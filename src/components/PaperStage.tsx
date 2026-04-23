@@ -14,14 +14,14 @@ import {
   Line,
   Rect,
   Stage,
-  Text,
   Transformer,
 } from 'react-konva'
+import { KonvaTextBlock } from './KonvaTextBlock'
 import { useEditor } from '../editor/EditorContext'
 import type { EditorAction } from '../editor/reducer'
 import { getBoundingBox, lineSegmentBox, type Box } from '../editor/bounds'
 import { snapBoxPosition, type SnapGuides } from '../editor/snap'
-import type { CanvasObject, EditorState, ImageObject, LineObject, TextObject } from '../types/document'
+import type { CanvasObject, EditorState, ImageObject, LineObject } from '../types/document'
 
 type PaperStageProps = {
   scale: number
@@ -186,26 +186,15 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
     const handleStageMouseDown = useCallback(
       (e: Konva.KonvaEventObject<MouseEvent>) => {
         if (e.target.name() === 'page-bg') {
+          const mode = stateRef.current.textPlacementMode
+          if (mode) {
+            const stage = e.target.getStage()
+            const p = stage?.getRelativePointerPosition()
+            if (p) dispatch({ type: 'PLACE_TEXT_AT', x: p.x, y: p.y })
+            return
+          }
           dispatch({ type: 'SELECT', id: null })
         }
-      },
-      [dispatch],
-    )
-
-    const handleTextTransformEnd = useCallback(
-      (obj: TextObject, node: Konva.Text) => {
-        const scaleX = node.scaleX()
-        node.scaleX(1)
-        node.scaleY(1)
-        dispatch({
-          type: 'RESIZE_OR_TRANSFORM',
-          id: obj.id,
-          patch: {
-            x: node.x(),
-            y: node.y(),
-            width: Math.max(48, node.width() * scaleX),
-          },
-        })
       },
       [dispatch],
     )
@@ -232,7 +221,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
 
     return (
       <div
-        className="paper-stage-wrap"
+        className={`paper-stage-wrap${state.textPlacementMode ? ' paper-stage-wrap--place-text' : ''}`}
         style={{
           width: pageW * scale,
           height: pageH * scale,
@@ -270,40 +259,24 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                 if (obj.type === 'text') {
                   const isSelected = state.selectedId === obj.id
                   const { onDragMove, onDragEnd } = makeDragHandlers(obj.id, (node) => {
-                    const t = node as Konva.Text
-                    return {
-                      x: t.x(),
-                      y: t.y(),
-                      w: obj.width,
-                      h: Math.max(obj.fontSize * 1.35, t.height()),
+                    const g = node as Konva.Group
+                    const bg = g.findOne('Rect') as Konva.Rect | null
+                    if (!bg) {
+                      return { x: g.x(), y: g.y(), w: obj.width, h: Math.max(28, obj.fontSize * 2) }
                     }
+                    return { x: g.x(), y: g.y(), w: bg.width(), h: bg.height() }
                   })
                   return (
-                    <Text
+                    <KonvaTextBlock
                       key={obj.id}
-                      ref={registerRef(obj.id) as (n: Konva.Text | null) => void}
-                      id={obj.id}
-                      x={obj.x}
-                      y={obj.y}
-                      width={obj.width}
-                      text={obj.text}
-                      fontSize={obj.fontSize}
-                      fontFamily={obj.fontFamily}
-                      fill={obj.fill}
-                      fontStyle={obj.fontStyle}
-                      align={obj.align}
-                      draggable
-                      wrap="word"
-                      lineHeight={1.25}
-                      onClick={() => dispatch({ type: 'SELECT', id: obj.id })}
-                      onTap={() => dispatch({ type: 'SELECT', id: obj.id })}
-                      onDblClick={() => onTextDoubleClick(obj.id)}
-                      onDblTap={() => onTextDoubleClick(obj.id)}
+                      obj={obj}
+                      isSelected={isSelected}
+                      placementActive={state.textPlacementMode}
+                      dispatch={dispatch}
+                      onTextDoubleClick={onTextDoubleClick}
+                      registerRef={registerRef}
                       onDragMove={onDragMove}
                       onDragEnd={onDragEnd}
-                      onTransformEnd={(e) => handleTextTransformEnd(obj, e.target as Konva.Text)}
-                      stroke={isSelected ? '#6366f1' : undefined}
-                      strokeWidth={isSelected ? 0.5 : 0}
                     />
                   )
                 }

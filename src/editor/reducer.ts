@@ -2,6 +2,10 @@ import {
   A4_HEIGHT,
   A4_WIDTH,
   DEFAULT_NEW_TEXT_FONT_SIZE,
+  isValidTierId,
+  normalizeCanvasObject,
+  resolveLockedTextStyle,
+  TEXT_PRESET_LEVEL_KEYS,
   type CanvasObject,
   type EditorState,
   type FontStyle,
@@ -9,7 +13,9 @@ import {
   type LineObject,
   type RectObject,
   type TextAlign,
+  type TextLevelOverrides,
   type TextObject,
+  type UserTextTier,
 } from '../types/document'
 
 export const initialEditorState = (): EditorState => ({
@@ -18,6 +24,10 @@ export const initialEditorState = (): EditorState => ({
   pageHeight: A4_HEIGHT,
   objects: [],
   selectedId: null,
+  textLevelOverrides: {},
+  userTextTiers: [],
+  defaultNewTextTierId: 'question_body',
+  textPlacementMode: false,
 })
 
 function nextZ(objects: CanvasObject[]): number {
@@ -29,9 +39,17 @@ function newId(): string {
   return crypto.randomUUID()
 }
 
+function pickValidDefaultNewTextTier(id: string | undefined, userTiers: UserTextTier[]): string {
+  const cand = id ?? 'question_body'
+  return isValidTierId(cand, userTiers) ? cand : 'question_body'
+}
+
 export type EditorAction =
   | { type: 'SELECT'; id: string | null }
-  | { type: 'ADD_TEXT' }
+  | { type: 'START_TEXT_PLACEMENT' }
+  | { type: 'CANCEL_TEXT_PLACEMENT' }
+  | { type: 'PLACE_TEXT_AT'; x: number; y: number }
+  | { type: 'SET_DEFAULT_NEW_TEXT_TIER'; tierId: string }
   | { type: 'ADD_LINE' }
   | { type: 'ADD_RECT' }
   | { type: 'ADD_IMAGE'; src: string; width: number; height: number }
@@ -52,6 +70,8 @@ export type EditorAction =
         fontStyle: FontStyle
         align: TextAlign
         width: number
+        textLevel: string
+        boxStroke: string
       }>
     }
   | {
@@ -75,8 +95,13 @@ export type EditorAction =
         objects: EditorState['objects']
         pageWidth?: number
         pageHeight?: number
+        textLevelOverrides?: TextLevelOverrides
+        userTextTiers?: UserTextTier[]
+        defaultNewTextTierId?: string
       }
     }
+  | { type: 'UPDATE_TEXT_LEVEL_OVERRIDES'; patch: TextLevelOverrides }
+  | { type: 'COMMIT_TEXT_TIER_CATALOG'; overridesPatch: TextLevelOverrides; userTiers: UserTextTier[] }
   | { type: 'RESET' }
   | { type: 'SET_PAGE_SIZE'; pageWidth: number; pageHeight: number }
 
@@ -91,27 +116,70 @@ function sortByZ(objects: CanvasObject[]): CanvasObject[] {
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
     case 'SELECT':
-      return { ...state, selectedId: action.id }
-    case 'ADD_TEXT': {
+      return {
+        ...state,
+        selectedId: action.id,
+        textPlacementMode: action.id !== null ? false : state.textPlacementMode,
+      }
+    case 'START_TEXT_PLACEMENT': {
+      const tierId = pickValidDefaultNewTextTier(state.defaultNewTextTierId, state.userTextTiers)
+      return {
+        ...state,
+        textPlacementMode: true,
+        selectedId: null,
+        defaultNewTextTierId: tierId,
+      }
+    }
+    case 'CANCEL_TEXT_PLACEMENT':
+      return { ...state, textPlacementMode: false }
+    case 'SET_DEFAULT_NEW_TEXT_TIER': {
+      if (!isValidTierId(action.tierId, state.userTextTiers)) return state
+      return { ...state, defaultNewTextTierId: action.tierId }
+    }
+    case 'PLACE_TEXT_AT': {
+      if (!state.textPlacementMode) return state
+      const tierId = pickValidDefaultNewTextTier(state.defaultNewTextTierId, state.userTextTiers)
       const z = nextZ(state.objects)
-      const text: TextObject = {
+      const margin = 40
+      const px = Math.max(0, Math.min(action.x, state.pageWidth - margin))
+      const py = Math.max(0, Math.min(action.y, state.pageHeight - margin))
+      const width = Math.max(120, Math.min(520, state.pageWidth - px - margin))
+
+      let text: TextObject = {
         id: newId(),
         type: 'text',
         zIndex: z,
-        x: 80,
-        y: 120,
-        width: 520,
+        x: px,
+        y: py,
+        width,
         text: '請輸入考題文字',
-        fontSize: DEFAULT_NEW_TEXT_FONT_SIZE,
         fontFamily: '"Microsoft JhengHei", "PingFang TC", sans-serif',
-        fill: '#111827',
         fontStyle: 'normal',
         align: 'left',
+        textLevel: 'custom',
+        fontSize: DEFAULT_NEW_TEXT_FONT_SIZE,
+        fill: '#111827',
+        boxFill: 'transparent',
+        boxStroke: '#64748b',
       }
+
+      if (tierId !== 'custom') {
+        const st = resolveLockedTextStyle(tierId, state.textLevelOverrides, state.userTextTiers)
+        if (st) {
+          text = {
+            ...text,
+            ...st,
+            textLevel: tierId,
+            boxFill: 'transparent',
+          }
+        }
+      }
+
       return {
         ...state,
         objects: [...state.objects, text],
         selectedId: text.id,
+        textPlacementMode: false,
       }
     }
     case 'ADD_LINE': {
@@ -279,7 +347,14 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const o = state.objects[i]
       if (o.type !== 'text') return state
       const objects = [...state.objects]
-      objects[i] = { ...o, ...action.patch }
+      let next: TextObject = { ...o, ...action.patch }
+      const lev = action.patch.textLevel
+      if (lev !== undefined && lev !== 'custom') {
+        const st = resolveLockedTextStyle(lev, state.textLevelOverrides, state.userTextTiers)
+        if (st) next = { ...next, ...st, textLevel: lev }
+        else next = { ...o, ...action.patch, textLevel: 'custom', boxFill: 'transparent' }
+      }
+      objects[i] = { ...next, boxFill: 'transparent' }
       return { ...state, objects }
     }
     case 'SET_LINE_STYLE': {
@@ -301,12 +376,85 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return { ...state, objects }
     }
     case 'LOAD_DOCUMENT': {
+      const raw = action.doc.objects as CanvasObject[]
+      const userTiers = Array.isArray(action.doc.userTextTiers) ? action.doc.userTextTiers : []
+      const knownIds = new Set(userTiers.map((t) => t.id))
+      const overrides = action.doc.textLevelOverrides ?? {}
+      const normalized = raw.map((obj) => normalizeCanvasObject(obj, { knownCustomTierIds: knownIds }))
+      const objects = normalized.map((o) => {
+        if (o.type !== 'text' || o.textLevel === 'custom') return o
+        const st = resolveLockedTextStyle(o.textLevel, overrides, userTiers)
+        if (!st) {
+          return {
+            ...o,
+            textLevel: 'custom',
+            boxFill: 'transparent',
+            boxStroke: o.boxStroke ?? '#64748b',
+          }
+        }
+        return { ...o, ...st, textLevel: o.textLevel, boxFill: 'transparent' as const }
+      })
+      const defaultNewTextTierId = pickValidDefaultNewTextTier(action.doc.defaultNewTextTierId, userTiers)
       return {
         ...state,
         pageWidth: action.doc.pageWidth ?? A4_WIDTH,
         pageHeight: action.doc.pageHeight ?? A4_HEIGHT,
-        objects: action.doc.objects,
+        objects,
+        textLevelOverrides: overrides,
+        userTextTiers: userTiers,
+        defaultNewTextTierId,
+        textPlacementMode: false,
         selectedId: null,
+      }
+    }
+    case 'UPDATE_TEXT_LEVEL_OVERRIDES': {
+      const merged: TextLevelOverrides = { ...state.textLevelOverrides }
+      for (const key of TEXT_PRESET_LEVEL_KEYS) {
+        const p = action.patch[key]
+        if (p) merged[key] = { ...merged[key], ...p }
+      }
+      const objects = state.objects.map((o) => {
+        if (o.type !== 'text' || o.textLevel === 'custom') return o
+        const st = resolveLockedTextStyle(o.textLevel, merged, state.userTextTiers)
+        if (!st) {
+          return {
+            ...o,
+            textLevel: 'custom',
+            boxFill: 'transparent',
+            boxStroke: o.boxStroke ?? '#64748b',
+          }
+        }
+        return { ...o, ...st, textLevel: o.textLevel, boxFill: 'transparent' as const }
+      })
+      return { ...state, textLevelOverrides: merged, objects }
+    }
+    case 'COMMIT_TEXT_TIER_CATALOG': {
+      const merged: TextLevelOverrides = { ...state.textLevelOverrides }
+      for (const key of TEXT_PRESET_LEVEL_KEYS) {
+        const p = action.overridesPatch[key]
+        if (p) merged[key] = { ...merged[key], ...p }
+      }
+      const userTiers = action.userTiers
+      const objects = state.objects.map((o) => {
+        if (o.type !== 'text' || o.textLevel === 'custom') return o
+        const st = resolveLockedTextStyle(o.textLevel, merged, userTiers)
+        if (!st) {
+          return {
+            ...o,
+            textLevel: 'custom',
+            boxFill: 'transparent',
+            boxStroke: o.boxStroke ?? '#64748b',
+          }
+        }
+        return { ...o, ...st, textLevel: o.textLevel, boxFill: 'transparent' as const }
+      })
+      const defaultNewTextTierId = pickValidDefaultNewTextTier(state.defaultNewTextTierId, userTiers)
+      return {
+        ...state,
+        textLevelOverrides: merged,
+        userTextTiers: userTiers,
+        objects,
+        defaultNewTextTierId,
       }
     }
     case 'RESET':

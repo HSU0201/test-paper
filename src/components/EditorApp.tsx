@@ -31,9 +31,14 @@ function EditorShell() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT') return
+      if (e.key === 'Escape' && state.textPlacementMode) {
+        e.preventDefault()
+        dispatch({ type: 'CANCEL_TEXT_PLACEMENT' })
+        return
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        const t = e.target as HTMLElement
-        if (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT') return
         if (state.selectedId) {
           e.preventDefault()
           dispatch({ type: 'DELETE_SELECTED' })
@@ -42,7 +47,7 @@ function EditorShell() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [dispatch, state.selectedId])
+  }, [dispatch, state.selectedId, state.textPlacementMode])
 
   const handleTextDoubleClick = useCallback((id: string) => {
     setEditingId(id)
@@ -71,6 +76,13 @@ function EditorShell() {
       <footer className="editor-footer">
         工作區 {state.pageWidth}×{state.pageHeight} px（約 {pxToMm(state.pageWidth)}×{pxToMm(state.pageHeight)}{' '}
         mm）· 拖曳時會對齊邊緣與中心 · 雙擊文字可編輯內容
+        {state.textPlacementMode ? (
+          <>
+            {' '}
+            · <strong>放置文字模式</strong>：空白處點一下建立文字；點既有文字可取消放置並選取編輯（Esc
+            或「取消放置文字」可離開）
+          </>
+        ) : null}
       </footer>
     </div>
   )

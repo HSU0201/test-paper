@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useEditor } from '../editor/EditorContext'
+import { TEXT_BOX_PADDING } from '../types/document'
 
 type TextEditOverlayProps = {
   editingId: string | null
@@ -49,9 +50,9 @@ export function TextEditOverlay({ editingId, scale, onClose }: TextEditOverlayPr
       className="text-edit-overlay"
       style={{
         position: 'absolute',
-        left: textObj.x * scale,
-        top: textObj.y * scale,
-        width: textObj.width * scale,
+        left: (textObj.x + TEXT_BOX_PADDING) * scale,
+        top: (textObj.y + TEXT_BOX_PADDING) * scale,
+        width: Math.max(40, textObj.width - TEXT_BOX_PADDING * 2) * scale,
         minHeight: textObj.fontSize * scale * 3,
         fontSize: textObj.fontSize * scale,
         fontFamily: textObj.fontFamily,
@@ -60,7 +61,7 @@ export function TextEditOverlay({ editingId, scale, onClose }: TextEditOverlayPr
         fontStyle: textObj.fontStyle.includes('italic') ? 'italic' : 'normal',
         textAlign: textObj.align,
         lineHeight: 1.25,
-        padding: 4 * scale,
+        padding: 2 * scale,
         boxSizing: 'border-box',
         border: '1px solid #6366f1',
         borderRadius: 4,

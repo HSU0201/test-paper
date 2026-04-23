@@ -1,13 +1,17 @@
-import { useRef, type ChangeEventHandler, type RefObject } from 'react'
+import { useMemo, useRef, type ChangeEventHandler, type RefObject } from 'react'
 import { useEditor } from '../editor/EditorContext'
 import { exportStageToPdf } from '../export/pdfFromStage'
 import type { EditorAction } from '../editor/reducer'
 import {
-  DEFAULT_NEW_TEXT_FONT_SIZE,
   PAPER_PRESETS,
+  TEXT_PRESET_LEVEL_KEYS,
   detectPaperPreset,
+  getTextTierLabel,
+  isValidTierId,
   pxToMm,
   type PaperPresetKey,
+  type TextLevelOverrides,
+  type UserTextTier,
 } from '../types/document'
 import type Konva from 'konva'
 
@@ -40,10 +44,17 @@ export function Toolbar({ stageRef }: ToolbarProps) {
 
   const landscape = state.pageWidth > state.pageHeight
   const presetKey = detectPaperPreset(state.pageWidth, state.pageHeight)
-  const selectedText =
-    state.selectedId != null
-      ? state.objects.find((o) => o.id === state.selectedId && o.type === 'text')
-      : undefined
+  const selectedObj = state.selectedId
+    ? state.objects.find((o) => o.id === state.selectedId)
+    : undefined
+  const selectedText = selectedObj?.type === 'text' ? selectedObj : undefined
+
+  /** 與任一 option value 對齊，避免受控 select 因無匹配而顯示空白 */
+  const tierSelectValue = useMemo(() => {
+    const raw = selectedText ? selectedText.textLevel : state.defaultNewTextTierId
+    if (isValidTierId(raw, state.userTextTiers)) return raw
+    return selectedText ? 'custom' : 'question_body'
+  }, [selectedText, state.defaultNewTextTierId, state.userTextTiers])
 
   const handleExportPdf = () => {
     const stage = stageRef.current
@@ -56,6 +67,9 @@ export function Toolbar({ stageRef }: ToolbarProps) {
       version: 1,
       pageWidth: state.pageWidth,
       pageHeight: state.pageHeight,
+      textLevelOverrides: state.textLevelOverrides,
+      userTextTiers: state.userTextTiers,
+      defaultNewTextTierId: state.defaultNewTextTierId,
       objects: state.objects,
     })
   }
@@ -70,6 +84,9 @@ export function Toolbar({ stageRef }: ToolbarProps) {
           objects?: unknown
           pageWidth?: number
           pageHeight?: number
+          textLevelOverrides?: TextLevelOverrides
+          userTextTiers?: UserTextTier[]
+          defaultNewTextTierId?: string
         }
         if (!Array.isArray(raw.objects)) throw new Error('缺少 objects 陣列')
         dispatch({
@@ -78,6 +95,9 @@ export function Toolbar({ stageRef }: ToolbarProps) {
             objects: raw.objects as typeof state.objects,
             pageWidth: raw.pageWidth,
             pageHeight: raw.pageHeight,
+            textLevelOverrides: raw.textLevelOverrides,
+            userTextTiers: raw.userTextTiers,
+            defaultNewTextTierId: raw.defaultNewTextTierId,
           },
         })
       } catch {
@@ -132,9 +152,60 @@ export function Toolbar({ stageRef }: ToolbarProps) {
       <div className="editor-toolbar editor-toolbar--primary">
         <div className="editor-toolbar__brand">試卷編輯器</div>
         <div className="editor-toolbar__actions">
-          <button type="button" onClick={() => dispatch({ type: 'ADD_TEXT' })}>
-            新增文字
-          </button>
+          <div
+            className="editor-toolbar__add-text"
+            title={
+              state.textPlacementMode
+                ? '放置模式中：可點既有文字取消放置並選取，或在空白處放置新文字。'
+                : selectedText
+                  ? '變更目前選取文字的階層，並同步為之後「新增文字」的預設。'
+                  : '之後按「新增文字」並在畫布點擊時，新文字使用的階層。'
+            }
+          >
+            <label className="editor-toolbar__add-text-label">
+              <span className="editor-toolbar__add-text-k">
+                {selectedText ? '目前文字階層' : '新增文字預設階層'}
+              </span>
+              <select
+                className="editor-toolbar__add-text-select"
+                value={tierSelectValue}
+                onChange={(e) => {
+                  const tierId = e.target.value
+                  if (selectedText) {
+                    dispatch({
+                      type: 'SET_TEXT_STYLE',
+                      id: selectedText.id,
+                      patch: { textLevel: tierId },
+                    })
+                  }
+                  dispatch({ type: 'SET_DEFAULT_NEW_TEXT_TIER', tierId })
+                }}
+              >
+                {TEXT_PRESET_LEVEL_KEYS.map((key) => (
+                  <option key={key} value={key}>
+                    {getTextTierLabel(key, state.textLevelOverrides, state.userTextTiers)}
+                  </option>
+                ))}
+                {state.userTextTiers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+                <option value="custom">自訂</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className={state.textPlacementMode ? 'editor-toolbar__place-text is-active' : ''}
+              onClick={() =>
+                state.textPlacementMode
+                  ? dispatch({ type: 'CANCEL_TEXT_PLACEMENT' })
+                  : dispatch({ type: 'START_TEXT_PLACEMENT' })
+              }
+            >
+              {state.textPlacementMode ? '取消放置文字' : '新增文字'}
+            </button>
+          </div>
           <button type="button" onClick={() => dispatch({ type: 'ADD_LINE' })}>
             新增線條
           </button>
@@ -295,13 +366,17 @@ export function Toolbar({ stageRef }: ToolbarProps) {
             <span className="editor-nav-sub__chip-v">{landscape ? '橫向' : '直向'}</span>
           </li>
           <li className="editor-nav-sub__chip">
-            <span className="editor-nav-sub__chip-k">新文字</span>
-            <span className="editor-nav-sub__chip-v">{DEFAULT_NEW_TEXT_FONT_SIZE}px</span>
+            <span className="editor-nav-sub__chip-k">新文字預設階層</span>
+            <span className="editor-nav-sub__chip-v">
+              {getTextTierLabel(state.defaultNewTextTierId, state.textLevelOverrides, state.userTextTiers)}
+            </span>
           </li>
           {selectedText ? (
             <li className="editor-nav-sub__chip editor-nav-sub__chip--sel">
-              <span className="editor-nav-sub__chip-k">選取字級</span>
-              <span className="editor-nav-sub__chip-v">{selectedText.fontSize}px</span>
+              <span className="editor-nav-sub__chip-k">選取文字</span>
+              <span className="editor-nav-sub__chip-v">
+                {`${getTextTierLabel(selectedText.textLevel, state.textLevelOverrides, state.userTextTiers)} · ${selectedText.fontSize}px`}
+              </span>
             </li>
           ) : null}
         </ul>
