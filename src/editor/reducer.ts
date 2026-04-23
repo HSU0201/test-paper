@@ -1,6 +1,7 @@
 import {
   A4_HEIGHT,
   A4_WIDTH,
+  DEFAULT_NEW_TEXT_FONT_SIZE,
   type CanvasObject,
   type EditorState,
   type FontStyle,
@@ -77,6 +78,7 @@ export type EditorAction =
       }
     }
   | { type: 'RESET' }
+  | { type: 'SET_PAGE_SIZE'; pageWidth: number; pageHeight: number }
 
 function findIndex(objects: CanvasObject[], id: string): number {
   return objects.findIndex((o) => o.id === id)
@@ -100,7 +102,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         y: 120,
         width: 520,
         text: '請輸入考題文字',
-        fontSize: 18,
+        fontSize: DEFAULT_NEW_TEXT_FONT_SIZE,
         fontFamily: '"Microsoft JhengHei", "PingFang TC", sans-serif',
         fill: '#111827',
         fontStyle: 'normal',
@@ -309,5 +311,10 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     }
     case 'RESET':
       return initialEditorState()
+    case 'SET_PAGE_SIZE': {
+      const w = Math.max(120, Math.round(action.pageWidth))
+      const h = Math.max(120, Math.round(action.pageHeight))
+      return { ...state, pageWidth: w, pageHeight: h }
+    }
   }
 }

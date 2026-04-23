@@ -1,6 +1,6 @@
 import type Konva from 'konva'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { A4_HEIGHT, A4_WIDTH } from '../types/document'
+import { pxToMm } from '../types/document'
 import { EditorProvider, useEditor } from '../editor/EditorContext'
 import { PaperStage } from './PaperStage'
 import { PropertiesPanel } from './PropertiesPanel'
@@ -21,13 +21,13 @@ function EditorShell() {
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect()
       const pad = 32
-      const sx = (r.width - pad) / A4_WIDTH
-      const sy = (r.height - pad) / A4_HEIGHT
+      const sx = (r.width - pad) / state.pageWidth
+      const sy = (r.height - pad) / state.pageHeight
       setScale(Math.max(0.35, Math.min(1, sx, sy)))
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [state.pageWidth, state.pageHeight])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -69,7 +69,8 @@ function EditorShell() {
         <PropertiesPanel />
       </div>
       <footer className="editor-footer">
-        A4 工作區 {A4_WIDTH}×{A4_HEIGHT} 邏輯像素 · 拖曳時會對齊邊緣與中心 · 雙擊文字可編輯內容
+        工作區 {state.pageWidth}×{state.pageHeight} px（約 {pxToMm(state.pageWidth)}×{pxToMm(state.pageHeight)}{' '}
+        mm）· 拖曳時會對齊邊緣與中心 · 雙擊文字可編輯內容
       </footer>
     </div>
   )
