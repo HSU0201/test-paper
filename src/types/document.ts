@@ -1,3 +1,4 @@
+import type { BlockRef, ExamContent } from './exam'
 import type { PaperLayout } from './layout'
 
 /** A4 邏輯像素（約 96 DPI） */
@@ -296,6 +297,10 @@ export type EditorState = {
   textPlacementMode: boolean
   /** 頁首與分欄版型 */
   layout: PaperLayout
+  /** 大題／小題內容，依陣列順序排版 */
+  exam: ExamContent
+  /** 選取中的大題或小題（與 selectedId 互斥） */
+  selectedBlock: BlockRef | null
 }
 
 export function isText(o: CanvasObject): o is TextObject {

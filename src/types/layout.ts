@@ -155,7 +155,7 @@ export function createDefaultLayout(): PaperLayout {
       gap: 24,
       leftRatio: 0.5,
       divider: true,
-      showTitles: true,
+      showTitles: false,
       titles: ['一、選擇題', '二、填充題'],
     },
   }

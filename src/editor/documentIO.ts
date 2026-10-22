@@ -13,10 +13,11 @@ export function downloadJson(filename: string, data: unknown) {
 
 export function serializeDocument(state: EditorState) {
   return {
-    version: 2,
+    version: 3,
     pageWidth: state.pageWidth,
     pageHeight: state.pageHeight,
     layout: state.layout,
+    exam: state.exam,
     textLevelOverrides: state.textLevelOverrides,
     userTextTiers: state.userTextTiers,
     defaultNewTextTierId: state.defaultNewTextTierId,
@@ -41,6 +42,7 @@ export function readDocumentFile(file: File, dispatch: (a: EditorAction) => void
         pageWidth?: number
         pageHeight?: number
         layout?: unknown
+        exam?: unknown
         textLevelOverrides?: TextLevelOverrides
         userTextTiers?: UserTextTier[]
         defaultNewTextTierId?: string
@@ -53,6 +55,7 @@ export function readDocumentFile(file: File, dispatch: (a: EditorAction) => void
           pageWidth: raw.pageWidth,
           pageHeight: raw.pageHeight,
           layout: raw.layout,
+          exam: raw.exam,
           textLevelOverrides: raw.textLevelOverrides,
           userTextTiers: raw.userTextTiers,
           defaultNewTextTierId: raw.defaultNewTextTierId,

@@ -487,6 +487,308 @@ kbd {
   accent-color: var(--c-primary);
 }
 
+.btn:disabled,
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.btn--block {
+  width: 100%;
+  justify-content: center;
+  border-color: var(--c-border);
+}
+
+.text-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--c-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.text-btn:hover {
+  text-decoration: underline;
+}
+
+.ui-textarea {
+  height: auto;
+  min-height: 60px;
+  padding: 8px 10px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.ui-grid-2--end {
+  align-items: end;
+}
+
+/* ============ 大綱 ============ */
+.outline__summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+
+.outline__summary div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  border-radius: var(--radius-m);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+}
+
+.outline__summary strong {
+  font-size: 18px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.outline__summary span {
+  font-size: 11px;
+  color: var(--c-text-3);
+}
+
+.outline__numbering {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.outline__empty {
+  margin: 0 0 12px;
+  padding: 16px;
+  border: 1px dashed var(--c-border-strong);
+  border-radius: var(--radius-m);
+  font-size: 13px;
+  color: var(--c-text-2);
+  text-align: center;
+}
+
+.outline__sections,
+.outline__questions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.outline-section {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.outline__questions {
+  margin: 2px 0 0 12px;
+  padding-left: 8px;
+  border-left: 1px solid var(--c-border);
+}
+
+.outline__questions > li {
+  position: relative;
+}
+
+.outline-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: var(--radius-s);
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+}
+
+.outline-row:hover {
+  background: var(--c-surface-2);
+}
+
+.outline-row.is-selected {
+  background: var(--c-primary-soft);
+  border-color: #c7cbff;
+}
+
+.outline-row.is-dragging,
+.outline-section.is-dragging > .outline-row {
+  opacity: 0.4;
+}
+
+.outline-row.is-overflow {
+  color: var(--c-danger);
+}
+
+.outline-row--section {
+  font-weight: 700;
+}
+
+.outline-row__grip {
+  color: var(--c-text-3);
+  font-size: 11px;
+  letter-spacing: -2px;
+  cursor: grab;
+}
+
+.outline-row__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outline-row__score {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.outline-row__num {
+  flex-shrink: 0;
+  min-width: 22px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--c-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.outline-row__stem {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.outline-row__stem em {
+  color: var(--c-text-3);
+  font-style: normal;
+}
+
+.outline-row__meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--c-text-3);
+}
+
+.is-drop-before::before,
+.is-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--c-primary);
+  z-index: 1;
+}
+
+.is-drop-before::before {
+  top: -1px;
+}
+
+.is-drop-after::after {
+  bottom: -1px;
+}
+
+.outline__add-q {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--c-text-3);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.outline__add-q:hover {
+  background: var(--c-surface-2);
+  color: var(--c-primary);
+}
+
+.outline__add-q svg,
+.outline__add-section svg {
+  width: 14px;
+  height: 14px;
+}
+
+.outline__add-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 36px;
+  margin-top: 4px;
+  border: 1px dashed var(--c-border-strong);
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--c-text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.outline__add-section:hover {
+  border-color: var(--c-primary);
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
+}
+
+.outline__tip {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--c-text-3);
+  line-height: 1.8;
+}
+
+/* ============ 題目編輯 ============ */
+.inspector__body {
+  padding: 4px 16px 24px;
+}
+
+.inspector__body > .btn--block {
+  margin-top: 8px;
+}
+
+.inspector__warn {
+  margin: 12px 16px 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-m);
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.choice-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.choice-row__label {
+  flex-shrink: 0;
+  width: 28px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--c-text-2);
+}
+
 /* ============ 版型：頁首欄位 ============ */
 .header-field {
   display: flex;
@@ -1208,6 +1510,12 @@ kbd {
 
 .statusbar__sel {
   color: var(--c-primary);
+  font-weight: 600;
+}
+
+.statusbar__warn {
+  margin-left: auto;
+  color: var(--c-danger);
   font-weight: 600;
 }
 

@@ -134,6 +134,9 @@ export function Icon({ name }: { name: IconName }) {
 }
 
 export type IconName =
+  | 'outline'
+  | 'undo'
+  | 'redo'
   | 'layout'
   | 'insert'
   | 'page'
@@ -153,6 +156,9 @@ export type IconName =
   | 'grid'
 
 const ICON_PATHS: Record<IconName, ReactNode> = {
+  outline: <path d="M4 6h2M9 6h11M6 12h2M11 12h9M6 18h2M11 18h9" />,
+  undo: <path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" />,
+  redo: <path d="m15 14 5-5-5-5M20 9H10a6 6 0 0 0 0 12h3" />,
   layout: (
     <>
       <rect x="3" y="3" width="18" height="18" rx="2" />

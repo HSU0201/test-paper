@@ -18,6 +18,7 @@ import {
 } from 'react-konva'
 import { KonvaTextBlock } from './KonvaTextBlock'
 import { EDITOR_ONLY_NAME, PaperLayoutLayer } from './PaperLayoutLayer'
+import { ExamFlowLayer } from './ExamFlowLayer'
 import { useEditor } from '../editor/EditorContext'
 import type { EditorAction } from '../editor/reducer'
 import { getBoundingBox, lineSegmentBox, type Box } from '../editor/bounds'
@@ -104,7 +105,7 @@ function snapTargets(objects: CanvasObject[], excludeId: string, layoutBoxes: Bo
 
 export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
   function PaperStage({ scale, showGuides, onTextDoubleClick }, ref) {
-    const { state, dispatch, sortedObjects, layoutGeometry } = useEditor()
+    const { state, dispatch, sortedObjects, layoutGeometry, flow } = useEditor()
     const stateRef = useRef(state)
     const layoutBoxesRef = useRef<Box[]>([])
     useLayoutEffect(() => {
@@ -205,6 +206,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
             return
           }
           dispatch({ type: 'SELECT', id: null })
+          dispatch({ type: 'SELECT_BLOCK', ref: null })
         }
       },
       [dispatch],
@@ -267,6 +269,12 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                 listening
               />
               <PaperLayoutLayer geometry={layoutGeometry} showGuides={showGuides} />
+              <ExamFlowLayer
+                flow={flow}
+                selected={state.selectedBlock}
+                interactive={!state.textPlacementMode}
+                dispatch={dispatch}
+              />
               {sortedObjects.map((obj) => {
                 if (obj.type === 'text') {
                   const isSelected = state.selectedId === obj.id

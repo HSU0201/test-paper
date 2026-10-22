@@ -6,7 +6,7 @@ import { exportStageToPdf } from '../export/pdfFromStage'
 import { Icon } from './ui'
 
 export function TopBar({ stageRef }: { stageRef: RefObject<Konva.Stage | null> }) {
-  const { state, dispatch } = useEditor()
+  const { state, dispatch, undo, redo, canUndo, canRedo } = useEditor()
   const openRef = useRef<HTMLInputElement>(null)
   const baseName = documentBaseName(state)
 
@@ -25,6 +25,13 @@ export function TopBar({ stageRef }: { stageRef: RefObject<Konva.Stage | null> }
       </div>
 
       <div className="topbar__actions">
+        <button type="button" className="icon-btn" title="復原（Ctrl+Z）" disabled={!canUndo} onClick={undo}>
+          <Icon name="undo" />
+        </button>
+        <button type="button" className="icon-btn" title="重做（Ctrl+Y）" disabled={!canRedo} onClick={redo}>
+          <Icon name="redo" />
+        </button>
+        <span className="topbar__sep" aria-hidden />
         <button type="button" className="btn btn--ghost" onClick={() => openRef.current?.click()}>
           <Icon name="open" />
           開啟
@@ -54,7 +61,7 @@ export function TopBar({ stageRef }: { stageRef: RefObject<Konva.Stage | null> }
           type="button"
           className="btn btn--ghost btn--danger"
           onClick={() => {
-            if (window.confirm('確定要清空整份試卷？版型與所有物件都會重設。')) dispatch({ type: 'RESET' })
+            if (window.confirm('確定要清空整份試卷？題目、版型與所有物件都會重設（可用復原找回）。')) dispatch({ type: 'RESET' })
           }}
         >
           <Icon name="trash" />

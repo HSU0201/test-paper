@@ -26,6 +26,8 @@ import {
   type HeaderFieldKey,
   type PaperLayout,
 } from '../types/layout'
+import { createEmptyExam, createSampleExam, normalizeExam } from '../types/exam'
+import { EXAM_ACTION_TYPES, examReducer, type ExamAction } from './examReducer'
 
 export const initialEditorState = (): EditorState => ({
   version: 1,
@@ -38,6 +40,8 @@ export const initialEditorState = (): EditorState => ({
   defaultNewTextTierId: 'question_body',
   textPlacementMode: false,
   layout: createDefaultLayout(),
+  exam: createSampleExam(),
+  selectedBlock: null,
 })
 
 function nextZ(objects: CanvasObject[]): number {
@@ -55,6 +59,7 @@ function pickValidDefaultNewTextTier(id: string | undefined, userTiers: UserText
 }
 
 export type EditorAction =
+  | ExamAction
   | { type: 'SELECT'; id: string | null }
   | { type: 'START_TEXT_PLACEMENT' }
   | { type: 'CANCEL_TEXT_PLACEMENT' }
@@ -109,6 +114,7 @@ export type EditorAction =
         userTextTiers?: UserTextTier[]
         defaultNewTextTierId?: string
         layout?: unknown
+        exam?: unknown
       }
     }
   | { type: 'SET_HEADER_FIELD'; key: HeaderFieldKey; patch: Partial<HeaderField> }
@@ -128,12 +134,27 @@ function sortByZ(objects: CanvasObject[]): CanvasObject[] {
   return [...objects].sort((a, b) => a.zIndex - b.zIndex)
 }
 
+function isExamAction(a: EditorAction): a is ExamAction {
+  return EXAM_ACTION_TYPES.has(a.type)
+}
+
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
+  if (isExamAction(action)) {
+    const next = examReducer({ exam: state.exam, selectedBlock: state.selectedBlock }, action)
+    const blockSelected = next.selectedBlock !== null && next.selectedBlock !== state.selectedBlock
+    return {
+      ...state,
+      ...next,
+      selectedId: blockSelected ? null : state.selectedId,
+      textPlacementMode: blockSelected ? false : state.textPlacementMode,
+    }
+  }
   switch (action.type) {
     case 'SELECT':
       return {
         ...state,
         selectedId: action.id,
+        selectedBlock: action.id !== null ? null : state.selectedBlock,
         textPlacementMode: action.id !== null ? false : state.textPlacementMode,
       }
     case 'START_TEXT_PLACEMENT': {
@@ -270,6 +291,15 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       }
     }
     case 'DELETE_SELECTED': {
+      const block = state.selectedBlock
+      if (block) {
+        return editorReducer(
+          state,
+          block.kind === 'section'
+            ? { type: 'REMOVE_SECTION', id: block.id }
+            : { type: 'REMOVE_QUESTION', id: block.id },
+        )
+      }
       if (!state.selectedId) return state
       return {
         ...state,
@@ -431,6 +461,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         textPlacementMode: false,
         selectedId: null,
         layout: normalizeLayout(action.doc.layout),
+        exam: normalizeExam(action.doc.exam),
+        selectedBlock: null,
       }
     }
     case 'SET_HEADER_FIELD':
@@ -514,7 +546,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       }
     }
     case 'RESET':
-      return initialEditorState()
+      return { ...initialEditorState(), exam: createEmptyExam() }
     case 'SET_PAGE_SIZE': {
       const w = Math.max(120, Math.round(action.pageWidth))
       const h = Math.max(120, Math.round(action.pageHeight))

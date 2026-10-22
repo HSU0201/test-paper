@@ -8,13 +8,16 @@ import { TextEditOverlay } from './TextEditOverlay'
 import { TopBar } from './TopBar'
 import { InsertPanel } from './panels/InsertPanel'
 import { LayoutPanel } from './panels/LayoutPanel'
+import { OutlinePanel } from './panels/OutlinePanel'
+import { examTotals } from '../types/exam'
 import { PagePanel } from './panels/PagePanel'
 import { Icon, type IconName } from './ui'
 import './editor.css'
 
-type SideTab = 'layout' | 'insert' | 'page'
+type SideTab = 'outline' | 'layout' | 'insert' | 'page'
 
 const SIDE_TABS: { id: SideTab; label: string; icon: IconName }[] = [
+  { id: 'outline', label: '大綱', icon: 'outline' },
   { id: 'layout', label: '版型', icon: 'layout' },
   { id: 'insert', label: '插入', icon: 'insert' },
   { id: 'page', label: '頁面', icon: 'page' },
@@ -23,13 +26,13 @@ const SIDE_TABS: { id: SideTab; label: string; icon: IconName }[] = [
 const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.9, 1, 1.25, 1.5, 2]
 
 function EditorShell() {
-  const { state, dispatch } = useEditor()
+  const { state, dispatch, undo, redo, flow } = useEditor()
   const stageRef = useRef<Konva.Stage>(null)
   const canvasAreaRef = useRef<HTMLDivElement>(null)
   const [fitScale, setFitScale] = useState(1)
   const [zoom, setZoom] = useState<number | 'fit'>('fit')
   const [showGuides, setShowGuides] = useState(true)
-  const [tab, setTab] = useState<SideTab>('layout')
+  const [tab, setTab] = useState<SideTab>('outline')
   const [editingId, setEditingId] = useState<string | null>(null)
   const scale = zoom === 'fit' ? fitScale : zoom
 
@@ -51,19 +54,32 @@ function EditorShell() {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
       if (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.tagName === 'SELECT') return
+      const mod = e.ctrlKey || e.metaKey
+      if (mod && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) redo()
+        else undo()
+        return
+      }
+      if (mod && e.key.toLowerCase() === 'y') {
+        e.preventDefault()
+        redo()
+        return
+      }
       if (e.key === 'Escape') {
         if (state.textPlacementMode) dispatch({ type: 'CANCEL_TEXT_PLACEMENT' })
         else if (state.selectedId) dispatch({ type: 'SELECT', id: null })
+        else if (state.selectedBlock) dispatch({ type: 'SELECT_BLOCK', ref: null })
         return
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedId) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && (state.selectedId || state.selectedBlock)) {
         e.preventDefault()
         dispatch({ type: 'DELETE_SELECTED' })
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [dispatch, state.selectedId, state.textPlacementMode])
+  }, [dispatch, undo, redo, state.selectedId, state.selectedBlock, state.textPlacementMode])
 
   const handleTextDoubleClick = useCallback((id: string) => {
     setEditingId(id)
@@ -77,6 +93,7 @@ function EditorShell() {
   }
 
   const selected = state.selectedId ? state.objects.find((o) => o.id === state.selectedId) : null
+  const totals = examTotals(state.exam)
 
   return (
     <div className="editor-root">
@@ -99,7 +116,15 @@ function EditorShell() {
 
         <section className="side-panel" aria-label={SIDE_TABS.find((t) => t.id === tab)?.label}>
           <h2 className="side-panel__title">{SIDE_TABS.find((t) => t.id === tab)?.label}</h2>
-          {tab === 'layout' ? <LayoutPanel /> : tab === 'insert' ? <InsertPanel /> : <PagePanel />}
+          {tab === 'outline' ? (
+            <OutlinePanel />
+          ) : tab === 'layout' ? (
+            <LayoutPanel />
+          ) : tab === 'insert' ? (
+            <InsertPanel />
+          ) : (
+            <PagePanel />
+          )}
         </section>
 
         <main className="canvas-area" ref={canvasAreaRef}>
@@ -159,8 +184,14 @@ function EditorShell() {
         <span>
           {state.pageWidth}×{state.pageHeight}px・約 {pxToMm(state.pageWidth)}×{pxToMm(state.pageHeight)}mm
         </span>
-        <span>{state.objects.length} 個物件</span>
-        {selected ? <span className="statusbar__sel">已選取 1 個物件</span> : null}
+        <span>
+          {totals.sections} 大題・{totals.questions} 題・總分 {totals.score}
+        </span>
+        <span>{state.objects.length} 個自由物件</span>
+        {selected || state.selectedBlock ? <span className="statusbar__sel">已選取</span> : null}
+        {flow.overflow.length ? (
+          <span className="statusbar__warn">⚠ 有 {flow.overflow.length} 個區塊超出頁面</span>
+        ) : null}
       </footer>
     </div>
   )
