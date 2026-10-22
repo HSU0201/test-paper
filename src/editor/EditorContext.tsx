@@ -8,11 +8,13 @@ import {
 } from 'react'
 import { editorReducer, initialEditorState, type EditorAction } from './reducer'
 import type { EditorState } from '../types/document'
+import { computeLayoutGeometry, type LayoutGeometry } from '../types/layout'
 
 type EditorContextValue = {
   state: EditorState
   dispatch: (a: EditorAction) => void
   sortedObjects: EditorState['objects']
+  layoutGeometry: LayoutGeometry
 }
 
 const EditorContext = createContext<EditorContextValue | null>(null)
@@ -25,13 +27,19 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     [state.objects],
   )
 
+  const layoutGeometry = useMemo(
+    () =>
+      computeLayoutGeometry(state.layout, state.pageWidth, state.pageHeight, state.textLevelOverrides),
+    [state.layout, state.pageWidth, state.pageHeight, state.textLevelOverrides],
+  )
+
   const stableDispatch = useCallback((a: EditorAction) => {
     dispatch(a)
   }, [])
 
   const value = useMemo(
-    () => ({ state, dispatch: stableDispatch, sortedObjects }),
-    [state, stableDispatch, sortedObjects],
+    () => ({ state, dispatch: stableDispatch, sortedObjects, layoutGeometry }),
+    [state, stableDispatch, sortedObjects, layoutGeometry],
   )
 
   return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>

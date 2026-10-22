@@ -17,6 +17,15 @@ import {
   type TextObject,
   type UserTextTier,
 } from '../types/document'
+import {
+  computeLayoutGeometry,
+  createDefaultLayout,
+  normalizeLayout,
+  type ColumnLayout,
+  type HeaderField,
+  type HeaderFieldKey,
+  type PaperLayout,
+} from '../types/layout'
 
 export const initialEditorState = (): EditorState => ({
   version: 1,
@@ -28,6 +37,7 @@ export const initialEditorState = (): EditorState => ({
   userTextTiers: [],
   defaultNewTextTierId: 'question_body',
   textPlacementMode: false,
+  layout: createDefaultLayout(),
 })
 
 function nextZ(objects: CanvasObject[]): number {
@@ -98,8 +108,13 @@ export type EditorAction =
         textLevelOverrides?: TextLevelOverrides
         userTextTiers?: UserTextTier[]
         defaultNewTextTierId?: string
+        layout?: unknown
       }
     }
+  | { type: 'SET_HEADER_FIELD'; key: HeaderFieldKey; patch: Partial<HeaderField> }
+  | { type: 'SET_COLUMNS'; patch: Partial<ColumnLayout> }
+  | { type: 'SET_COLUMN_TITLE'; index: 0 | 1; title: string }
+  | { type: 'SET_LAYOUT'; patch: Partial<Pick<PaperLayout, 'margin' | 'headerRule'>> }
   | { type: 'UPDATE_TEXT_LEVEL_OVERRIDES'; patch: TextLevelOverrides }
   | { type: 'COMMIT_TEXT_TIER_CATALOG'; overridesPatch: TextLevelOverrides; userTiers: UserTextTier[] }
   | { type: 'RESET' }
@@ -140,10 +155,20 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       if (!state.textPlacementMode) return state
       const tierId = pickValidDefaultNewTextTier(state.defaultNewTextTierId, state.userTextTiers)
       const z = nextZ(state.objects)
-      const margin = 40
-      const px = Math.max(0, Math.min(action.x, state.pageWidth - margin))
-      const py = Math.max(0, Math.min(action.y, state.pageHeight - margin))
-      const width = Math.max(120, Math.min(520, state.pageWidth - px - margin))
+      const geo = computeLayoutGeometry(
+        state.layout,
+        state.pageWidth,
+        state.pageHeight,
+        state.textLevelOverrides,
+      )
+      const col =
+        geo.columns.find((c) => action.x >= c.x && action.x <= c.x + c.w) ??
+        geo.columns.reduce((best, c) =>
+          Math.abs(c.x + c.w / 2 - action.x) < Math.abs(best.x + best.w / 2 - action.x) ? c : best,
+        )
+      const px = Math.max(col.x, Math.min(action.x, col.x + col.w - 120))
+      const py = Math.max(col.y, Math.min(action.y, col.y + col.h - 28))
+      const width = Math.max(120, col.x + col.w - px)
 
       let text: TextObject = {
         id: newId(),
@@ -405,8 +430,39 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         defaultNewTextTierId,
         textPlacementMode: false,
         selectedId: null,
+        layout: normalizeLayout(action.doc.layout),
       }
     }
+    case 'SET_HEADER_FIELD':
+      return {
+        ...state,
+        layout: {
+          ...state.layout,
+          header: {
+            ...state.layout.header,
+            [action.key]: { ...state.layout.header[action.key], ...action.patch },
+          },
+        },
+      }
+    case 'SET_COLUMNS':
+      return {
+        ...state,
+        layout: normalizeLayout({
+          ...state.layout,
+          columns: { ...state.layout.columns, ...action.patch },
+        }),
+      }
+    case 'SET_COLUMN_TITLE': {
+      const [t0, t1] = state.layout.columns.titles
+      const titles: [string, string] = [t0, t1]
+      titles[action.index] = action.title
+      return {
+        ...state,
+        layout: { ...state.layout, columns: { ...state.layout.columns, titles } },
+      }
+    }
+    case 'SET_LAYOUT':
+      return { ...state, layout: normalizeLayout({ ...state.layout, ...action.patch }) }
     case 'UPDATE_TEXT_LEVEL_OVERRIDES': {
       const merged: TextLevelOverrides = { ...state.textLevelOverrides }
       for (const key of TEXT_PRESET_LEVEL_KEYS) {

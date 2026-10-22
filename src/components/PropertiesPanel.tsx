@@ -72,16 +72,31 @@ export function PropertiesPanel() {
             <div className="properties-panel__level-summary">
               <span className="properties-panel__level-summary-v">{currentLevelLabel}</span>
               <button type="button" className="properties-panel__level-btn" onClick={openLevelDialog}>
-                開啟階層總表…
+                階層總表…
               </button>
             </div>
           </div>
-          <p className="properties-panel__hint">
-            在總表內可一次調整內建四種階層、新增或編輯自訂階層，並將任一階層套用至目前這段文字。
-          </p>
-          <p className="properties-panel__hint">
-            快速改<strong>這一段</strong>的階層：請用工具列「目前文字階層」下拉。總表用於整卷預設與自訂階層目錄。
-          </p>
+          <label className="field">
+            <span>套用階層</span>
+            <select
+              value={obj.textLevel}
+              onChange={(e) =>
+                dispatch({ type: 'SET_TEXT_STYLE', id: obj.id, patch: { textLevel: e.target.value } })
+              }
+            >
+              {TEXT_PRESET_LEVEL_KEYS.map((key) => (
+                <option key={key} value={key}>
+                  {getTextTierLabel(key, state.textLevelOverrides, state.userTextTiers)}
+                </option>
+              ))}
+              {state.userTextTiers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+              <option value="custom">自訂（不套階層）</option>
+            </select>
+          </label>
           {levelLocked ? (
             <p className="properties-panel__hint">
               此階層的字級與文字顏色依總表預設；此處可改對齊、區塊寬度與字型家族。

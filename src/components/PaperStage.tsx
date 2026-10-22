@@ -17,6 +17,7 @@ import {
   Transformer,
 } from 'react-konva'
 import { KonvaTextBlock } from './KonvaTextBlock'
+import { EDITOR_ONLY_NAME, PaperLayoutLayer } from './PaperLayoutLayer'
 import { useEditor } from '../editor/EditorContext'
 import type { EditorAction } from '../editor/reducer'
 import { getBoundingBox, lineSegmentBox, type Box } from '../editor/bounds'
@@ -25,6 +26,7 @@ import type { CanvasObject, EditorState, ImageObject, LineObject } from '../type
 
 type PaperStageProps = {
   scale: number
+  showGuides: boolean
   onTextDoubleClick: (id: string) => void
 }
 
@@ -95,11 +97,20 @@ function boxesExcluding(
   return out
 }
 
+/** 吸附對象：其他物件＋版型的內容區與各欄邊界 */
+function snapTargets(objects: CanvasObject[], excludeId: string, layoutBoxes: Box[]): Box[] {
+  return [...boxesExcluding(objects, excludeId, (o) => getBoundingBox(o)), ...layoutBoxes]
+}
+
 export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
-  function PaperStage({ scale, onTextDoubleClick }, ref) {
-    const { state, dispatch, sortedObjects } = useEditor()
+  function PaperStage({ scale, showGuides, onTextDoubleClick }, ref) {
+    const { state, dispatch, sortedObjects, layoutGeometry } = useEditor()
     const stateRef = useRef(state)
-    stateRef.current = state
+    const layoutBoxesRef = useRef<Box[]>([])
+    useLayoutEffect(() => {
+      stateRef.current = state
+      layoutBoxesRef.current = [layoutGeometry.content, ...layoutGeometry.columns]
+    }, [state, layoutGeometry])
 
     const transformerRef = useRef<Konva.Transformer>(null)
     const shapeRefs = useRef<Record<string, Konva.Node>>({})
@@ -118,7 +129,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
           onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => {
             const node = e.target
             const b = boxFromNode(node)
-            const others = boxesExcluding(stateRef.current.objects, id, (o) => getBoundingBox(o))
+            const others = snapTargets(stateRef.current.objects, id, layoutBoxesRef.current)
             const r = snapBoxPosition(b, others, pageW, pageH)
             node.absolutePosition({ x: r.x, y: r.y })
             setGuides(r.guides)
@@ -126,7 +137,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
           onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => {
             const node = e.target
             const b = boxFromNode(node)
-            const others = boxesExcluding(stateRef.current.objects, id, (o) => getBoundingBox(o))
+            const others = snapTargets(stateRef.current.objects, id, layoutBoxesRef.current)
             const r = snapBoxPosition(b, others, pageW, pageH)
             clearGuides()
             dispatch({ type: 'MOVE_OBJECT', id, x: r.x, y: r.y })
@@ -255,6 +266,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                 shadowOffset={{ x: 0, y: 8 }}
                 listening
               />
+              <PaperLayoutLayer geometry={layoutGeometry} showGuides={showGuides} />
               {sortedObjects.map((obj) => {
                 if (obj.type === 'text') {
                   const isSelected = state.selectedId === obj.id
@@ -352,9 +364,14 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                 }
                 return null
               })}
-              <Transformer ref={transformerRef} borderStroke="#6366f1" anchorStroke="#6366f1" />
+              <Transformer
+                ref={transformerRef}
+                name={EDITOR_ONLY_NAME}
+                borderStroke="#6366f1"
+                anchorStroke="#6366f1"
+              />
             </Layer>
-            <Layer listening={false}>
+            <Layer listening={false} name={EDITOR_ONLY_NAME}>
               {guides.vertical.map((gx, i) => (
                 <Line
                   key={`vg-${i}-${gx}`}

@@ -1,3 +1,5 @@
+import type { PaperLayout } from './layout'
+
 /** A4 邏輯像素（約 96 DPI） */
 export const A4_WIDTH = 794
 export const A4_HEIGHT = 1123
@@ -292,6 +294,8 @@ export type EditorState = {
   defaultNewTextTierId: string
   /** 為 true 時點畫布空白處會建立文字（使用當下的 defaultNewTextTierId） */
   textPlacementMode: boolean
+  /** 頁首與分欄版型 */
+  layout: PaperLayout
 }
 
 export function isText(o: CanvasObject): o is TextObject {
