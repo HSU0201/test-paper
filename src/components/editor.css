@@ -397,6 +397,39 @@ kbd {
   gap: 10px;
 }
 
+.exam-style {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-m);
+  background: var(--c-surface-2);
+}
+
+.exam-style__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--c-text);
+}
+
+.exam-style__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.exam-style__bold {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.exam-style__bold .ui-switch {
+  margin-bottom: 7px;
+}
+
 .ui-row {
   display: flex;
   align-items: center;

@@ -19,6 +19,8 @@ export type TextLevelPreset = {
   fill: string
   /** 選取時外框顏色 */
   boxStroke: string
+  /** 試卷排版用：大題標題、作答說明、題文是否粗體 */
+  bold?: boolean
 }
 
 export const TEXT_LEVEL_PRESETS = {
@@ -27,24 +29,28 @@ export const TEXT_LEVEL_PRESETS = {
     fontSize: 24,
     fill: '#000000',
     boxStroke: '#c9a227',
+    bold: true,
   },
   section_heading: {
     label: '章節標題',
     fontSize: 18,
     fill: '#000000',
     boxStroke: '#e2b007',
+    bold: true,
   },
   question_body: {
     label: '題文／內文',
     fontSize: 16,
     fill: '#000000',
     boxStroke: '#a08a4a',
+    bold: false,
   },
   instruction: {
     label: '作答說明',
     fontSize: 14,
     fill: '#000000',
     boxStroke: '#8a5e00',
+    bold: false,
   },
 }
 
@@ -75,6 +81,7 @@ export function mergeTextLevelPreset(
     fontSize: o.fontSize ?? base.fontSize,
     fill: o.fill ?? base.fill,
     boxStroke: o.boxStroke ?? base.boxStroke,
+    bold: o.bold ?? base.bold ?? false,
     boxFill: 'transparent',
   }
 }

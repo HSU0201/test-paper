@@ -16,11 +16,45 @@ import {
   type QuestionType,
   type Section,
 } from '../types/exam'
-import { Icon, NumberField, PanelSection, Segmented } from './ui'
+import { Icon, NumberField, PanelSection, Segmented, Switch } from './ui'
 import { ColorField } from './ColorField'
 import { plainText } from '../editor/richText'
+import { mergeTextLevelPreset, type BuiltinTextLevelKey, type TextLevelPreset } from '../types/document'
 
 const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]
+
+/** 大題標題、作答說明、題文的字級與粗體；同一類文字整份試卷共用 */
+function ExamTextStyle({
+  role,
+  label,
+}: {
+  role: Extract<BuiltinTextLevelKey, 'section_heading' | 'instruction' | 'question_body'>
+  label: string
+}) {
+  const { state, dispatch } = useEditor()
+  const preset = mergeTextLevelPreset(role, state.textLevelOverrides)
+  const set = (patch: Partial<TextLevelPreset>) =>
+    dispatch({ type: 'UPDATE_TEXT_LEVEL_OVERRIDES', patch: { [role]: patch } })
+  return (
+    <div className="exam-style">
+      <span className="exam-style__label">{label}</span>
+      <div className="exam-style__row">
+        <NumberField
+          label="字級"
+          suffix="px"
+          min={8}
+          max={72}
+          value={preset.fontSize}
+          onChange={(v) => set({ fontSize: Math.min(72, Math.max(8, Math.round(v))) })}
+        />
+        <div className="exam-style__bold">
+          <span className="ui-field__label">粗體</span>
+          <Switch checked={!!preset.bold} label={`${label}粗體`} onChange={(v) => set({ bold: v })} />
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function SectionEditor({ section, index }: { section: Section; index: number }) {
   const { dispatch } = useEditor()
@@ -43,6 +77,11 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
             onChange={(instruction) => set({ instruction })}
           />
         </div>
+      </PanelSection>
+
+      <PanelSection title="文字樣式" description="大題標題與作答說明的字級、粗體會套用到整份試卷。">
+        <ExamTextStyle role="section_heading" label="大題標題" />
+        <ExamTextStyle role="instruction" label="作答說明" />
       </PanelSection>
 
       <PanelSection title="配分" description={`本大題共 ${section.questions.length} 題，${sectionScore(section)} 分。`}>
@@ -346,6 +385,10 @@ function QuestionEditor({ questionId }: { questionId: string }) {
             onChange={(stem) => set({ stem })}
           />
         </div>
+      </PanelSection>
+
+      <PanelSection title="文字樣式" description="題號、題幹與選項共用這個字級與粗體，整份試卷一起套用。">
+        <ExamTextStyle role="question_body" label="題文" />
       </PanelSection>
 
       {isChoiceType(q.type) ? (

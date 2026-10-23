@@ -66,9 +66,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       state.exam,
       (page) => pageGeometry(page).frames,
       {
-        heading: { fontSize: heading.fontSize, fill: '#000000', bold: true },
-        instruction: { fontSize: instruction.fontSize, fill: '#000000' },
-        body: { fontSize: body.fontSize, fill: '#000000' },
+        heading: { fontSize: heading.fontSize, fill: '#000000', bold: heading.bold },
+        instruction: { fontSize: instruction.fontSize, fill: '#000000', bold: instruction.bold },
+        body: { fontSize: body.fontSize, fill: '#000000', bold: body.bold },
       },
       state.layout.spacing,
       measureWithKonva,
