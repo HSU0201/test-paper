@@ -1,3 +1,5 @@
+import { plainText } from '../editor/richText'
+
 export type QuestionType = 'single_choice' | 'multi_choice' | 'fill_blank' | 'short_answer'
 
 export const QUESTION_TYPE_LABEL: Record<QuestionType, string> = {
@@ -112,7 +114,7 @@ export function questionNumbers(exam: ExamContent): Map<string, number> {
 }
 
 export function sectionHeading(s: Section, index: number): string {
-  return `${toChineseNumeral(index + 1)}、${s.title}`
+  return `${toChineseNumeral(index + 1)}、${plainText(s.title)}`
 }
 
 /** 大題標題後的配分說明：每題同分時寫「每題 N 分」 */

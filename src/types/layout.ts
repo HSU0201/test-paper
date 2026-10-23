@@ -1,4 +1,5 @@
 import type { Box } from '../editor/bounds'
+import { plainText } from '../editor/richText'
 
 /** 頁首欄位角色；custom 為使用者自行新增 */
 export type HeaderRole =
@@ -106,7 +107,7 @@ const DEFAULT_ITEMS: Seed[] = [
   { role: 'totalScore', value: '', showLabel: true, visible: false, xr: 0.7, wr: 0.3, y: 88, fontSize: 13, bold: false, align: 'right' },
 ]
 
-const HEADER_TEXT_COLOR = '#0f172a'
+const HEADER_TEXT_COLOR = '#000000'
 
 export function createHeaderItem(seed: Seed): HeaderItem {
   return {
@@ -153,11 +154,12 @@ export function createDefaultLayout(): PaperLayout {
 
 /** 留白欄位的底線長度；給 boxWidth 時自動填滿欄寬（全形字寬約等於字級） */
 export function headerItemText(item: HeaderItem, boxWidth?: number): string {
-  const value = item.value.trim()
-  if (!item.showLabel) return value
-  if (value) return `${item.label}：${value}`
+  const valuePlain = plainText(item.value).trim()
+  const labelPlain = plainText(item.label)
+  if (!item.showLabel) return item.value.trim()
+  if (valuePlain) return `${item.label}：${item.value.trim()}`
   const blanks =
-    boxWidth === undefined ? 6 : Math.max(2, Math.floor(boxWidth / item.fontSize - (item.label.length + 1) - 0.3))
+    boxWidth === undefined ? 6 : Math.max(2, Math.floor(boxWidth / item.fontSize - (labelPlain.length + 1) - 0.3))
   return `${item.label}：${'＿'.repeat(blanks)}`
 }
 

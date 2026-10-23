@@ -213,9 +213,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         align: 'left',
         textLevel: 'custom',
         fontSize: DEFAULT_NEW_TEXT_FONT_SIZE,
-        fill: '#111827',
+        fill: '#000000',
         boxFill: 'transparent',
-        boxStroke: '#64748b',
+        boxStroke: '#a08a4a',
       }
 
       if (tierId !== 'custom') {

@@ -21,6 +21,7 @@ import { EDITOR_ONLY_NAME, HEADER_REF_PREFIX, HeaderItemsLayer, PageDecorLayer }
 import { ExamFlowLayer } from './ExamFlowLayer'
 import { useHtmlImage } from './useHtmlImage'
 import { useEditor } from '../editor/EditorContext'
+import { EDITOR_GUIDE, EDITOR_SELECTION } from '../editor/theme'
 import type { EditorAction } from '../editor/reducer'
 import { getBoundingBox, lineSegmentBox, type Box } from '../editor/bounds'
 import { snapBoxPosition, type SnapGuides } from '../editor/snap'
@@ -348,7 +349,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                       width={obj.width}
                       height={obj.height}
                       fill={obj.fill === 'transparent' ? undefined : obj.fill}
-                      stroke={isSelected ? '#6366f1' : obj.stroke}
+                      stroke={isSelected ? EDITOR_SELECTION : obj.stroke}
                       strokeWidth={isSelected ? 2 : obj.strokeWidth}
                       cornerRadius={obj.cornerRadius}
                       draggable
@@ -405,8 +406,8 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
               <Transformer
                 ref={transformerRef}
                 name={EDITOR_ONLY_NAME}
-                borderStroke="#6366f1"
-                anchorStroke="#6366f1"
+                borderStroke={EDITOR_SELECTION}
+                anchorStroke={EDITOR_SELECTION}
               />
             </Layer>
             <Layer listening={false} name={EDITOR_ONLY_NAME}>
@@ -414,7 +415,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                 <Line
                   key={`vg-${i}-${gx}`}
                   points={[gx, 0, gx, pageH]}
-                  stroke="#ec4899"
+                  stroke={EDITOR_GUIDE}
                   strokeWidth={1}
                   dash={[4, 4]}
                 />
@@ -423,7 +424,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                 <Line
                   key={`hg-${i}-${gy}`}
                   points={[0, gy, pageW, gy]}
-                  stroke="#ec4899"
+                  stroke={EDITOR_GUIDE}
                   strokeWidth={1}
                   dash={[4, 4]}
                 />
@@ -464,7 +465,7 @@ function LineShape({
       x={0}
       y={0}
       points={[obj.x1, obj.y1, obj.x2, obj.y2]}
-      stroke={isSelected ? '#6366f1' : obj.stroke}
+      stroke={isSelected ? EDITOR_SELECTION : obj.stroke}
       strokeWidth={isSelected ? obj.strokeWidth + 1 : obj.strokeWidth}
       hitStrokeWidth={Math.max(12, obj.strokeWidth)}
       draggable

@@ -1,8 +1,10 @@
 import { Group, Image as KonvaImage, Line, Rect, Text } from 'react-konva'
 import type { EditorAction } from '../editor/reducer'
-import type { FlowImage, PlacedBlock } from '../editor/flowLayout'
-import { FLOW_FONT, FLOW_WRAP } from '../editor/konvaMeasure'
+import type { FlowImage, FlowRun, PlacedBlock } from '../editor/flowLayout'
+import { FLOW_FONT, FLOW_WRAP, measureWithKonva } from '../editor/konvaMeasure'
+import { layoutRichLines } from '../editor/richText'
 import type { Asset, BlockRef } from '../types/exam'
+import { EDITOR_FLAG, EDITOR_SELECTION } from '../editor/theme'
 import { EDITOR_ONLY_NAME } from './PaperLayoutLayer'
 import { useHtmlImage } from './useHtmlImage'
 
@@ -24,6 +26,87 @@ function FigureImage({ im, asset }: { im: FlowImage; asset: Asset | undefined })
   return <KonvaImage image={el} x={im.x} y={im.y} width={im.w} height={im.h} listening={false} />
 }
 
+function FlowRunText({ r }: { r: FlowRun }) {
+  const base = r.placeholder ? '#94a3b8' : r.style.fill || '#000000'
+  const fontStyle = r.style.bold ? 'bold' : 'normal'
+  const step = r.style.fontSize * r.lineHeight
+  if (r.vertical && r.colors?.some(Boolean)) {
+    const glyphs = r.text.split('\n')
+    const groups: { text: string; color: string; start: number }[] = []
+    glyphs.forEach((g, i) => {
+      const color = r.colors?.[i] || base
+      const last = groups[groups.length - 1]
+      if (last && last.color === color) last.text += `\n${g}`
+      else groups.push({ text: g, color, start: i })
+    })
+    return (
+      <Group>
+        {groups.map((g) => (
+          <Text
+            key={g.start}
+            name={r.placeholder ? EDITOR_ONLY_NAME : undefined}
+            x={r.x}
+            y={r.y + g.start * step}
+            width={r.width}
+            height={g.text.split('\n').length * step}
+            text={g.text}
+            fontSize={r.style.fontSize}
+            fontFamily={FLOW_FONT}
+            fontStyle={fontStyle}
+            fill={g.color}
+            align="center"
+            lineHeight={r.lineHeight}
+            wrap="none"
+            listening={false}
+          />
+        ))}
+      </Group>
+    )
+  }
+  if (!r.vertical && r.colors?.some(Boolean)) {
+    const pieces = layoutRichLines(r.text, r.colors, r.width, (sample) =>
+      measureWithKonva(sample, 10000, r.style, r.lineHeight).naturalWidth,
+    )
+    return (
+      <Group>
+        {pieces.map((p, i) => (
+          <Text
+            key={i}
+            name={r.placeholder ? EDITOR_ONLY_NAME : undefined}
+            x={r.x + p.x}
+            y={r.y + p.line * step}
+            text={p.text}
+            fontSize={r.style.fontSize}
+            fontFamily={FLOW_FONT}
+            fontStyle={fontStyle}
+            fill={p.color || base}
+            wrap="none"
+            listening={false}
+          />
+        ))}
+      </Group>
+    )
+  }
+  return (
+    <Text
+      name={r.placeholder ? EDITOR_ONLY_NAME : undefined}
+      x={r.x}
+      y={r.y}
+      width={r.width}
+      height={r.height}
+      text={r.text}
+      fontSize={r.style.fontSize}
+      fontFamily={FLOW_FONT}
+      fontStyle={fontStyle}
+      fill={base}
+      align={r.vertical ? 'center' : 'left'}
+      lineHeight={r.lineHeight}
+      wrap={r.vertical ? 'none' : FLOW_WRAP}
+      listening={false}
+    />
+  )
+}
+
 /** 大題與小題由排版自動定位；點擊選取後到右側編輯，不可拖曳 */
 export function ExamFlowLayer({ blocks, assets, selected, flagged, interactive, dispatch }: ExamFlowLayerProps) {
   return (
@@ -41,23 +124,7 @@ export function ExamFlowLayer({ blocks, assets, selected, flagged, interactive, 
               <FigureImage key={im.key} im={im} asset={assets[im.assetId]} />
             ))}
             {b.runs.map((r) => (
-              <Text
-                key={r.key}
-                name={r.placeholder ? EDITOR_ONLY_NAME : undefined}
-                x={r.x}
-                y={r.y}
-                width={r.width}
-                height={r.height}
-                text={r.text}
-                fontSize={r.style.fontSize}
-                fontFamily={FLOW_FONT}
-                fontStyle={r.style.bold ? 'bold' : 'normal'}
-                fill={r.placeholder ? '#94a3b8' : r.style.fill}
-                align={r.vertical ? 'center' : 'left'}
-                lineHeight={r.lineHeight}
-                wrap={r.vertical ? 'none' : FLOW_WRAP}
-                listening={false}
-              />
+              <FlowRunText key={r.key} r={r} />
             ))}
             <Rect
               name={EDITOR_ONLY_NAME}
@@ -67,7 +134,7 @@ export function ExamFlowLayer({ blocks, assets, selected, flagged, interactive, 
               height={b.box.h + pad * 2}
               cornerRadius={4}
               fill="rgba(0,0,0,0.001)"
-              stroke={isSel ? '#4f46e5' : isFlag ? '#f59e0b' : undefined}
+              stroke={isSel ? EDITOR_SELECTION : isFlag ? EDITOR_FLAG : undefined}
               strokeWidth={isSel || isFlag ? 1.5 : 0}
               dash={[5, 3]}
               listening={interactive}

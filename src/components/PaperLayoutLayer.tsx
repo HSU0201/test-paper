@@ -1,9 +1,13 @@
 import type Konva from 'konva'
+import { useRef } from 'react'
 import { Group, Line, Rect, Text } from 'react-konva'
 import type { Box } from '../editor/bounds'
 import type { EditorAction } from '../editor/reducer'
 import { snapBoxPosition, type SnapGuides } from '../editor/snap'
-import { headerItemHeight, headerItemText, verticalHeaderText, type HeaderLayout, type PageGeometry } from '../types/layout'
+import { measureWithKonva } from '../editor/konvaMeasure'
+import { layoutRichLines, paintText, plainText } from '../editor/richText'
+import { EDITOR_GUIDE } from '../editor/theme'
+import { headerItemHeight, headerItemText, verticalHeaderText, type HeaderItem, type HeaderLayout, type PageGeometry } from '../types/layout'
 
 export const EDITOR_ONLY_NAME = 'editor-only'
 export const HEADER_REF_PREFIX = 'hdr:'
@@ -17,17 +21,79 @@ export function PageDecorLayer({ geometry, showGuides }: { geometry: PageGeometr
     <Group listening={false}>
       {showGuides ? (
         <Group name={EDITOR_ONLY_NAME}>
-          <Rect x={content.x} y={content.y} width={content.w} height={content.h} stroke="#c7d2fe" strokeWidth={1} dash={[6, 4]} />
+          <Rect x={content.x} y={content.y} width={content.w} height={content.h} stroke="#e7d39a" strokeWidth={1} dash={[6, 4]} />
           {header ? (
-            <Rect x={header.x} y={header.y} width={header.w} height={header.h} fill="rgba(245,158,11,0.05)" />
+            <Rect x={header.x} y={header.y} width={header.w} height={header.h} fill="rgba(226,176,7,0.1)" />
           ) : null}
           {frames.map((f, i) => (
-            <Rect key={`frame-${i}`} x={f.x} y={f.y} width={f.w} height={f.h} fill="rgba(99,102,241,0.035)" />
+            <Rect key={`frame-${i}`} x={f.x} y={f.y} width={f.w} height={f.h} fill="rgba(246,209,91,0.18)" />
           ))}
         </Group>
       ) : null}
       {rules.map((r) => (
-        <Line key={r.key} points={[r.x1, r.y1, r.x2, r.y2]} stroke="#334155" strokeWidth={1} />
+        <Line key={r.key} points={[r.x1, r.y1, r.x2, r.y2]} stroke="#2c2416" strokeWidth={1} />
+      ))}
+    </Group>
+  )
+}
+
+function HeaderInk({
+  box,
+  item,
+  painted,
+  vertical,
+}: {
+  box: Box
+  item: HeaderItem
+  painted: { text: string; colors?: string[] }
+  vertical: boolean
+}) {
+  const fontStyle = item.bold ? 'bold' : 'normal'
+  const widthOf = (sample: string) =>
+    measureWithKonva(sample, 10000, { fontSize: item.fontSize, fill: '#000000', bold: item.bold }, vertical ? 1.15 : 1).naturalWidth
+  if (vertical) {
+    const glyphs = [...painted.text].map((ch) => verticalHeaderText(ch))
+    const step = item.fontSize * 1.15
+    const textH = glyphs.length * step
+    const y0 = item.align === 'right' ? box.h - textH : item.align === 'center' ? (box.h - textH) / 2 : 0
+    return (
+      <Group listening={false}>
+        {glyphs.map((g, i) => {
+          const w = widthOf(g)
+          return (
+            <Text
+              key={i}
+              x={(box.w - w) / 2}
+              y={y0 + i * step}
+              text={g}
+              fontSize={item.fontSize}
+              fontFamily={LAYOUT_FONT}
+              fontStyle={fontStyle}
+              fill={painted.colors?.[i] || '#000000'}
+              listening={false}
+            />
+          )
+        })}
+      </Group>
+    )
+  }
+  const fullW = widthOf(painted.text)
+  const origin = item.align === 'center' ? Math.max(0, (box.w - fullW) / 2) : item.align === 'right' ? Math.max(0, box.w - fullW) : 0
+  const pieces = layoutRichLines(painted.text, painted.colors, 100000, widthOf)
+  return (
+    <Group listening={false}>
+      {pieces.map((p, i) => (
+        <Text
+          key={i}
+          x={origin + p.x}
+          y={p.line * item.fontSize}
+          text={p.text}
+          fontSize={item.fontSize}
+          fontFamily={LAYOUT_FONT}
+          fontStyle={fontStyle}
+          fill={p.color || '#000000'}
+          listening={false}
+        />
       ))}
     </Group>
   )
@@ -63,6 +129,7 @@ export function HeaderItemsLayer({
   clearGuides,
 }: HeaderItemsLayerProps) {
   const visible = header.items.filter((it) => it.visible)
+  const inkRefs = useRef(new Map<string, Konva.Group>())
   const itemBox = (id: string): Box | null => {
     const it = header.items.find((x) => x.id === id)
     if (!it) return null
@@ -86,9 +153,14 @@ export function HeaderItemsLayer({
       {visible.map((it) => {
         const b = itemBox(it.id)!
         const text = headerItemText(it, vertical ? b.h / 1.15 : b.w)
-        const shown = vertical && text ? verticalHeaderText(text) : text
+        const painted = paintText(text)
+        const shown = vertical && painted.text ? verticalHeaderText(painted.text) : painted.text
+        const colored = !!painted.colors?.some(Boolean)
         const isPlaceholder = !text
         const isSel = selectedId === it.id
+        const syncInk = (n: Konva.Node) => {
+          inkRefs.current.get(it.id)?.setAttrs({ x: n.x(), y: n.y(), scaleX: n.scaleX(), scaleY: n.scaleY() })
+        }
         return (
           <Group key={it.id}>
             {isSel ? (
@@ -98,11 +170,24 @@ export function HeaderItemsLayer({
                 y={b.y - 2}
                 width={b.w + 4}
                 height={b.h + 4}
-                stroke="#f59e0b"
+                stroke={EDITOR_GUIDE}
                 strokeWidth={1}
                 dash={[4, 3]}
                 listening={false}
               />
+            ) : null}
+            {colored ? (
+              <Group
+                ref={(n) => {
+                  if (n) inkRefs.current.set(it.id, n)
+                  else inkRefs.current.delete(it.id)
+                }}
+                x={b.x}
+                y={b.y}
+                listening={false}
+              >
+                <HeaderInk box={b} item={it} painted={painted} vertical={vertical} />
+              </Group>
             ) : null}
             <Text
               ref={registerRef(`${HEADER_REF_PREFIX}${it.id}`) as (n: Konva.Text | null) => void}
@@ -111,11 +196,11 @@ export function HeaderItemsLayer({
               y={b.y}
               width={b.w}
               height={vertical ? b.h : undefined}
-              text={isPlaceholder ? (vertical ? verticalHeaderText(it.label) : `（${it.label}）`) : shown}
+              text={isPlaceholder ? (vertical ? verticalHeaderText(plainText(it.label)) : `（${plainText(it.label)}）`) : shown}
               fontSize={it.fontSize}
               fontFamily={LAYOUT_FONT}
               fontStyle={it.bold ? 'bold' : 'normal'}
-              fill={isPlaceholder ? '#94a3b8' : it.fill}
+              fill={isPlaceholder ? '#94a3b8' : colored ? 'rgba(0,0,0,0)' : '#000000'}
               align={vertical ? 'center' : it.align}
               verticalAlign={vertical ? (it.align === 'left' ? 'top' : it.align === 'right' ? 'bottom' : 'middle') : 'middle'}
               lineHeight={vertical ? 1.15 : 1}
@@ -130,8 +215,10 @@ export function HeaderItemsLayer({
               onTap={() => dispatch({ type: 'SELECT_BLOCK', ref: { kind: 'header', id: it.id } })}
               onDragMove={(e) => {
                 const n = e.target
+                syncInk(n)
                 const r = snapBoxPosition({ x: n.x(), y: n.y(), w: b.w, h: b.h }, otherBoxes(it.id), pageW, pageH)
                 n.position(clampToHeader(r.x, r.y, b.w, b.h))
+                syncInk(n)
                 setGuides(r.guides)
               }}
               onDragEnd={(e) => {
@@ -145,12 +232,14 @@ export function HeaderItemsLayer({
                     : { xr: (n.x() - box.x) / box.w, y: Math.round(n.y() - box.y) },
                 })
               }}
+              onTransform={(e) => syncInk(e.target)}
               onTransformEnd={(e) => {
                 const n = e.target as Konva.Text
                 const sx = n.scaleX()
                 const sy = n.scaleY()
                 n.scaleX(1)
                 n.scaleY(1)
+                inkRefs.current.get(it.id)?.scale({ x: 1, y: 1 })
                 if (vertical) {
                   const h = Math.max(it.fontSize * 2, n.height() * sy)
                   n.height(h)

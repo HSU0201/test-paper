@@ -17,6 +17,8 @@ import {
   type Section,
 } from '../types/exam'
 import { Icon, NumberField, PanelSection, Segmented } from './ui'
+import { ColorField } from './ColorField'
+import { plainText } from '../editor/richText'
 
 const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]
 
@@ -26,20 +28,21 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
   return (
     <div className="inspector__body">
       <PanelSection title={sectionHeading(section, index)}>
-        <label className="ui-field">
+        <div className="ui-field">
           <span className="ui-field__label">大題名稱</span>
-          <input className="ui-input" value={section.title} onChange={(e) => set({ title: e.target.value })} />
-        </label>
-        <label className="ui-field">
+          <ColorField ariaLabel="大題名稱" value={section.title} onChange={(title) => set({ title })} />
+        </div>
+        <div className="ui-field">
           <span className="ui-field__label">作答說明</span>
-          <textarea
-            className="ui-input ui-textarea"
+          <ColorField
+            ariaLabel="作答說明"
+            multiline
             rows={2}
             value={section.instruction}
             placeholder="例：每題 4 分，答錯不倒扣。"
-            onChange={(e) => set({ instruction: e.target.value })}
+            onChange={(instruction) => set({ instruction })}
           />
-        </label>
+        </div>
       </PanelSection>
 
       <PanelSection title="配分" description={`本大題共 ${section.questions.length} 題，${sectionScore(section)} 分。`}>
@@ -246,12 +249,11 @@ function ChoiceRow({
     <div className="choice-block">
       <div className="choice-row">
         <span className="choice-row__label">{label}</span>
-        <input
-          className="ui-input"
+        <ColorField
+          ariaLabel={`選項 ${label}`}
           value={choice.text}
-          aria-label={`選項 ${label}`}
           placeholder={asset ? '圖片說明，可留白' : undefined}
-          onChange={(e) => dispatch({ type: 'UPDATE_CHOICE', questionId, choiceId: choice.id, text: e.target.value })}
+          onChange={(text) => dispatch({ type: 'UPDATE_CHOICE', questionId, choiceId: choice.id, text })}
         />
         <button type="button" className="icon-btn" title="插入選項圖片" onClick={() => fileRef.current?.click()}>
           <Icon name="image" />
@@ -315,7 +317,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
 
   return (
     <div className="inspector__body">
-      <PanelSection title={`第 ${num} 題・${section.title}`}>
+      <PanelSection title={`第 ${num} 題・${plainText(section.title)}`}>
         <div className="ui-grid-2">
           <label className="ui-field">
             <span className="ui-field__label">題型</span>
@@ -333,17 +335,17 @@ function QuestionEditor({ questionId }: { questionId: string }) {
           </label>
           <NumberField label="配分" suffix="分" min={0} max={100} value={q.score} onChange={(v) => set({ score: v })} />
         </div>
-        <label className="ui-field">
+        <div className="ui-field">
           <span className="ui-field__label">題目</span>
-          <textarea
-            className="ui-input ui-textarea"
+          <ColorField
+            ariaLabel="題目"
+            multiline
             rows={4}
             value={q.stem}
             placeholder={q.type === 'fill_blank' ? '例：3 + 4 = ＿＿＿＿' : '輸入題目內容'}
-            autoFocus={!q.stem}
-            onChange={(e) => set({ stem: e.target.value })}
+            onChange={(stem) => set({ stem })}
           />
-        </label>
+        </div>
       </PanelSection>
 
       {isChoiceType(q.type) ? (

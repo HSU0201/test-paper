@@ -25,26 +25,26 @@ export const TEXT_LEVEL_PRESETS = {
   paper_title: {
     label: '試卷大標',
     fontSize: 24,
-    fill: '#0f172a',
-    boxStroke: '#2563eb',
+    fill: '#000000',
+    boxStroke: '#c9a227',
   },
   section_heading: {
     label: '章節標題',
     fontSize: 18,
-    fill: '#1e3a8a',
-    boxStroke: '#6366f1',
+    fill: '#000000',
+    boxStroke: '#e2b007',
   },
   question_body: {
     label: '題文／內文',
     fontSize: 16,
-    fill: '#111827',
-    boxStroke: '#64748b',
+    fill: '#000000',
+    boxStroke: '#a08a4a',
   },
   instruction: {
     label: '作答說明',
     fontSize: 14,
-    fill: '#374151',
-    boxStroke: '#ca8a04',
+    fill: '#000000',
+    boxStroke: '#8a5e00',
   },
 }
 
@@ -235,8 +235,8 @@ export function createDefaultUserTextTier(): UserTextTier {
     id: crypto.randomUUID(),
     label: '新階層',
     fontSize: 15,
-    fill: '#111827',
-    boxStroke: '#64748b',
+    fill: '#000000',
+    boxStroke: '#a08a4a',
   }
 }
 

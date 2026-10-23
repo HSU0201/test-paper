@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useEditor } from '../editor/EditorContext'
+import { EDITOR_SELECTION } from '../editor/theme'
 import { TEXT_BOX_PADDING } from '../types/document'
 
 type TextEditOverlayProps = {
@@ -63,7 +64,7 @@ export function TextEditOverlay({ editingId, scale, onClose }: TextEditOverlayPr
         lineHeight: 1.25,
         padding: 2 * scale,
         boxSizing: 'border-box',
-        border: '1px solid #6366f1',
+        border: `1px solid ${EDITOR_SELECTION}`,
         borderRadius: 4,
         background: 'rgba(255,255,255,0.96)',
         resize: 'vertical',

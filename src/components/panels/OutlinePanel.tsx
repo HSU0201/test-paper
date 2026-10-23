@@ -1,5 +1,6 @@
 import { useState, type DragEvent, type KeyboardEvent } from 'react'
 import { useEditor } from '../../editor/EditorContext'
+import { plainText } from '../../editor/richText'
 import {
   examTotals,
   QUESTION_TYPE_LABEL,
@@ -182,7 +183,7 @@ export function OutlinePanel() {
                       >
                         <span className="outline-row__num">{nums.get(q.id)}.</span>
                         <span className="outline-row__stem">
-                          {q.stem.trim() || <em>（未輸入題目）</em>}
+                          {plainText(q.stem).trim() || <em>（未輸入題目）</em>}
                         </span>
                         {q.figures.length ? (
                           <span className="outline-row__fig" title={`${q.figures.length} 張附圖`}>

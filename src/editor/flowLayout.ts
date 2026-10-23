@@ -5,6 +5,7 @@ import {
   questionNumbers,
   sectionHeading,
   sectionScoreNote,
+  toChineseNumeral,
   type Asset,
   type BlockRef,
   type ExamContent,
@@ -12,6 +13,7 @@ import {
   type Section,
 } from '../types/exam'
 import { toVerticalGlyph, type SpacingSettings } from '../types/layout'
+import { paintText, plainText, richChars } from './richText'
 
 export type TextStyle = { fontSize: number; fill: string; bold?: boolean }
 
@@ -38,6 +40,8 @@ export type FlowRun = {
   placeholder?: boolean
   /** 直排：每個字一行，由上往下，下一欄在左側 */
   vertical?: boolean
+  /** 與 text 的每個字對應；空字串表示用 style.fill（黑色）。直排時不含換行。 */
+  colors?: string[]
   height?: number
 }
 
@@ -94,13 +98,14 @@ type Ctx = { st: FlowStyles; m: MeasureFn; mt: Metrics; assets: Record<string, A
 function buildSectionHead(s: Section, index: number, w: number, c: Ctx): Built {
   const { st, m, mt } = c
   const runs: FlowRun[] = []
-  const title = `${sectionHeading(s, index)}${sectionScoreNote(s)}`
-  runs.push({ key: 'title', x: 0, y: 0, width: w, text: title, style: st.heading, lineHeight: mt.lineHeight })
-  let h = m(title, w, st.heading, mt.lineHeight).height
-  if (s.instruction.trim()) {
+  const title = paintText(`${toChineseNumeral(index + 1)}、${s.title}${sectionScoreNote(s)}`)
+  runs.push({ key: 'title', x: 0, y: 0, width: w, text: title.text, colors: title.colors, style: st.heading, lineHeight: mt.lineHeight })
+  let h = m(title.text, w, st.heading, mt.lineHeight).height
+  if (plainText(s.instruction).trim()) {
     h += 2
-    runs.push({ key: 'inst', x: 0, y: h, width: w, text: s.instruction, style: st.instruction, lineHeight: mt.lineHeight })
-    h += m(s.instruction, w, st.instruction, mt.lineHeight).height
+    const inst = paintText(s.instruction)
+    runs.push({ key: 'inst', x: 0, y: h, width: w, text: inst.text, colors: inst.colors, style: st.instruction, lineHeight: mt.lineHeight })
+    h += m(inst.text, w, st.instruction, mt.lineHeight).height
   }
   return { height: h + 4, runs, rules: [], images: [] }
 }
@@ -120,7 +125,8 @@ function buildQuestion(q: Question, num: number, w: number, c: Ctx): Built {
   const lh = st.body.fontSize * mt.lineHeight
   const indent = Math.ceil(st.body.fontSize * 2)
   const innerW = Math.max(40, w - indent)
-  const stem = q.stem.trim() || EMPTY_STEM
+  const stemPainted = paintText(q.stem.trim() || EMPTY_STEM)
+  const stem = stemPainted.text
 
   const right = q.figures.find((f) => f.placement === 'right')
   const below = q.figures.filter((f) => f !== right && f.placement !== 'afterChoices')
@@ -143,6 +149,7 @@ function buildQuestion(q: Question, num: number, w: number, c: Ctx): Built {
     y: 0,
     width: stemW,
     text: stem,
+    colors: q.stem.trim() ? stemPainted.colors : undefined,
     style: st.body,
     lineHeight: mt.lineHeight,
     placeholder: !q.stem.trim(),
@@ -166,10 +173,12 @@ function buildQuestion(q: Question, num: number, w: number, c: Ctx): Built {
     h += 4
     const hasImage = (ch: Question['choices'][number]) => !!(ch.image && c.assets[ch.image.assetId])
     const labels = q.choices.map((ch, i) =>
-      ch.text.trim() ? `${choiceLabel(i)} ${ch.text.trim()}` : hasImage(ch) ? choiceLabel(i) : `${choiceLabel(i)} \u3000`,
+      plainText(ch.text).trim()
+        ? paintText(`${choiceLabel(i)} ${ch.text.trim()}`)
+        : paintText(hasImage(ch) ? choiceLabel(i) : `${choiceLabel(i)} \u3000`),
     )
     const anyImage = q.choices.some(hasImage)
-    const widest = Math.max(...labels.map((t) => m(t, 10000, st.body, mt.lineHeight).naturalWidth))
+    const widest = Math.max(...labels.map((t) => m(t.text, 10000, st.body, mt.lineHeight).naturalWidth))
     let cols: number = q.choiceLayout === 'auto' ? 1 : q.choiceLayout
     if (q.choiceLayout === 'auto') {
       if (anyImage) cols = labels.length <= 4 && innerW / 4 >= 110 ? 4 : 2
@@ -186,10 +195,19 @@ function buildQuestion(q: Question, num: number, w: number, c: Ctx): Built {
         const ch = q.choices[i]
         const x = indent + k * cellW
         const textW = cellW - 6
-        runs.push({ key: `ch-${i}`, x, y: h, width: textW, text: labels[i], style: st.body, lineHeight: mt.lineHeight })
-        let cellH = m(labels[i], textW, st.body, mt.lineHeight).height
+        runs.push({
+          key: `ch-${i}`,
+          x,
+          y: h,
+          width: textW,
+          text: labels[i].text,
+          colors: labels[i].colors,
+          style: st.body,
+          lineHeight: mt.lineHeight,
+        })
+        let cellH = m(labels[i].text, textW, st.body, mt.lineHeight).height
         if (ch.image && hasImage(ch)) {
-          const inline = !ch.text.trim()
+          const inline = !plainText(ch.text).trim()
           const labelW = m(`${choiceLabel(i)} `, 10000, st.body, mt.lineHeight).naturalWidth
           const maxW = inline ? Math.max(24, textW - labelW) : textW
           const size = figureSize(c, ch.image.assetId, maxW, ch.image.widthRatio)
@@ -428,7 +446,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
   }
 
   type Open = {
-    chars: string[]
+    chars: { g: string; color?: string }[]
     style: TextStyle
     key: string
     placeholder: boolean
@@ -446,13 +464,15 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     }
     const step = open.style.fontSize * lh
     const height = open.chars.length * step
+    const colors = open.chars.some((c) => c.color) ? open.chars.map((c) => c.color ?? '') : undefined
     acc.runs.push({
       key: `${open.key}-${acc.runs.length}`,
       x: open.x,
       y: open.y,
       width: open.w,
       height,
-      text: open.chars.join('\n'),
+      text: open.chars.map((c) => c.g).join('\n'),
+      colors,
       style: open.style,
       lineHeight: lh,
       vertical: true,
@@ -486,22 +506,22 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
   }
 
   const writeChunk = (text: string, style: TextStyle, key: string, placeholder = false) => {
-    const chars = [...text].filter((ch) => ch !== '\n')
+    const chars = richChars(text).filter((unit) => unit.ch !== '\n')
     const room = open && open.style === style && !!open.placeholder === placeholder ? open.cap - open.chars.length : 0
     if (room < chars.length) closeOpen()
     write(text, style, key, placeholder)
   }
 
   const write = (text: string, style: TextStyle, key: string, placeholder = false) => {
-    for (const ch of text) {
-      if (ch === '\n') {
+    for (const unit of richChars(text)) {
+      if (unit.ch === '\n') {
         closeOpen()
         continue
       }
       if (open && (open.style !== style || !!open.placeholder !== placeholder || open.chars.length >= open.cap)) closeOpen()
       if (!open) startOpen(style, key, placeholder)
       const col = open
-      if (col) col.chars.push(toVerticalGlyph(ch))
+      if (col) col.chars.push({ g: toVerticalGlyph(unit.ch), color: unit.color })
     }
   }
 
@@ -551,7 +571,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
   }
 
   const textWidth = (text: string, fontSize: number, frameH: number) => {
-    const n = [...text].filter((ch) => ch !== '\n').length
+    const n = [...plainText(text)].filter((ch) => ch !== '\n').length
     return Math.max(1, Math.ceil(n / charsPerColumn(fontSize, lh, frameH))) * colPitchOf(fontSize)
   }
 
@@ -577,7 +597,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
       let keep = headW + oneCol
       if (follower?.kind === 'question' && it.section.keepTogether === 'whole') {
         const rest = items.slice(i + 1).filter((x) => x.kind === 'question') as Extract<Item, { kind: 'question' }>[]
-        const whole = rest.reduce((sum, q) => sum + textWidth(`${q.num}.${q.question.stem}`, st.body.fontSize, fh), headW)
+        const whole = rest.reduce((sum, q) => sum + textWidth(plainText(`${q.num}.${q.question.stem}`), st.body.fontSize, fh), headW)
         if (whole <= frame().w) keep = whole
       }
       if (keep <= frame().w && remain() < keep) {
@@ -592,8 +612,8 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     }
 
     if (it.kind === 'section') {
-      write(`${sectionHeading(it.section, it.index)}${sectionScoreNote(it.section)}`, st.heading, 'title')
-      if (it.section.instruction.trim()) {
+      write(`${toChineseNumeral(it.index + 1)}、${it.section.title}${sectionScoreNote(it.section)}`, st.heading, 'title')
+      if (plainText(it.section.instruction).trim()) {
         closeOpen()
         write(it.section.instruction.trim(), st.instruction, 'inst')
       }
@@ -615,7 +635,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     below.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id))
     if (isChoiceType(q.type)) {
       q.choices.forEach((ch, ci) => {
-        const label = ch.text.trim() ? `${choiceLabel(ci)} ${ch.text.trim()}` : choiceLabel(ci)
+        const label = plainText(ch.text).trim() ? `${choiceLabel(ci)} ${ch.text.trim()}` : choiceLabel(ci)
         writeChunk(label, st.body, `ch-${ci}`)
         if (ch.image) emitImage(ch.image.assetId, ch.image.widthRatio, `chimg-${ch.id}`)
       })
