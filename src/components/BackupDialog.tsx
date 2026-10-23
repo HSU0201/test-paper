@@ -1,8 +1,11 @@
+import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useEditor } from '../editor/EditorContext'
 import { documentBaseName, downloadJson, readDocumentFile, serializeDocument, toLoadAction } from '../editor/documentIO'
 import { loadSnapshot, MAX_SNAPSHOTS, SNAPSHOT_EVERY_MINUTES } from '../editor/persist'
+import { easeOut } from '../motion/presets'
+import { MotionDialog } from './MotionDialog'
 
 function pad(n: number) {
   return String(n).padStart(2, '0')
@@ -18,23 +21,25 @@ function fileStamp(at: number) {
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`
 }
 
-export function BackupDialog({ onClose }: { onClose: () => void }) {
+export function BackupDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { state, dispatch, snapshots, backupNow, reloadSnapshots } = useEditor()
   const openRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const baseName = documentBaseName(state)
 
   useEffect(() => {
+    if (!open) return
     void reloadSnapshots()
-  }, [reloadSnapshots])
+  }, [open, reloadSnapshots])
 
   useEffect(() => {
+    if (!open) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [open, onClose])
 
   const downloadCurrent = () => {
     downloadJson(`${baseName}.json`, serializeDocument(state))
@@ -71,13 +76,9 @@ export function BackupDialog({ onClose }: { onClose: () => void }) {
   if (!mount) return null
 
   return createPortal(
-    <div
-      className="text-level-dialog-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <div className="text-level-dialog backup-dialog" role="dialog" aria-modal="true" aria-labelledby="backup-dialog-title">
+    <AnimatePresence>
+      {open ? (
+    <MotionDialog key="backup" className="backup-dialog" titleId="backup-dialog-title" onClose={onClose}>
         <h3 id="backup-dialog-title" className="text-level-dialog__title">
           備份與還原
         </h3>
@@ -125,13 +126,24 @@ export function BackupDialog({ onClose }: { onClose: () => void }) {
         </div>
         <h4 className="backup-dialog__list-title">本機備份</h4>
         {snapshots.length === 0 ? (
-          <p className="backup-dialog__empty">
+          <motion.p
+            className="backup-dialog__empty"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2, ease: easeOut }}
+          >
             還沒有備份。繼續編輯約 {SNAPSHOT_EVERY_MINUTES} 分鐘後會自動留下第一份，也可以按「立即備份」。
-          </p>
+          </motion.p>
         ) : (
           <ul className="backup-dialog__list">
             {snapshots.map((at, index) => (
-              <li key={at} className="backup-dialog__row">
+              <motion.li
+                key={at}
+                className="backup-dialog__row"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22, delay: Math.min(index * 0.03, 0.15), ease: easeOut }}
+              >
                 <span className="backup-dialog__time">
                   {formatWhen(at)}
                   {index === 0 ? <span className="backup-dialog__tag">最新</span> : null}
@@ -142,7 +154,7 @@ export function BackupDialog({ onClose }: { onClose: () => void }) {
                 <button type="button" className="btn btn--ghost" onClick={() => void downloadAt(at)}>
                   下載
                 </button>
-              </li>
+              </motion.li>
             ))}
           </ul>
         )}
@@ -151,8 +163,9 @@ export function BackupDialog({ onClose }: { onClose: () => void }) {
             關閉
           </button>
         </div>
-      </div>
-    </div>,
+    </MotionDialog>
+      ) : null}
+    </AnimatePresence>,
     mount,
   )
 }

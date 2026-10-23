@@ -1,5 +1,7 @@
+import { AnimatePresence, motion } from 'motion/react'
 import { useEditor } from '../../editor/EditorContext'
 import { HEADER_ROLE_LABEL, resolveSplit, type HeaderItem, type SpacingSettings } from '../../types/layout'
+import { easeOut } from '../../motion/presets'
 import { NumberField, PanelSection, Segmented, Switch } from '../ui'
 
 function HeaderItemRow({ item, selected }: { item: HeaderItem; selected: boolean }) {
@@ -18,16 +20,27 @@ function HeaderItemRow({ item, selected }: { item: HeaderItem; selected: boolean
           <Switch checked={item.visible} label={`顯示${name}`} onChange={(v) => set({ visible: v })} />
         </span>
       </div>
-      {item.visible ? (
-        <input
-          className="ui-input"
-          value={item.value}
-          placeholder={item.showLabel ? '留白則印出底線供學生填寫' : `輸入${name}`}
-          onClick={(e) => e.stopPropagation()}
-          onFocus={() => dispatch({ type: 'SELECT_BLOCK', ref: { kind: 'header', id: item.id } })}
-          onChange={(e) => set({ value: e.target.value })}
-        />
-      ) : null}
+      <AnimatePresence initial={false}>
+        {item.visible ? (
+          <motion.div
+            key="value"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2, ease: easeOut }}
+            style={{ overflow: 'hidden' }}
+          >
+            <input
+              className="ui-input"
+              value={item.value}
+              placeholder={item.showLabel ? '留白則印出底線供學生填寫' : `輸入${name}`}
+              onClick={(e) => e.stopPropagation()}
+              onFocus={() => dispatch({ type: 'SELECT_BLOCK', ref: { kind: 'header', id: item.id } })}
+              onChange={(e) => set({ value: e.target.value })}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   )
 }

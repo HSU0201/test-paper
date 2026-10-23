@@ -1,4 +1,6 @@
-import type { ReactNode } from 'react'
+import { motion } from 'motion/react'
+import { useId, type ReactNode } from 'react'
+import { layoutSpring } from '../motion/presets'
 
 export function PanelSection({
   title,
@@ -42,7 +44,12 @@ export function Switch({
       className={`ui-switch${checked ? ' is-on' : ''}`}
       onClick={() => onChange(!checked)}
     >
-      <span className="ui-switch__thumb" />
+      <motion.span
+        className="ui-switch__thumb"
+        initial={false}
+        animate={{ x: checked ? 14 : 0 }}
+        transition={layoutSpring}
+      />
     </button>
   )
 }
@@ -58,20 +65,27 @@ export function Segmented<T extends string | number>({
   onChange: (v: T) => void
   label: string
 }) {
+  const pillId = useId()
   return (
     <div className="ui-segmented" role="radiogroup" aria-label={label}>
-      {options.map((o) => (
-        <button
-          key={String(o.value)}
-          type="button"
-          role="radio"
-          aria-checked={value === o.value}
-          className={value === o.value ? 'is-active' : ''}
-          onClick={() => onChange(o.value)}
-        >
-          {o.label}
-        </button>
-      ))}
+      {options.map((o) => {
+        const active = value === o.value
+        return (
+          <button
+            key={String(o.value)}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            className={active ? 'is-active' : ''}
+            onClick={() => onChange(o.value)}
+          >
+            {active ? (
+              <motion.span layoutId={pillId} className="ui-segmented__pill" transition={layoutSpring} />
+            ) : null}
+            <span className="ui-segmented__label">{o.label}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }

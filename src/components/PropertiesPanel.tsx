@@ -1,3 +1,4 @@
+import { AnimatePresence } from 'motion/react'
 import { useState } from 'react'
 import { useEditor } from '../editor/EditorContext'
 import type {
@@ -15,6 +16,7 @@ import {
   TEXT_LEVEL_PRESETS,
   TEXT_PRESET_LEVEL_KEYS,
 } from '../types/document'
+import { MotionDialog } from './MotionDialog'
 
 function buildLevelDraft(overrides: TextLevelOverrides): Record<BuiltinTextLevelKey, TextLevelPreset> {
   const out = {} as Record<BuiltinTextLevelKey, TextLevelPreset>
@@ -227,21 +229,9 @@ export function PropertiesPanel() {
           />
         </label>
         </aside>
+        <AnimatePresence>
         {levelDialogOpen && levelDraft && userTierDraft ? (
-          <div
-            className="text-level-dialog-backdrop"
-            role="presentation"
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) closeLevelDialog()
-            }}
-          >
-            <div
-              className="text-level-dialog"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="text-level-dialog-title"
-              onMouseDown={(e) => e.stopPropagation()}
-            >
+          <MotionDialog key="text-levels" titleId="text-level-dialog-title" onClose={closeLevelDialog}>
               <h3 id="text-level-dialog-title" className="text-level-dialog__title">
                 文字階層總表
               </h3>
@@ -509,9 +499,9 @@ export function PropertiesPanel() {
                   儲存階層目錄
                 </button>
               </div>
-            </div>
-          </div>
+          </MotionDialog>
         ) : null}
+        </AnimatePresence>
       </>
     )
   }

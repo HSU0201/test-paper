@@ -1,5 +1,7 @@
 import type Konva from 'konva'
+import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { easeOut, fadeEase, layoutSpring, paneVariants } from '../motion/presets'
 import { getTextTierLabel } from '../types/document'
 import { StatusBar } from './StatusBar'
 import { EditorProvider, useEditor } from '../editor/EditorContext'
@@ -34,6 +36,7 @@ function EditorShell() {
   const [zoom, setZoom] = useState<number | 'fit'>('fit')
   const [showGuides, setShowGuides] = useState(true)
   const [tab, setTab] = useState<SideTab>('outline')
+  const [tabDir, setTabDir] = useState(1)
   const [editingId, setEditingId] = useState<string | null>(null)
   const scale = zoom === 'fit' ? fitScale : zoom
 
@@ -86,6 +89,13 @@ function EditorShell() {
     setEditingId(id)
   }, [])
 
+  const selectTab = (id: SideTab) => {
+    const next = SIDE_TABS.findIndex((t) => t.id === id)
+    const cur = SIDE_TABS.findIndex((t) => t.id === tab)
+    setTabDir(next >= cur ? 1 : -1)
+    setTab(id)
+  }
+
   const stepZoom = (dir: 1 | -1) => {
     const cur = scale
     const next =
@@ -102,52 +112,108 @@ function EditorShell() {
     <div className="editor-root">
       <TopBar stagesRef={stagesRef} />
       <div className="editor-body">
-        <nav className="side-rail" aria-label="編輯面板">
+        <motion.nav
+          className="side-rail"
+          aria-label="編輯面板"
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.32, ease: easeOut }}
+        >
           {SIDE_TABS.map((t) => (
             <button
               key={t.id}
               type="button"
               className={`side-rail__btn${tab === t.id ? ' is-active' : ''}`}
               aria-pressed={tab === t.id}
-              onClick={() => setTab(t.id)}
+              onClick={() => selectTab(t.id)}
             >
+              {tab === t.id ? (
+                <motion.span layoutId="side-rail-active" className="side-rail__mark" transition={layoutSpring} />
+              ) : null}
               <Icon name={t.icon} />
               <span>{t.label}</span>
             </button>
           ))}
-        </nav>
+        </motion.nav>
 
-        <section className="side-panel" aria-label={SIDE_TABS.find((t) => t.id === tab)?.label}>
-          <h2 className="side-panel__title">{SIDE_TABS.find((t) => t.id === tab)?.label}</h2>
-          {tab === 'outline' ? (
-            <OutlinePanel />
-          ) : tab === 'layout' ? (
-            <LayoutPanel />
-          ) : tab === 'insert' ? (
-            <InsertPanel />
-          ) : (
-            <PagePanel />
-          )}
-        </section>
+        <motion.section
+          className="side-panel"
+          aria-label={SIDE_TABS.find((t) => t.id === tab)?.label}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.32, delay: 0.04, ease: easeOut }}
+        >
+          <div className="side-panel__stage">
+            <AnimatePresence initial={false} custom={tabDir}>
+              <motion.div
+                key={tab}
+                className="side-panel__pane"
+                custom={tabDir}
+                variants={paneVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={fadeEase}
+              >
+                <h2 className="side-panel__title">{SIDE_TABS.find((t) => t.id === tab)?.label}</h2>
+                {tab === 'outline' ? (
+                  <OutlinePanel />
+                ) : tab === 'layout' ? (
+                  <LayoutPanel />
+                ) : tab === 'insert' ? (
+                  <InsertPanel />
+                ) : (
+                  <PagePanel />
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </motion.section>
 
         <main className="canvas-area" ref={canvasAreaRef}>
-          {state.textPlacementMode ? (
-            <div className="canvas-banner" role="status">
-              點擊紙張放置「
-              {getTextTierLabel(state.defaultNewTextTierId, state.textLevelOverrides, state.userTextTiers)}
-              」
-              <button type="button" onClick={() => dispatch({ type: 'CANCEL_TEXT_PLACEMENT' })}>
-                取消 <kbd>Esc</kbd>
-              </button>
-            </div>
-          ) : null}
+          <AnimatePresence>
+            {state.textPlacementMode ? (
+              <motion.div
+                key="place-banner"
+                className="canvas-banner-slot"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={fadeEase}
+              >
+                <div className="canvas-banner" role="status">
+                  點擊紙張放置「
+                  {getTextTierLabel(state.defaultNewTextTierId, state.textLevelOverrides, state.userTextTiers)}
+                  」
+                  <button type="button" onClick={() => dispatch({ type: 'CANCEL_TEXT_PLACEMENT' })}>
+                    取消 <kbd>Esc</kbd>
+                  </button>
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
           <div className="canvas-scroll">
-            {saveStatus.state === 'loading' ? <p className="canvas-loading">讀取暫存中…</p> : null}
-            <div className="canvas-pages" hidden={saveStatus.state === 'loading'}>
+            <AnimatePresence mode="wait">
+              {saveStatus.state === 'loading' ? (
+                <motion.p
+                  key="loading"
+                  className="canvas-loading"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={fadeEase}
+                >
+                  讀取暫存中…
+                </motion.p>
+              ) : (
+                <motion.div key="pages" className="canvas-pages" initial={false} animate={{ opacity: 1 }}>
               {Array.from({ length: pageCount }, (_, i) => (
-                <div
+                <motion.div
                   key={i}
                   className={`canvas-page${state.activePage === i ? ' is-active' : ''}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.32, delay: Math.min(i * 0.045, 0.22), ease: easeOut }}
                   ref={(el) => {
                     pageElsRef.current[i] = el
                   }}
@@ -169,11 +235,20 @@ function EditorShell() {
                       <TextEditOverlay editingId={editingId} scale={scale} onClose={() => setEditingId(null)} />
                     ) : null}
                   </div>
-                </div>
+                </motion.div>
               ))}
-            </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-          <div className="canvas-controls" role="toolbar" aria-label="檢視">
+          <motion.div
+            className="canvas-controls"
+            role="toolbar"
+            aria-label="檢視"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.32, delay: 0.1, ease: easeOut }}
+          >
             <button
               type="button"
               className={`icon-btn${showGuides ? ' is-active' : ''}`}
@@ -187,7 +262,19 @@ function EditorShell() {
             <button type="button" className="icon-btn" title="縮小" onClick={() => stepZoom(-1)}>
               <Icon name="minus" />
             </button>
-            <span className="canvas-controls__zoom">{Math.round(scale * 100)}%</span>
+            <span className="canvas-controls__zoom">
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.span
+                  key={Math.round(scale * 100)}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.16, ease: easeOut }}
+                >
+                  {Math.round(scale * 100)}%
+                </motion.span>
+              </AnimatePresence>
+            </span>
             <button type="button" className="icon-btn" title="放大" onClick={() => stepZoom(1)}>
               <Icon name="plus" />
             </button>
@@ -199,7 +286,7 @@ function EditorShell() {
             >
               <Icon name="fit" />
             </button>
-          </div>
+          </motion.div>
         </main>
 
         <Inspector />

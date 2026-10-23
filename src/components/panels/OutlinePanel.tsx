@@ -1,3 +1,4 @@
+import { motion } from 'motion/react'
 import { useState, type DragEvent, type KeyboardEvent } from 'react'
 import { useEditor } from '../../editor/EditorContext'
 import { plainText } from '../../editor/richText'
@@ -9,7 +10,13 @@ import {
   sectionScore,
   type BlockRef,
 } from '../../types/exam'
+import { layoutSpring } from '../../motion/presets'
 import { Icon, Segmented } from '../ui'
+
+function SelectMark({ on }: { on: boolean }) {
+  if (!on) return null
+  return <motion.span layoutId="outline-selection" className="outline-row__mark" transition={layoutSpring} />
+}
 
 type Drag = BlockRef | null
 /** 放置位置：大題用 sectionIndex；小題用 sectionId + index */
@@ -137,6 +144,7 @@ export function OutlinePanel() {
                 onClick={() => select({ kind: 'section', id: s.id })}
                 onKeyDown={onKey({ kind: 'section', id: s.id }, s.id)}
               >
+                <SelectMark on={isSel(s.id)} />
                 <span className="outline-row__grip" aria-hidden>
                   ⋮⋮
                 </span>
@@ -181,6 +189,7 @@ export function OutlinePanel() {
                         onKeyDown={onKey({ kind: 'question', id: q.id }, s.id)}
                         title={overflowIds.has(q.id) ? '此題比一整欄還高，會超出頁面' : undefined}
                       >
+                        <SelectMark on={isSel(q.id)} />
                         <span className="outline-row__num">{nums.get(q.id)}.</span>
                         <span className="outline-row__stem">
                           {plainText(q.stem).trim() || <em>（未輸入題目）</em>}

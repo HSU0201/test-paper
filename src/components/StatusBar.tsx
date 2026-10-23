@@ -1,6 +1,8 @@
+import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import { useEditor } from '../editor/EditorContext'
 import { describeWarnings } from '../editor/warningText'
+import { easeOut } from '../motion/presets'
 import { examTotals } from '../types/exam'
 import { resolveSplit } from '../types/layout'
 import { APP_VERSION } from '../version'
@@ -46,8 +48,15 @@ export function StatusBar({ onLocate }: { onLocate: (page: number) => void }) {
             : '尚未暫存'
   const backupNote = saveStatus.state !== 'loading' && snapshots.length ? ` · 備份 ${snapshots.length} 份` : ''
 
+  const saveKey = saveStatus.state === 'saving' ? 'saving' : `${save}${backupNote}`
+
   return (
-    <footer className="statusbar">
+    <motion.footer
+      className="statusbar"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3, delay: 0.08, ease: easeOut }}
+    >
       <span>共 {pageCount} 頁</span>
       <span>
         {totals.sections} 大題・{totals.questions} 題・總分 {totals.score}
@@ -64,11 +73,28 @@ export function StatusBar({ onLocate }: { onLocate: (page: number) => void }) {
           >
             {warnCount ? '⚠' : 'ⓘ'} 版面提示 {notices.length}
           </button>
-          {open ? (
-            <div className="notice-pop" role="dialog" aria-label="版面提示">
+          <AnimatePresence>
+            {open ? (
+            <motion.div
+              key="notices"
+              className="notice-pop"
+              role="dialog"
+              aria-label="版面提示"
+              initial={{ opacity: 0, y: 8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 6, scale: 0.98, pointerEvents: 'none' }}
+              transition={{ duration: 0.18, ease: easeOut }}
+              style={{ transformOrigin: 'right bottom' }}
+            >
               <ul>
-                {notices.map((n) => (
-                  <li key={n.key} className={`notice-pop__item is-${n.tone}`}>
+                {notices.map((n, index) => (
+                  <motion.li
+                    key={n.key}
+                    className={`notice-pop__item is-${n.tone}`}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.18, delay: Math.min(index * 0.03, 0.12), ease: easeOut }}
+                  >
                     <span>{n.text}</span>
                     {n.target ? (
                       <button
@@ -85,20 +111,31 @@ export function StatusBar({ onLocate }: { onLocate: (page: number) => void }) {
                         查看
                       </button>
                     ) : null}
-                  </li>
+                  </motion.li>
                 ))}
               </ul>
-            </div>
-          ) : null}
+            </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
       ) : null}
-      <span className={`statusbar__save${saveStatus.state === 'error' ? ' is-error' : ''}`}>
+      <motion.span
+        key={saveKey}
+        className={`statusbar__save${saveStatus.state === 'error' ? ' is-error' : ''}`}
+        initial={{ opacity: 0 }}
+        animate={saveStatus.state === 'saving' ? { opacity: [0.45, 1, 0.45] } : { opacity: 1 }}
+        transition={
+          saveStatus.state === 'saving'
+            ? { duration: 1.15, repeat: Infinity, ease: 'easeInOut' }
+            : { duration: 0.18 }
+        }
+      >
         {save}
         {backupNote}
-      </span>
+      </motion.span>
       <span className="statusbar__version" title="應用程式版本">
         v{APP_VERSION}
       </span>
-    </footer>
+    </motion.footer>
   )
 }

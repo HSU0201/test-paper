@@ -1,8 +1,10 @@
 import type Konva from 'konva'
+import { motion } from 'motion/react'
 import { useRef, useState, type RefObject } from 'react'
 import { useEditor } from '../editor/EditorContext'
 import { documentBaseName, downloadJson, readDocumentFile, serializeDocument } from '../editor/documentIO'
 import { exportStagesToPdf } from '../export/pdfFromStage'
+import { easeOut } from '../motion/presets'
 import { BackupDialog } from './BackupDialog'
 import { Icon } from './ui'
 
@@ -13,11 +15,22 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
   const baseName = documentBaseName(state)
 
   return (
-    <header className="topbar">
+    <motion.header
+      className="topbar"
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32, ease: easeOut }}
+    >
       <div className="topbar__brand">
-        <span className="topbar__logo" aria-hidden>
+        <motion.span
+          className="topbar__logo"
+          aria-hidden
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4, ease: easeOut, delay: 0.05 }}
+        >
           <img src="/favicon.png" alt="" />
-        </span>
+        </motion.span>
         <div className="topbar__title">
           <span className="topbar__app">試卷編輯器</span>
           <span className="topbar__doc" title={baseName}>
@@ -86,7 +99,7 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
           匯出 PDF
         </button>
       </div>
-      {backupOpen ? <BackupDialog onClose={() => setBackupOpen(false)} /> : null}
-    </header>
+      <BackupDialog open={backupOpen} onClose={() => setBackupOpen(false)} />
+    </motion.header>
   )
 }

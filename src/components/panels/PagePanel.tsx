@@ -1,5 +1,7 @@
+import { motion } from 'motion/react'
 import { useEditor } from '../../editor/EditorContext'
 import { detectPaperPreset, PAPER_PRESETS, pxToMm, type PaperPresetKey } from '../../types/document'
+import { layoutSpring } from '../../motion/presets'
 import { NumberField, PanelSection, Segmented } from '../ui'
 
 export function PagePanel() {
@@ -22,11 +24,14 @@ export function PagePanel() {
           {(Object.keys(PAPER_PRESETS) as PaperPresetKey[]).map((k) => {
             const p = PAPER_PRESETS[k]
             return (
-              <button
+              <motion.button
                 key={k}
                 type="button"
                 className={`paper-preset${presetKey === k ? ' is-active' : ''}`}
                 onClick={() => applyPreset(k, landscape)}
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.97 }}
+                transition={layoutSpring}
               >
                 <span
                   className="paper-preset__thumb"
@@ -36,7 +41,7 @@ export function PagePanel() {
                 <span className="paper-preset__meta">
                   {pxToMm(p.width)}×{pxToMm(p.height)}
                 </span>
-              </button>
+              </motion.button>
             )
           })}
         </div>

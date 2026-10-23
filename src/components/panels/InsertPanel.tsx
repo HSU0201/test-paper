@@ -1,6 +1,8 @@
+import { motion } from 'motion/react'
 import { useRef, type ChangeEventHandler } from 'react'
 import { useEditor } from '../../editor/EditorContext'
 import { mergeTextLevelPreset, TEXT_PRESET_LEVEL_KEYS } from '../../types/document'
+import { layoutSpring } from '../../motion/presets'
 import { Icon, PanelSection } from '../ui'
 
 export function InsertPanel() {
@@ -50,34 +52,58 @@ export function InsertPanel() {
       <PanelSection title="文字" description="選一種階層，再到紙張上點一下放置；會自動對齊所在欄位。">
         <div className="insert-tiers">
           {tiers.map((t) => (
-            <button
+            <motion.button
               key={t.id}
               type="button"
               className={`insert-tier${placingTier === t.id ? ' is-active' : ''}`}
               onClick={() => startPlacing(t.id)}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.985 }}
+              transition={layoutSpring}
             >
               <span className="insert-tier__swatch" style={{ background: t.color }} />
               <span className="insert-tier__label">{t.label}</span>
               <span className="insert-tier__meta">{t.fontSize}px</span>
-            </button>
+            </motion.button>
           ))}
         </div>
       </PanelSection>
 
       <PanelSection title="圖形與媒體">
         <div className="insert-grid">
-          <button type="button" className="insert-tile" onClick={() => dispatch({ type: 'ADD_LINE' })}>
+          <motion.button
+            type="button"
+            className="insert-tile"
+            onClick={() => dispatch({ type: 'ADD_LINE' })}
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.97 }}
+            transition={layoutSpring}
+          >
             <Icon name="line" />
             線條
-          </button>
-          <button type="button" className="insert-tile" onClick={() => dispatch({ type: 'ADD_RECT' })}>
+          </motion.button>
+          <motion.button
+            type="button"
+            className="insert-tile"
+            onClick={() => dispatch({ type: 'ADD_RECT' })}
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.97 }}
+            transition={layoutSpring}
+          >
             <Icon name="rect" />
             方框
-          </button>
-          <button type="button" className="insert-tile" onClick={() => fileRef.current?.click()}>
+          </motion.button>
+          <motion.button
+            type="button"
+            className="insert-tile"
+            onClick={() => fileRef.current?.click()}
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.97 }}
+            transition={layoutSpring}
+          >
             <Icon name="image" />
             圖片
-          </button>
+          </motion.button>
         </div>
         <input
           ref={fileRef}
