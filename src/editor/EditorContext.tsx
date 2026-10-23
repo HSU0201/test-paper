@@ -72,8 +72,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       },
       state.layout.spacing,
       measureWithKonva,
+      state.pageWidth > state.pageHeight,
     )
-  }, [state.exam, state.textLevelOverrides, state.layout.spacing, pageGeometry])
+  }, [state.exam, state.textLevelOverrides, state.layout.spacing, state.pageWidth, state.pageHeight, pageGeometry])
 
   const pageCount = useMemo(() => {
     const objMax = state.objects.reduce((m, o) => Math.max(m, (o.page ?? 0) + 1), 0)

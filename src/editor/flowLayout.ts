@@ -11,7 +11,7 @@ import {
   type Question,
   type Section,
 } from '../types/exam'
-import type { SpacingSettings } from '../types/layout'
+import { toVerticalGlyph, type SpacingSettings } from '../types/layout'
 
 export type TextStyle = { fontSize: number; fill: string; bold?: boolean }
 
@@ -36,6 +36,9 @@ export type FlowRun = {
   style: TextStyle
   lineHeight: number
   placeholder?: boolean
+  /** 直排：每個字一行，由上往下，下一欄在左側 */
+  vertical?: boolean
+  height?: number
 }
 
 export type FlowRule = { key: string; x1: number; y1: number; x2: number; y2: number }
@@ -161,11 +164,16 @@ function buildQuestion(q: Question, num: number, w: number, c: Ctx): Built {
 
   if (isChoiceType(q.type) && q.choices.length) {
     h += 4
-    const labels = q.choices.map((ch, i) => `${choiceLabel(i)} ${ch.text.trim() || '　'}`)
+    const hasImage = (ch: Question['choices'][number]) => !!(ch.image && c.assets[ch.image.assetId])
+    const labels = q.choices.map((ch, i) =>
+      ch.text.trim() ? `${choiceLabel(i)} ${ch.text.trim()}` : hasImage(ch) ? choiceLabel(i) : `${choiceLabel(i)} \u3000`,
+    )
+    const anyImage = q.choices.some(hasImage)
     const widest = Math.max(...labels.map((t) => m(t, 10000, st.body, mt.lineHeight).naturalWidth))
     let cols: number = q.choiceLayout === 'auto' ? 1 : q.choiceLayout
     if (q.choiceLayout === 'auto') {
-      if (labels.length <= 4 && widest <= innerW / 4 - 8) cols = 4
+      if (anyImage) cols = labels.length <= 4 && innerW / 4 >= 110 ? 4 : 2
+      else if (labels.length <= 4 && widest <= innerW / 4 - 8) cols = 4
       else if (widest <= innerW / 2 - 8) cols = 2
     }
     cols = Math.min(cols, labels.length)
@@ -175,16 +183,30 @@ function buildQuestion(q: Question, num: number, w: number, c: Ctx): Built {
       for (let k = 0; k < cols; k++) {
         const i = row * cols + k
         if (i >= labels.length) break
-        runs.push({
-          key: `ch-${i}`,
-          x: indent + k * cellW,
-          y: h,
-          width: cellW - 6,
-          text: labels[i],
-          style: st.body,
-          lineHeight: mt.lineHeight,
-        })
-        rowH = Math.max(rowH, m(labels[i], cellW - 6, st.body, mt.lineHeight).height)
+        const ch = q.choices[i]
+        const x = indent + k * cellW
+        const textW = cellW - 6
+        runs.push({ key: `ch-${i}`, x, y: h, width: textW, text: labels[i], style: st.body, lineHeight: mt.lineHeight })
+        let cellH = m(labels[i], textW, st.body, mt.lineHeight).height
+        if (ch.image && hasImage(ch)) {
+          const inline = !ch.text.trim()
+          const labelW = m(`${choiceLabel(i)} `, 10000, st.body, mt.lineHeight).naturalWidth
+          const maxW = inline ? Math.max(24, textW - labelW) : textW
+          const size = figureSize(c, ch.image.assetId, maxW, ch.image.widthRatio)
+          if (size) {
+            const iy = inline ? 2 : cellH + 2
+            images.push({
+              key: `chimg-${ch.id}`,
+              x: inline ? x + labelW : x,
+              y: h + iy,
+              w: size.w,
+              h: size.h,
+              assetId: ch.image.assetId,
+            })
+            cellH = Math.max(cellH, iy + size.h + 4)
+          }
+        }
+        rowH = Math.max(rowH, cellH)
       }
       h += rowH
     }
@@ -295,6 +317,318 @@ function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): Pa
   return { blocks, pageCount: page + 1, warnings, headMoves }
 }
 
+const colWidthOf = (fontSize: number) => Math.ceil(fontSize * 1.2)
+const colPitchOf = (fontSize: number) => Math.ceil(fontSize * 1.75)
+const charsPerColumn = (fontSize: number, lineHeight: number, frameH: number) =>
+  Math.max(1, Math.floor((frameH - 6) / (fontSize * lineHeight)))
+
+/**
+ * 橫向紙張：文字直排。每一欄由上往下，欄位由右往左；
+ * 上半部排完後，從下半部的右邊再往左排。每個題目都從該欄頂端開始。
+ */
+function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: Ctx): PaginateResult {
+  const { st, mt, assets } = c
+  // 直排的字距比橫排行高緊一些，壓縮時仍會跟著變密
+  const lh = Math.round((1 + (mt.lineHeight - 1) * 0.4) * 100) / 100
+  const blocks: PlacedBlock[] = []
+  const warnings: LayoutWarning[] = []
+  let headMoves = 0
+  if (!items.length) return { blocks, pageCount: 1, warnings, headMoves }
+
+  type Slot = { box: Box; index: number }
+  const slotsOf = (pageIndex: number): Slot[] => {
+    const list = getFrames(pageIndex).map((box, index) => ({ box, index }))
+    if (list.length === 2 && list[1].box.x > list[0].box.x + 1) return [list[1], list[0]]
+    return list
+  }
+
+  let page = 0
+  let slots = slotsOf(0)
+  let si = 0
+  let x = slots[0].box.x + slots[0].box.w
+  const slot = () => slots[si]
+  const frame = () => slot().box
+  const atStart = () => x >= frame().x + frame().w - 0.5
+  const remain = () => x - frame().x
+
+  const nextFrame = (): boolean => {
+    if (si >= slots.length - 1 && page >= MAX_PAGES - 1) return false
+    if (si >= slots.length - 1) {
+      page += 1
+      slots = slotsOf(page)
+      si = 0
+    } else {
+      si += 1
+    }
+    x = frame().x + frame().w
+    return true
+  }
+
+  type Acc = {
+    ref: BlockRef
+    page: number
+    fi: number
+    frame: Box
+    runs: FlowRun[]
+    rules: FlowRule[]
+    images: FlowImage[]
+    minX: number
+    maxX: number
+    maxY: number
+    live: boolean
+    oversize: boolean
+  }
+  const blank = (ref: BlockRef): Acc => ({
+    ref,
+    page: 0,
+    fi: 0,
+    frame: frame(),
+    runs: [],
+    rules: [],
+    images: [],
+    minX: Infinity,
+    maxX: -Infinity,
+    maxY: -Infinity,
+    live: false,
+    oversize: false,
+  })
+  let acc = blank(itemRef(items[0]))
+
+  const flush = () => {
+    if (!acc.live) return
+    const f = acc.frame
+    blocks.push({
+      ref: acc.ref,
+      page: acc.page,
+      frame: acc.fi,
+      box: { x: acc.minX, y: f.y, w: Math.max(8, acc.maxX - acc.minX), h: Math.max(8, acc.maxY - f.y) },
+      runs: acc.runs,
+      rules: acc.rules,
+      images: acc.images,
+    })
+    acc = blank(acc.ref)
+  }
+
+  const track = (x1: number, x2: number, y2: number) => {
+    if (!acc.live) {
+      acc.live = true
+      acc.page = page
+      acc.fi = slot().index
+      acc.frame = frame()
+    }
+    acc.minX = Math.min(acc.minX, x1)
+    acc.maxX = Math.max(acc.maxX, x2)
+    acc.maxY = Math.max(acc.maxY, y2)
+  }
+
+  const markOversize = () => {
+    if (acc.oversize) return
+    acc.oversize = true
+    warnings.push({ type: 'oversize', ref: acc.ref, page })
+  }
+
+  type Open = {
+    chars: string[]
+    style: TextStyle
+    key: string
+    placeholder: boolean
+    cap: number
+    x: number
+    w: number
+    y: number
+  }
+  let open: Open | null = null
+
+  const closeOpen = () => {
+    if (!open?.chars.length) {
+      open = null
+      return
+    }
+    const step = open.style.fontSize * lh
+    const height = open.chars.length * step
+    acc.runs.push({
+      key: `${open.key}-${acc.runs.length}`,
+      x: open.x,
+      y: open.y,
+      width: open.w,
+      height,
+      text: open.chars.join('\n'),
+      style: open.style,
+      lineHeight: lh,
+      vertical: true,
+      placeholder: open.placeholder || undefined,
+    })
+    track(open.x, open.x + open.w, open.y + height)
+    open = null
+  }
+
+  const reserve = (need: number) => {
+    if (need <= remain() + 0.5 || atStart()) return
+    closeOpen()
+    flush()
+    nextFrame()
+  }
+
+  const startOpen = (style: TextStyle, key: string, placeholder: boolean) => {
+    const p = colPitchOf(style.fontSize)
+    const cw = Math.min(colWidthOf(style.fontSize), p)
+    reserve(p)
+    const f = frame()
+    let slotLeft = x - p
+    let textX = slotLeft + (p - cw) / 2
+    if (slotLeft < f.x) {
+      textX = f.x
+      slotLeft = f.x
+      markOversize()
+    }
+    x = slotLeft
+    open = { chars: [], style, key, placeholder, cap: charsPerColumn(style.fontSize, lh, f.h), x: textX, w: cw, y: f.y }
+  }
+
+  const writeChunk = (text: string, style: TextStyle, key: string, placeholder = false) => {
+    const chars = [...text].filter((ch) => ch !== '\n')
+    const room = open && open.style === style && !!open.placeholder === placeholder ? open.cap - open.chars.length : 0
+    if (room < chars.length) closeOpen()
+    write(text, style, key, placeholder)
+  }
+
+  const write = (text: string, style: TextStyle, key: string, placeholder = false) => {
+    for (const ch of text) {
+      if (ch === '\n') {
+        closeOpen()
+        continue
+      }
+      if (open && (open.style !== style || !!open.placeholder !== placeholder || open.chars.length >= open.cap)) closeOpen()
+      if (!open) startOpen(style, key, placeholder)
+      const col = open
+      if (col) col.chars.push(toVerticalGlyph(ch))
+    }
+  }
+
+  const emitImage = (assetId: string, ratio: number, key: string) => {
+    closeOpen()
+    const asset = assets[assetId]
+    if (!asset) return
+    reserve(32)
+    const f = frame()
+    const aspect = asset.width / Math.max(1, asset.height)
+    let h = f.h * Math.min(1, Math.max(0.25, ratio))
+    let w = h * aspect
+    const maxW = Math.max(48, f.w * 0.45)
+    if (w > maxW) {
+      w = maxW
+      h = w / aspect
+    }
+    if (h > f.h) {
+      h = f.h
+      w = h * aspect
+    }
+    reserve(w + 6)
+    const host = frame()
+    let ix = x - w
+    if (ix < host.x) {
+      ix = host.x
+      markOversize()
+    }
+    acc.images.push({ key, x: ix, y: host.y, w, h, assetId })
+    track(ix, ix + w, host.y + h)
+    x = Math.max(host.x, ix - 6)
+  }
+
+  const emitAnswers = (count: number) => {
+    closeOpen()
+    const p = colPitchOf(st.body.fontSize)
+    for (let i = 0; i < count; i++) {
+      reserve(p)
+      const f = frame()
+      let slotLeft = x - p
+      if (slotLeft < f.x) slotLeft = f.x
+      const cx = slotLeft + p / 2
+      acc.rules.push({ key: `ans-${acc.rules.length}`, x1: cx, y1: f.y + 8, x2: cx, y2: f.y + f.h - 8 })
+      track(slotLeft, slotLeft + colWidthOf(st.body.fontSize), f.y + f.h - 8)
+      x = slotLeft
+    }
+  }
+
+  const textWidth = (text: string, fontSize: number, frameH: number) => {
+    const n = [...text].filter((ch) => ch !== '\n').length
+    return Math.max(1, Math.ceil(n / charsPerColumn(fontSize, lh, frameH))) * colPitchOf(fontSize)
+  }
+
+  const applyGap = (px: number) => {
+    if (px <= 0 || atStart()) return
+    if (remain() - px < colPitchOf(st.body.fontSize)) nextFrame()
+    else x -= px
+  }
+
+  for (let i = 0; i < items.length; i++) {
+    closeOpen()
+    flush()
+    const it = items[i]
+    acc = blank(itemRef(it))
+    applyGap(it.kind === 'section' ? mt.sectionGap : it.firstOfSection ? 0 : mt.questionGap)
+
+    if (it.kind === 'section' && !atStart()) {
+      const fh = frame().h
+      const title = `${sectionHeading(it.section, it.index)}${sectionScoreNote(it.section)}`
+      const headW = textWidth(title, st.heading.fontSize, fh) + (it.section.instruction.trim() ? textWidth(it.section.instruction, st.instruction.fontSize, fh) : 0)
+      const follower = items[i + 1]
+      const oneCol = colPitchOf(st.body.fontSize)
+      let keep = headW + oneCol
+      if (follower?.kind === 'question' && it.section.keepTogether === 'whole') {
+        const rest = items.slice(i + 1).filter((x) => x.kind === 'question') as Extract<Item, { kind: 'question' }>[]
+        const whole = rest.reduce((sum, q) => sum + textWidth(`${q.num}.${q.question.stem}`, st.body.fontSize, fh), headW)
+        if (whole <= frame().w) keep = whole
+      }
+      if (keep <= frame().w && remain() < keep) {
+        const from = { page, frame: slot().index }
+        nextFrame()
+        const to = { page, frame: slot().index }
+        if (from.page !== to.page || from.frame !== to.frame) {
+          headMoves += 1
+          warnings.push({ type: 'headMoved', sectionId: it.section.id, from, to })
+        }
+      }
+    }
+
+    if (it.kind === 'section') {
+      write(`${sectionHeading(it.section, it.index)}${sectionScoreNote(it.section)}`, st.heading, 'title')
+      if (it.section.instruction.trim()) {
+        closeOpen()
+        write(it.section.instruction.trim(), st.instruction, 'inst')
+      }
+      continue
+    }
+
+    const q = it.question
+    const right = q.figures.filter((f) => f.placement === 'right')
+    const below = q.figures.filter((f) => f.placement !== 'right' && f.placement !== 'afterChoices')
+    const after = q.figures.filter((f) => f.placement === 'afterChoices')
+    right.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id))
+    const stem = q.stem.trim()
+    if (stem) write(`${it.num}.${stem}`, st.body, 'stem')
+    else {
+      write(`${it.num}.`, st.body, 'num')
+      closeOpen()
+      write(EMPTY_STEM, st.body, 'stem', true)
+    }
+    below.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id))
+    if (isChoiceType(q.type)) {
+      q.choices.forEach((ch, ci) => {
+        const label = ch.text.trim() ? `${choiceLabel(ci)} ${ch.text.trim()}` : choiceLabel(ci)
+        writeChunk(label, st.body, `ch-${ci}`)
+        if (ch.image) emitImage(ch.image.assetId, ch.image.widthRatio, `chimg-${ch.id}`)
+      })
+    }
+    after.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id))
+    if (q.type === 'short_answer' && q.answerLines > 0) emitAnswers(q.answerLines)
+  }
+  closeOpen()
+  flush()
+
+  return { blocks, pageCount: page + 1, warnings, headMoves }
+}
+
 /**
  * 排版流程：
  * 1. 以原始行距、間距排一次。
@@ -308,6 +642,7 @@ export function layoutExam(
   st: FlowStyles,
   spacing: SpacingSettings,
   m: MeasureFn,
+  vertical = false,
 ): FlowResult {
   const nums = questionNumbers(exam)
   const items: Item[] = []
@@ -320,7 +655,8 @@ export function layoutExam(
 
   const run = (t: number) => {
     const mt = metricsAt(spacing, t)
-    return { t, mt, r: paginate(items, getFrames, { st, m, mt, assets: exam.assets }) }
+    const ctx = { st, m, mt, assets: exam.assets }
+    return { t, mt, r: vertical ? paginateVertical(items, getFrames, ctx) : paginate(items, getFrames, ctx) }
   }
   const score = (r: PaginateResult) => r.pageCount * 1000 + r.headMoves
 

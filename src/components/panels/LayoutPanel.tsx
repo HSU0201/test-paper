@@ -81,13 +81,18 @@ export function LayoutPanel() {
   const { state, dispatch, flow } = useEditor()
   const { columns, margin, header, spacing } = state.layout
   const selectedHeader = state.selectedBlock?.kind === 'header' ? state.selectedBlock.id : null
+  const landscape = state.pageWidth > state.pageHeight
   const effective = resolveSplit(columns, state.pageWidth, state.pageHeight)
 
   return (
     <div className="side-panel__scroll">
       <PanelSection
         title="頁首"
-        description="在紙張上可直接拖曳頁首文字調整位置、拉兩側把手改寬度；點選後右側可改字級與對齊。"
+        description={
+          landscape
+            ? '橫向紙張的頁首改放在最右側，文字由上往下直排。拖曳可調整位置，上下把手調整長度。'
+            : '在紙張上可直接拖曳頁首文字調整位置、拉兩側把手改寬度；點選後右側可改字級與對齊。'
+        }
         actions={
           <button type="button" className="text-btn" onClick={() => dispatch({ type: 'RESET_HEADER_LAYOUT' })}>
             還原版型
@@ -102,7 +107,7 @@ export function LayoutPanel() {
         </button>
         <div className="ui-grid-2">
           <NumberField
-            label="頁首高度"
+            label={landscape ? '頁首寬度' : '頁首高度'}
             suffix="px"
             min={20}
             max={260}
@@ -110,7 +115,7 @@ export function LayoutPanel() {
             onChange={(v) => dispatch({ type: 'SET_HEADER', patch: { height: v } })}
           />
           <div className="ui-row ui-row--stack">
-            <span className="ui-row__label">下方分隔線</span>
+            <span className="ui-row__label">{landscape ? '左側分隔線' : '下方分隔線'}</span>
             <Switch checked={header.rule} label="頁首分隔線" onChange={(v) => dispatch({ type: 'SET_HEADER', patch: { rule: v } })} />
           </div>
         </div>
@@ -143,7 +148,10 @@ export function LayoutPanel() {
               onChange={(v) => dispatch({ type: 'SET_COLUMNS', patch: { split: v } })}
             />
             {columns.split === 'auto' ? (
-              <p className="panel-hint">直式紙張左右分欄、橫式紙張上下分欄（目前：{effective === 'vertical' ? '左右' : '上下'}）</p>
+              <p className="panel-hint">
+                直式左右分欄。橫式分成上下兩區，文字直排，先由上半部右邊排到左邊，再由下半部右邊排到左邊（目前：
+                {effective === 'vertical' ? '左右' : '上下'}）
+              </p>
             ) : null}
             <label className="ui-field">
               <span className="ui-field__label">

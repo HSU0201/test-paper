@@ -11,6 +11,7 @@ import {
   questionNumbers,
   sectionHeading,
   sectionScore,
+  type Choice,
   type ChoiceLayout,
   type QuestionType,
   type Section,
@@ -213,6 +214,97 @@ function FiguresEditor({ questionId }: { questionId: string }) {
   )
 }
 
+function ChoiceRow({
+  questionId,
+  choice,
+  index,
+  canRemove,
+}: {
+  questionId: string
+  choice: Choice
+  index: number
+  canRemove: boolean
+}) {
+  const { state, dispatch } = useEditor()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [error, setError] = useState<string | null>(null)
+  const asset = choice.image ? state.exam.assets[choice.image.assetId] : undefined
+  const label = choiceLabel(index)
+
+  const onFile = async (file?: File) => {
+    if (!file) return
+    setError(null)
+    try {
+      dispatch({ type: 'SET_CHOICE_IMAGE', questionId, choiceId: choice.id, asset: await readImageFile(file) })
+    } catch {
+      setError('無法讀取這張圖片')
+    }
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  return (
+    <div className="choice-block">
+      <div className="choice-row">
+        <span className="choice-row__label">{label}</span>
+        <input
+          className="ui-input"
+          value={choice.text}
+          aria-label={`選項 ${label}`}
+          placeholder={asset ? '圖片說明，可留白' : undefined}
+          onChange={(e) => dispatch({ type: 'UPDATE_CHOICE', questionId, choiceId: choice.id, text: e.target.value })}
+        />
+        <button type="button" className="icon-btn" title="插入選項圖片" onClick={() => fileRef.current?.click()}>
+          <Icon name="image" />
+        </button>
+        <button
+          type="button"
+          className="icon-btn icon-btn--danger"
+          title="刪除選項"
+          disabled={!canRemove}
+          onClick={() => dispatch({ type: 'REMOVE_CHOICE', questionId, choiceId: choice.id })}
+        >
+          <Icon name="trash" />
+        </button>
+        <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => void onFile(e.target.files?.[0])} />
+      </div>
+      {error ? <p className="choice-block__error">{error}</p> : null}
+      {asset && choice.image ? (
+        <div className="choice-row__image">
+          <img className="choice-row__thumb" src={asset.src} alt={`${label} 的圖片`} />
+          <label className="ui-field choice-row__ratio">
+            <span className="ui-field__label">
+              圖片寬度 <strong>{Math.round(choice.image.widthRatio * 100)}%</strong>
+            </span>
+            <input
+              type="range"
+              min={30}
+              max={100}
+              step={5}
+              value={Math.round(choice.image.widthRatio * 100)}
+              onChange={(e) =>
+                dispatch({
+                  type: 'SET_CHOICE_IMAGE_RATIO',
+                  questionId,
+                  choiceId: choice.id,
+                  widthRatio: Number(e.target.value) / 100,
+                })
+              }
+            />
+          </label>
+          <button
+            type="button"
+            className="icon-btn icon-btn--danger"
+            title="移除圖片"
+            onClick={() => dispatch({ type: 'SET_CHOICE_IMAGE', questionId, choiceId: choice.id, asset: null })}
+          >
+            <Icon name="trash" />
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function QuestionEditor({ questionId }: { questionId: string }) {
   const { state, dispatch } = useEditor()
   const hit = findQuestion(state.exam, questionId)
@@ -257,6 +349,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
       {isChoiceType(q.type) ? (
         <PanelSection
           title="選項"
+          description="每個選項都能附一張圖；只有圖片時，圖會跟在選項代號旁邊。"
           actions={
             <button type="button" className="text-btn" onClick={() => dispatch({ type: 'ADD_CHOICE', questionId: q.id })}>
               ＋ 新增選項
@@ -264,26 +357,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
           }
         >
           {q.choices.map((c, i) => (
-            <div key={c.id} className="choice-row">
-              <span className="choice-row__label">{choiceLabel(i)}</span>
-              <input
-                className="ui-input"
-                value={c.text}
-                aria-label={`選項 ${choiceLabel(i)}`}
-                onChange={(e) =>
-                  dispatch({ type: 'UPDATE_CHOICE', questionId: q.id, choiceId: c.id, text: e.target.value })
-                }
-              />
-              <button
-                type="button"
-                className="icon-btn icon-btn--danger"
-                title="刪除選項"
-                disabled={q.choices.length <= 2}
-                onClick={() => dispatch({ type: 'REMOVE_CHOICE', questionId: q.id, choiceId: c.id })}
-              >
-                <Icon name="trash" />
-              </button>
-            </div>
+            <ChoiceRow key={c.id} questionId={q.id} choice={c} index={i} canRemove={q.choices.length > 2} />
           ))}
           <div className="ui-field">
             <span className="ui-field__label">選項排列</span>

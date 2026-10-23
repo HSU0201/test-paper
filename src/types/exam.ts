@@ -9,7 +9,10 @@ export const QUESTION_TYPE_LABEL: Record<QuestionType, string> = {
 
 export type ChoiceLayout = 'auto' | 1 | 2 | 4
 
-export type Choice = { id: string; text: string }
+/** 選項圖片；widthRatio 為佔該選項格寬度的比例 */
+export type ChoiceImage = { assetId: string; widthRatio: number }
+
+export type Choice = { id: string; text: string; image?: ChoiceImage }
 
 /** below：題目下方；right：題目右側（文字繞排）；afterChoices：選項之後 */
 export type FigurePlacement = 'below' | 'right' | 'afterChoices'
@@ -224,7 +227,9 @@ export function normalizeExam(raw: unknown): ExamContent {
             ...createQuestion(type, 0),
             ...item,
             type,
-            choices: Array.isArray(item.choices) ? item.choices : [],
+            choices: (Array.isArray(item.choices) ? item.choices : []).map((c) =>
+              c.image && !assets[c.image.assetId] ? { id: c.id, text: c.text } : c,
+            ),
             figures: (Array.isArray(item.figures) ? item.figures : []).filter((f) => f && assets[f.assetId]),
           }
         }),

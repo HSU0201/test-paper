@@ -3,7 +3,7 @@ import { Group, Line, Rect, Text } from 'react-konva'
 import type { Box } from '../editor/bounds'
 import type { EditorAction } from '../editor/reducer'
 import { snapBoxPosition, type SnapGuides } from '../editor/snap'
-import { headerItemHeight, headerItemText, type HeaderLayout, type PageGeometry } from '../types/layout'
+import { headerItemHeight, headerItemText, verticalHeaderText, type HeaderLayout, type PageGeometry } from '../types/layout'
 
 export const EDITOR_ONLY_NAME = 'editor-only'
 export const HEADER_REF_PREFIX = 'hdr:'
@@ -36,6 +36,8 @@ export function PageDecorLayer({ geometry, showGuides }: { geometry: PageGeometr
 type HeaderItemsLayerProps = {
   header: HeaderLayout
   box: Box
+  /** 橫向：頁首在右側，文字直排 */
+  vertical: boolean
   pageW: number
   pageH: number
   selectedId: string | null
@@ -50,6 +52,7 @@ type HeaderItemsLayerProps = {
 export function HeaderItemsLayer({
   header,
   box,
+  vertical,
   pageW,
   pageH,
   selectedId,
@@ -63,7 +66,11 @@ export function HeaderItemsLayer({
   const itemBox = (id: string): Box | null => {
     const it = header.items.find((x) => x.id === id)
     if (!it) return null
-    return { x: box.x + it.xr * box.w, y: box.y + it.y, w: it.wr * box.w, h: headerItemHeight(it) }
+    const col = headerItemHeight(it)
+    if (vertical) {
+      return { x: box.x + box.w - it.y - col, y: box.y + it.xr * box.h, w: col, h: it.wr * box.h }
+    }
+    return { x: box.x + it.xr * box.w, y: box.y + it.y, w: it.wr * box.w, h: col }
   }
   const otherBoxes = (id: string): Box[] => [
     box,
@@ -78,7 +85,8 @@ export function HeaderItemsLayer({
     <Group>
       {visible.map((it) => {
         const b = itemBox(it.id)!
-        const text = headerItemText(it, b.w)
+        const text = headerItemText(it, vertical ? b.h / 1.15 : b.w)
+        const shown = vertical && text ? verticalHeaderText(text) : text
         const isPlaceholder = !text
         const isSel = selectedId === it.id
         return (
@@ -102,16 +110,17 @@ export function HeaderItemsLayer({
               x={b.x}
               y={b.y}
               width={b.w}
-              height={b.h}
-              text={isPlaceholder ? `（${it.label}）` : text}
+              height={vertical ? b.h : undefined}
+              text={isPlaceholder ? (vertical ? verticalHeaderText(it.label) : `（${it.label}）`) : shown}
               fontSize={it.fontSize}
               fontFamily={LAYOUT_FONT}
               fontStyle={it.bold ? 'bold' : 'normal'}
               fill={isPlaceholder ? '#94a3b8' : it.fill}
-              align={it.align}
-              verticalAlign="middle"
+              align={vertical ? 'center' : it.align}
+              verticalAlign={vertical ? (it.align === 'left' ? 'top' : it.align === 'right' ? 'bottom' : 'middle') : 'middle'}
+              lineHeight={vertical ? 1.15 : 1}
               wrap="none"
-              ellipsis
+              ellipsis={!vertical}
               draggable={interactive}
               listening={interactive}
               onMouseDown={(e) => {
@@ -131,14 +140,32 @@ export function HeaderItemsLayer({
                 dispatch({
                   type: 'UPDATE_HEADER_ITEM',
                   id: it.id,
-                  patch: { xr: (n.x() - box.x) / box.w, y: Math.round(n.y() - box.y) },
+                  patch: vertical
+                    ? { xr: (n.y() - box.y) / box.h, y: Math.round(box.x + box.w - n.x() - n.width()) }
+                    : { xr: (n.x() - box.x) / box.w, y: Math.round(n.y() - box.y) },
                 })
               }}
               onTransformEnd={(e) => {
                 const n = e.target as Konva.Text
-                const w = Math.max(30, n.width() * n.scaleX())
+                const sx = n.scaleX()
+                const sy = n.scaleY()
                 n.scaleX(1)
                 n.scaleY(1)
+                if (vertical) {
+                  const h = Math.max(it.fontSize * 2, n.height() * sy)
+                  n.height(h)
+                  dispatch({
+                    type: 'UPDATE_HEADER_ITEM',
+                    id: it.id,
+                    patch: {
+                      xr: (n.y() - box.y) / box.h,
+                      wr: Math.min(1, h / box.h),
+                      y: Math.round(box.x + box.w - n.x() - n.width()),
+                    },
+                  })
+                  return
+                }
+                const w = Math.max(30, n.width() * sx)
                 dispatch({
                   type: 'UPDATE_HEADER_ITEM',
                   id: it.id,

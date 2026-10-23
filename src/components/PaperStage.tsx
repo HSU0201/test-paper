@@ -165,7 +165,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
       if (header) {
         const hn = shapeRefs.current[`${HEADER_REF_PREFIX}${header}`]
         tr.nodes(hn ? [hn] : [])
-        tr.enabledAnchors(['middle-left', 'middle-right'])
+        tr.enabledAnchors(geometry.headerVertical ? ['top-center', 'bottom-center'] : ['middle-left', 'middle-right'])
         tr.rotateEnabled(false)
         tr.getLayer()?.batchDraw()
         return
@@ -205,7 +205,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
       }
       tr.rotateEnabled(false)
       tr.getLayer()?.batchDraw()
-    }, [state.selectedId, state.selectedBlock, pageObjects, state.layout.header])
+    }, [state.selectedId, state.selectedBlock, pageObjects, state.layout.header, geometry.headerVertical])
 
     const handleStageMouseDown = useCallback(
       (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -286,6 +286,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                 <HeaderItemsLayer
                   header={state.layout.header}
                   box={geometry.header}
+                  vertical={geometry.headerVertical}
                   pageW={pageW}
                   pageH={pageH}
                   selectedId={state.selectedBlock?.kind === 'header' ? state.selectedBlock.id : null}

@@ -5,6 +5,7 @@ import { NumberField, PanelSection, Segmented, Switch } from './ui'
 export function HeaderItemInspector({ item }: { item: HeaderItem }) {
   const { state, dispatch } = useEditor()
   const set = (patch: Partial<HeaderItem>) => dispatch({ type: 'UPDATE_HEADER_ITEM', id: item.id, patch })
+  const vertical = state.pageWidth > state.pageHeight
   const maxY = Math.max(0, state.layout.header.height - Math.round(item.fontSize * 1.4))
 
   return (
@@ -50,41 +51,50 @@ export function HeaderItemInspector({ item }: { item: HeaderItem }) {
           label="對齊"
           value={item.align}
           options={[
-            { value: 'left', label: '靠左' },
+            { value: 'left', label: vertical ? '靠上' : '靠左' },
             { value: 'center', label: '置中' },
-            { value: 'right', label: '靠右' },
+            { value: 'right', label: vertical ? '靠下' : '靠右' },
           ]}
           onChange={(v) => set({ align: v })}
         />
       </PanelSection>
 
-      <PanelSection title="位置" description="也可以直接在紙上拖曳；左右把手調整寬度。">
+      <PanelSection
+        title="位置"
+        description={vertical ? '橫向時頁首在右側直排。拖曳可移動；上下把手調整長度。' : '也可以直接在紙上拖曳；左右把手調整寬度。'}
+      >
         <div className="ui-grid-2">
           <NumberField
-            label="左側 %"
+            label={vertical ? '距上 %' : '左側 %'}
             min={0}
             max={95}
             value={Math.round(item.xr * 100)}
             onChange={(v) => set({ xr: Math.min(v / 100, 1 - item.wr) })}
           />
           <NumberField
-            label="寬度 %"
+            label={vertical ? '長度 %' : '寬度 %'}
             min={5}
             max={100}
             value={Math.round(item.wr * 100)}
             onChange={(v) => set({ wr: v / 100, xr: Math.min(item.xr, 1 - v / 100) })}
           />
-          <NumberField label="上方 px" min={0} max={maxY} value={Math.round(item.y)} onChange={(v) => set({ y: v })} />
+          <NumberField
+            label={vertical ? '距右 px' : '上方 px'}
+            min={0}
+            max={maxY}
+            value={Math.round(item.y)}
+            onChange={(v) => set({ y: v })}
+          />
         </div>
         <div className="ui-chip-row">
           <button type="button" className="ui-chip" onClick={() => set({ xr: 0, wr: 1, align: 'center' })}>
-            整行置中
+            {vertical ? '整欄置中' : '整行置中'}
           </button>
           <button type="button" className="ui-chip" onClick={() => set({ xr: 0, wr: 0.5, align: 'left' })}>
-            左半
+            {vertical ? '上半' : '左半'}
           </button>
           <button type="button" className="ui-chip" onClick={() => set({ xr: 0.5, wr: 0.5, align: 'right' })}>
-            右半
+            {vertical ? '下半' : '右半'}
           </button>
         </div>
       </PanelSection>

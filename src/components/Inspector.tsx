@@ -28,6 +28,7 @@ export function Inspector() {
   const obj = state.selectedId ? state.objects.find((o) => o.id === state.selectedId) : null
   const block = state.selectedBlock
   const frames = pageGeometry(0).frames.length
+  const stacked = resolveSplit(state.layout.columns, state.pageWidth, state.pageHeight) === 'horizontal'
 
   if (block?.kind === 'header') {
     const item = state.layout.header.items.find((it) => it.id === block.id)
@@ -60,6 +61,8 @@ export function Inspector() {
       ),
       state.exam,
       frames,
+      stacked,
+      state.pageWidth > state.pageHeight,
     )
     const page = flow.blocks.find((b) => b.ref.id === block.id)?.page
     return (

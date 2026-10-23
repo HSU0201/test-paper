@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useEditor } from '../editor/EditorContext'
 import { describeWarnings } from '../editor/warningText'
 import { examTotals } from '../types/exam'
+import { resolveSplit } from '../types/layout'
 
 function timeLabel(at?: number) {
   if (!at) return ''
@@ -14,7 +15,13 @@ export function StatusBar({ onLocate }: { onLocate: (page: number) => void }) {
   const [open, setOpen] = useState(false)
   const popRef = useRef<HTMLDivElement>(null)
   const totals = examTotals(state.exam)
-  const notices = describeWarnings(flow.warnings, state.exam, pageGeometry(0).frames.length)
+  const notices = describeWarnings(
+    flow.warnings,
+    state.exam,
+    pageGeometry(0).frames.length,
+    resolveSplit(state.layout.columns, state.pageWidth, state.pageHeight) === 'horizontal',
+    state.pageWidth > state.pageHeight,
+  )
   const warnCount = notices.filter((n) => n.tone === 'warn').length
 
   useEffect(() => {

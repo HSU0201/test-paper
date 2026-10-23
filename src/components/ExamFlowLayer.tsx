@@ -33,7 +33,7 @@ export function ExamFlowLayer({ blocks, assets, selected, flagged, interactive, 
         const isFlag = flagged.has(b.ref.id)
         const pad = 4
         return (
-          <Group key={b.ref.id}>
+          <Group key={`${b.ref.kind}:${b.ref.id}:${b.page}:${b.frame}:${Math.round(b.box.x)}`}>
             {b.rules.map((r) => (
               <Line key={r.key} points={[r.x1, r.y1, r.x2, r.y2]} stroke="#94a3b8" strokeWidth={1} listening={false} />
             ))}
@@ -47,13 +47,15 @@ export function ExamFlowLayer({ blocks, assets, selected, flagged, interactive, 
                 x={r.x}
                 y={r.y}
                 width={r.width}
+                height={r.height}
                 text={r.text}
                 fontSize={r.style.fontSize}
                 fontFamily={FLOW_FONT}
                 fontStyle={r.style.bold ? 'bold' : 'normal'}
                 fill={r.placeholder ? '#94a3b8' : r.style.fill}
+                align={r.vertical ? 'center' : 'left'}
                 lineHeight={r.lineHeight}
-                wrap={FLOW_WRAP}
+                wrap={r.vertical ? 'none' : FLOW_WRAP}
                 listening={false}
               />
             ))}

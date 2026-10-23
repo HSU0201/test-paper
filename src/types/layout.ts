@@ -233,11 +233,50 @@ export type LayoutRule = { key: string; x1: number; y1: number; x2: number; y2: 
 
 export type PageGeometry = {
   content: Box
-  /** 本頁有頁首時的頁首區 */
+  /** 本頁有頁首時的頁首區；橫向時在右側 */
   header: Box | null
+  /** 橫向頁首：文字由上往下直排 */
+  headerVertical: boolean
   /** 依閱讀順序排列的欄位 */
   frames: Box[]
   rules: LayoutRule[]
+}
+
+/** 直排時左右括號改成由上、下包住的形狀 */
+const VERTICAL_BRACKETS: Record<string, string> = {
+  '(': '\uFE35',
+  ')': '\uFE36',
+  '（': '\uFE35',
+  '）': '\uFE36',
+  '[': '\uFE47',
+  ']': '\uFE48',
+  '［': '\uFE47',
+  '］': '\uFE48',
+  '{': '\uFE37',
+  '}': '\uFE38',
+  '｛': '\uFE37',
+  '｝': '\uFE38',
+  '〔': '\uFE39',
+  '〕': '\uFE3A',
+  '【': '\uFE3B',
+  '】': '\uFE3C',
+  '「': '\uFE41',
+  '」': '\uFE42',
+  '『': '\uFE43',
+  '』': '\uFE44',
+  '〈': '\uFE3F',
+  '〉': '\uFE40',
+  '《': '\uFE3D',
+  '》': '\uFE3E',
+}
+
+export function toVerticalGlyph(ch: string): string {
+  return VERTICAL_BRACKETS[ch] ?? ch
+}
+
+/** 直排頁首：每個字獨立一行，閱讀方向由上往下 */
+export function verticalHeaderText(text: string): string {
+  return [...text].map(toVerticalGlyph).join('\n')
 }
 
 /** 計算某一頁的內容區、頁首區與欄位（排版、繪製、吸附共用） */
@@ -256,18 +295,34 @@ export function computePageGeometry(
   }
   const rules: LayoutRule[] = []
   const hasHeader = header.height > 0 && (pageIndex === 0 || header.repeat)
-  let bodyTop = content.y
+  const headerVertical = hasHeader && pageW > pageH
   let headerBox: Box | null = null
-  if (hasHeader) {
+  let body: Box
+  if (headerVertical) {
+    headerBox = {
+      x: content.x + content.w - header.height,
+      y: content.y,
+      w: header.height,
+      h: content.h,
+    }
+    let bodyRight = headerBox.x - 6
+    if (header.rule) {
+      rules.push({ key: 'header-rule', x1: bodyRight, y1: content.y, x2: bodyRight, y2: content.y + content.h })
+    }
+    bodyRight -= 12
+    body = { x: content.x, y: content.y, w: Math.max(40, bodyRight - content.x), h: content.h }
+  } else if (hasHeader) {
     headerBox = { x: content.x, y: content.y, w: content.w, h: header.height }
-    bodyTop = content.y + header.height + 6
+    let bodyTop = content.y + header.height + 6
     if (header.rule) {
       rules.push({ key: 'header-rule', x1: content.x, y1: bodyTop, x2: content.x + content.w, y2: bodyTop })
     }
     bodyTop += 12
+    body = { x: content.x, y: bodyTop, w: content.w, h: Math.max(40, content.y + content.h - bodyTop) }
+  } else {
+    body = { ...content }
   }
-  const bottom = content.y + content.h
-  const body: Box = { x: content.x, y: bodyTop, w: content.w, h: Math.max(40, bottom - bodyTop) }
+  const bottom = body.y + body.h
 
   const frames: Box[] = []
   if (columns.count === 2) {
@@ -293,5 +348,5 @@ export function computePageGeometry(
     frames.push(body)
   }
 
-  return { content, header: headerBox, frames, rules }
+  return { content, header: headerBox, headerVertical, frames, rules }
 }
