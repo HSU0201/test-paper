@@ -21,8 +21,8 @@ import {
   computePageGeometry,
   createCustomHeaderItem,
   createDefaultLayout,
-  headerItemHeight,
   normalizeLayout,
+  refitHeaderHeight,
   withDefaultHeaderPlacement,
   type ColumnLayout,
   type HeaderItem,
@@ -513,22 +513,19 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     case 'UPDATE_HEADER_ITEM':
       return withHeader(state, (h) => {
         const items = h.items.map((it) => (it.id === action.id ? { ...it, ...action.patch } : it))
-        const shown = items.find((it) => it.id === action.id)
-        let height = h.height
-        if (shown?.visible) {
-          const bottom = shown.y + headerItemHeight(shown) + 8
-          if (bottom > height) height = Math.min(400, Math.ceil(bottom))
-        }
-        return { ...h, height, items }
+        const affectsHeight = 'visible' in action.patch || 'y' in action.patch || 'fontSize' in action.patch
+        return affectsHeight ? refitHeaderHeight(h, items) : { ...h, items }
       })
     case 'UPDATE_HEADER_ITEMS':
-      return withHeader(state, (h) => ({
-        ...h,
-        items: h.items.map((it) => {
-          const update = action.updates.find((u) => u.id === it.id)
-          return update ? { ...it, ...update.patch } : it
-        }),
-      }))
+      return withHeader(state, (h) =>
+        refitHeaderHeight(
+          h,
+          h.items.map((it) => {
+            const update = action.updates.find((u) => u.id === it.id)
+            return update ? { ...it, ...update.patch } : it
+          }),
+        ),
+      )
     case 'ADD_HEADER_ITEM': {
       const item = createCustomHeaderItem(Math.max(0, state.layout.header.height - 22))
       return {
@@ -541,14 +538,21 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const item = state.layout.header.items.find((it) => it.id === action.id)
       if (!item) return state
       const next = withHeader(state, (h) =>
-        item.role === 'custom'
-          ? { ...h, items: h.items.filter((it) => it.id !== action.id) }
-          : { ...h, items: h.items.map((it) => (it.id === action.id ? { ...it, visible: false } : it)) },
+        refitHeaderHeight(
+          h,
+          item.role === 'custom'
+            ? h.items.filter((it) => it.id !== action.id)
+            : h.items.map((it) => (it.id === action.id ? { ...it, visible: false } : it)),
+        ),
       )
       return { ...next, selectedBlock: state.selectedBlock?.id === action.id ? null : state.selectedBlock }
     }
     case 'SET_HEADER':
-      return withHeader(state, (h) => ({ ...h, ...action.patch }))
+      return withHeader(state, (h) => {
+        const next = { ...h, ...action.patch }
+        if (typeof action.patch.height === 'number') next.heightManual = action.patch.height
+        return next
+      })
     case 'RESET_HEADER_LAYOUT':
       return withHeader(state, (h) => withDefaultHeaderPlacement(h))
     case 'SET_COLUMNS':

@@ -2,7 +2,8 @@ import { Group, Image as KonvaImage, Line, Rect, Text } from 'react-konva'
 import type { EditorAction } from '../editor/reducer'
 import type { FlowFrame, FlowImage, FlowRun, PlacedBlock } from '../editor/flowLayout'
 import { FLOW_WRAP, measureText } from '../editor/konvaMeasure'
-import { layoutRichLines } from '../editor/richText'
+import { rubyAdvance } from '../editor/rubyLayout'
+import { layoutRichLines, type RubyFace } from '../editor/richText'
 import { needsManualWrap } from '../editor/zhuyin'
 import type { Asset, BlockRef } from '../types/exam'
 import { EDITOR_FLAG, EDITOR_SELECTION } from '../editor/theme'
@@ -41,7 +42,7 @@ function stemSlots(blocks: PlacedBlock[], questionId: string): StemSlot[] {
   let index = 0
   let origin = false
   for (const r of runs) {
-    const step = Math.max(1, r.style.fontSize * r.lineHeight)
+    const step = Math.max(1, r.inkStep ?? r.style.fontSize * r.lineHeight)
     if (r.vertical) {
       const n = r.text ? r.text.split('\n').length : 0
       const skip = Math.min(r.stemFrom ?? 0, n)
@@ -147,7 +148,153 @@ function DraggableFigure({
   return <KonvaImage {...shared} image={el} />
 }
 
+function RubyCluster({
+  x,
+  y,
+  step,
+  fontSize,
+  fontFamily,
+  hanBold,
+  fill,
+  face,
+  han,
+  reading,
+}: {
+  x: number
+  y: number
+  step: number
+  fontSize: number
+  fontFamily: string
+  hanBold: string
+  fill: string
+  face: RubyFace
+  han: string
+  reading: string
+}) {
+  const adv = rubyAdvance(fontSize, face, reading)
+  const blockH = Math.max(fontSize, adv.stack)
+  const top = y + Math.max(0, (step - blockH) / 2)
+  const baseY = top + (blockH - fontSize) / 2
+  const stackY = top + (blockH - adv.stack) / 2
+  const colX = adv.base + adv.mid
+  const pad = Math.max(1, fontSize * 0.06)
+  return (
+    <Group x={x} y={0} listening={false}>
+      {face === 'box' ? (
+        <Rect
+          x={pad}
+          y={baseY + pad}
+          width={Math.max(4, adv.base - pad * 2)}
+          height={Math.max(4, fontSize - pad * 2)}
+          stroke={fill}
+          strokeWidth={1.25}
+          listening={false}
+        />
+      ) : face === 'char' ? (
+        <Text
+          x={0}
+          y={baseY}
+          text={han}
+          fontSize={fontSize}
+          fontFamily={fontFamily}
+          fontStyle={hanBold}
+          fill={fill}
+          listening={false}
+        />
+      ) : null}
+      {adv.letters.map((ch, i) => (
+        <Text
+          key={i}
+          x={colX}
+          y={stackY + i * adv.pitch}
+          width={adv.letter * 1.15}
+          height={adv.pitch}
+          text={ch}
+          fontSize={adv.letter}
+          fontFamily={fontFamily}
+          fill={fill}
+          align="center"
+          verticalAlign="middle"
+          wrap="none"
+          listening={false}
+        />
+      ))}
+      {adv.tone ? (
+        <Text
+          x={colX + adv.letter * 1.02}
+          y={stackY + (adv.stack - adv.letter) / 2}
+          width={adv.letter}
+          height={adv.letter}
+          text={adv.tone}
+          fontSize={adv.letter * 0.92}
+          fontFamily={fontFamily}
+          fill={fill}
+          align="left"
+          verticalAlign="middle"
+          wrap="none"
+          listening={false}
+        />
+      ) : null}
+    </Group>
+  )
+}
+
 function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
+  if (r.ink?.length) {
+    const step = r.inkStep ?? r.style.fontSize * r.lineHeight
+    const base = r.placeholder ? '#94a3b8' : r.style.fill || '#000000'
+    const fontStyle = r.style.bold ? 'bold' : 'normal'
+    const lineWidth = new Map<number, number>()
+    for (const p of r.ink) lineWidth.set(p.line, Math.max(lineWidth.get(p.line) ?? 0, p.x + p.width))
+    const shift = (line: number) => {
+      if (!r.align || r.align === 'left') return 0
+      const used = lineWidth.get(line) ?? 0
+      return r.align === 'center' ? Math.max(0, (r.width - used) / 2) : Math.max(0, r.width - used)
+    }
+    return (
+      <Group listening={false}>
+        {r.ink.map((p, i) => {
+          const x = r.x + p.x + shift(p.line)
+          const y = r.y + p.line * step
+          const fill = p.color || base
+          if (p.ruby) {
+            return (
+              <RubyCluster
+                key={i}
+                x={x}
+                y={y}
+                step={step}
+                fontSize={r.style.fontSize}
+                fontFamily={fontFamily}
+                hanBold={fontStyle}
+                fill={fill}
+                face={p.ruby.face}
+                han={p.ruby.han}
+                reading={p.ruby.reading}
+              />
+            )
+          }
+          return (
+            <Text
+              key={i}
+              x={x}
+              y={y}
+              width={Math.max(1, p.width)}
+              height={step}
+              text={p.text}
+              fontSize={r.style.fontSize}
+              fontFamily={fontFamily}
+              fontStyle={fontStyle}
+              fill={fill}
+              verticalAlign="middle"
+              wrap="none"
+              listening={false}
+            />
+          )
+        })}
+      </Group>
+    )
+  }
   const base = r.placeholder ? '#94a3b8' : r.style.fill || '#000000'
   const fontStyle = r.style.bold ? 'bold' : 'normal'
   const step = r.style.fontSize * r.lineHeight

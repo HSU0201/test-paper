@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useId, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { useEditor } from '../../editor/EditorContext'
-import { hasZhuyinMarkup, plainText } from '../../editor/richText'
+import { hasRubyMarkup, hasZhuyinMarkup, plainText } from '../../editor/richText'
 import {
   examTotals,
   FOOTER_CONTINUE_ID,
@@ -196,7 +196,9 @@ export function OutlinePanel() {
                 <span className="outline-row__grip" aria-hidden>
                   ⋮⋮
                 </span>
-                <span className="outline-row__title">{sectionHeading(s, si)}</span>
+                <span className="outline-row__title">
+                  {plainText(s.title).trim() ? sectionHeading(s, si) : `${sectionHeading(s, si)}（未輸入名稱）`}
+                </span>
                 {(s.frame ?? 'none') !== 'none' ? <span className="outline-row__badge">框</span> : null}
                 {(s.layout ?? 'flow') === 'rows' ? <span className="outline-row__badge">表</span> : null}
                 {sectionRowSize(s) === 2 ? <span className="outline-row__badge">兩題</span> : null}
@@ -251,6 +253,9 @@ export function OutlinePanel() {
                         {(q.zhuyin === true || hasZhuyinMarkup(q.stem) || q.choices.some((c) => hasZhuyinMarkup(c.text))) &&
                         !s.zhuyin ? (
                           <span className="outline-row__badge">注音</span>
+                        ) : null}
+                        {hasRubyMarkup(q.stem) || q.choices.some((c) => hasRubyMarkup(c.text)) ? (
+                          <span className="outline-row__badge">旁注</span>
                         ) : null}
                         {q.figures.length ? (
                           <span className="outline-row__fig" title={`${q.figures.length} 張附圖`}>

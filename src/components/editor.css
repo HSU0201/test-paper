@@ -2273,6 +2273,58 @@ kbd {
   border-radius: 3px;
 }
 
+.color-field__box .ruby {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin: 0 0.08em 0.15em 0;
+  line-height: 1;
+  user-select: all;
+}
+
+.color-field__box .ruby__base {
+  font-size: 1.15em;
+  min-width: 1em;
+  text-align: center;
+}
+
+.color-field__box .ruby--box .ruby__base {
+  width: 1.05em;
+  height: 1.05em;
+  border: 1px solid currentColor;
+  box-sizing: border-box;
+}
+
+.color-field__box .ruby--reading .ruby__base {
+  display: none;
+}
+
+.color-field__box .ruby__ann {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  margin-left: 0.12em;
+  font-family: 'PaperBopomofo', sans-serif;
+}
+
+.color-field__box .ruby--reading .ruby__ann {
+  margin-left: 0;
+  margin-right: 0.45em;
+}
+
+.color-field__box .ruby__letters {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.42em;
+  line-height: 1.05;
+  text-align: center;
+}
+
+.color-field__box .ruby__tone {
+  font-size: 0.4em;
+  margin-left: 0.05em;
+}
+
 .color-field__swatch {
   width: 18px;
   height: 18px;

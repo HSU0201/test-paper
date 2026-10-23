@@ -231,10 +231,11 @@ export function choiceLabel(index: number): string {
   return `(${String.fromCharCode(65 + index)})`
 }
 
-/** 題幹裡一個（ ）或一段底線算一格 */
+/** 題幹裡一個（ ）、一段底線，或一個注音方格算一格 */
 export function countAnswerBlanks(stem: string): number {
+  const boxes = stem.match(/\{\{yb:/g)?.length ?? 0
   const text = plainText(stem).replace(new RegExp(FIGURE_MARK_PATTERN.source, 'g'), '')
-  return text.match(/（[\s　]*）|\([\s]*\)|＿{2,}|_{2,}/g)?.length ?? 0
+  return boxes + (text.match(/（[\s　]*）|\([\s]*\)|＿{2,}|_{2,}/g)?.length ?? 0)
 }
 
 export function questionBlankCount(q: Question): number {
@@ -308,8 +309,8 @@ export function sectionScoreNote(s: Section): string {
 }
 
 /**
- * 小題配分不同時印在題號後。
- * 每格固定分數時各題總分可能不同（5 格、4 格），這種情況不列在題號前。
+ * 小題配分不同時印在題目最後。
+ * 每格固定分數時各題總分可能不同（5 格、4 格），這種情況不列在題目上。
  */
 export function questionScoreMark(section: Section, q: Question): string {
   if (section.scoreMode === 'blank') return ''
@@ -481,6 +482,21 @@ function figure(assetId: string, placement: FigurePlacement, widthRatio: number,
  * 空白試卷用的排版目錄：四種題型，加上選項欄數、外框、底線、
  * 直式表格、配分寫法，以及圖片可以放的位置。
  */
+const SAMPLE_RUBY: Record<string, string> = {
+  小: 'ㄒㄧㄠˇ',
+  魚: 'ㄩˊ',
+  逆: 'ㄋㄧˋ',
+  流: 'ㄌㄧㄡˊ',
+  而: 'ㄦˊ',
+  上: 'ㄕㄤˋ',
+}
+
+/** 範例用。face 決定這一格印國字、方格，或只留注音。 */
+function rubyRun(text: string, face: 'char' | 'box' | 'reading'): string {
+  const mark = face === 'box' ? 'yb' : face === 'reading' ? 'yr' : 'y'
+  return [...text].map((ch) => (SAMPLE_RUBY[ch] ? `{{${mark}:${ch}|${SAMPLE_RUBY[ch]}}}` : ch)).join('')
+}
+
 export function createSampleExam(): ExamContent {
   const assets: Record<string, Asset> = {}
   const add = (asset: Asset) => {
@@ -506,6 +522,35 @@ export function createSampleExam(): ExamContent {
   const iconBlue = add(sampleSvg(64, 64, `<rect x="12" y="12" width="40" height="40" rx="4" fill="#1d4ed8"/>`, false))
   const iconGreen = add(sampleSvg(64, 64, `<polygon points="32,8 56,54 8,54" fill="#1f7a45"/>`, false))
   const pic = (assetId: string, widthRatio: number): ChoiceImage => ({ assetId, widthRatio })
+
+  const phrase = '小魚逆流而上'
+  const ruby = createSection('國字注音', 'fill_blank')
+  ruby.defaultScore = 1
+  ruby.scoreMode = 'blank'
+  ruby.blankScore = 1
+  ruby.instruction = '選取國字後可「加上注音」。同一批字還能「改成方格」或「只留注音」，也能「去掉注音」。方格算一格。'
+  ruby.questions = [
+    {
+      ...q(
+        'fill_blank',
+        1,
+        [rubyRun(phrase, 'char'), rubyRun(phrase, 'box'), rubyRun(phrase, 'reading')].join('\n'),
+        [],
+        phrase,
+      ),
+      bodyStyle: { fontSize: 22 },
+    },
+    {
+      ...q(
+        'fill_blank',
+        1,
+        `只改其中幾個字：${rubyRun('小魚', 'char')}${rubyRun('逆流', 'box')}${rubyRun('而上', 'reading')}`,
+        [],
+        phrase,
+      ),
+      bodyStyle: { fontSize: 22 },
+    },
+  ]
 
   const single = createSection('單選題', 'single_choice')
   single.defaultScore = 4
@@ -586,10 +631,10 @@ export function createSampleExam(): ExamContent {
   essay.defaultScore = 8
   essay.frame = 'all'
   essay.headingStyle = { fontSize: 20 }
-  essay.instruction = '標題和題目框在一起。作答區可以畫底線，也可以只留白。各題分數不同時，會寫在題號後面。'
+  essay.instruction = '標題和題目框在一起。作答區可以畫底線，也可以只留白。各題分數不同時，會寫在題目最後。'
   essay.questions = [
     {
-      ...q('short_answer', 6, '小明買了 3 枝筆和 2 本筆記本共花了 110 元，一枝筆 20 元。一本筆記本多少元？'),
+      ...q('short_answer', 6, '買了 3 枝筆和 2 本筆記本共花了 110 元，一枝筆 20 元。一本筆記本多少元？'),
       answerLines: 3,
     },
     {
@@ -625,7 +670,7 @@ export function createSampleExam(): ExamContent {
 
   return {
     numbering: 'perSection',
-    sections: [single, multi, fill, essay, table],
+    sections: [ruby, single, multi, fill, essay, table],
     assets,
     footer: { ...createDefaultFooter(), continueOn: true, endOn: true },
   }

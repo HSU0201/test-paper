@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
-import { editZhuyin, htmlToMarkup, INK_PALETTE, markupToHtml, plainText } from '../editor/richText'
+import { editRuby, editZhuyin, htmlToMarkup, INK_PALETTE, markupToHtml, plainText, type RubyEdit } from '../editor/richText'
 
 type ColorFieldProps = {
   value: string
@@ -103,6 +103,32 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
     onChange(next)
   }
 
+  const applyRuby = (mode: RubyEdit) => {
+    const el = ref.current
+    const range = rangeRef.current
+    const hint =
+      mode === 'plain'
+        ? '請先選取要去掉注音的字'
+        : mode === 'char'
+          ? '請先選取要加上注音的國字'
+          : '請先選取國字，或已經加了注音的字'
+    if (!el || !range || range.collapsed || !el.contains(range.startContainer) || !el.contains(range.endContainer)) {
+      setMsg(hint)
+      return
+    }
+    const start = displayIndex(range.startContainer, range.startOffset)
+    const end = displayIndex(range.endContainer, range.endOffset)
+    const current = htmlToMarkup(el)
+    const next = editRuby(current, Math.min(start, end), Math.max(start, end), mode)
+    if (next === current) {
+      setMsg(mode === 'plain' ? '選取的範圍裡沒有右側注音' : '選取的範圍裡沒有可加注音的國字')
+      return
+    }
+    setMsg(null)
+    el.innerHTML = markupToHtml(next)
+    onChange(next)
+  }
+
   const apply = (color: string) => {
     const el = ref.current
     const range = rangeRef.current
@@ -191,6 +217,18 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
             onClick={() => applyZhuyin('to-han')}
           >
             改回國字
+          </button>
+          <button type="button" className="text-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyRuby('char')}>
+            加上注音
+          </button>
+          <button type="button" className="text-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyRuby('box')}>
+            改成方格
+          </button>
+          <button type="button" className="text-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyRuby('reading')}>
+            只留注音
+          </button>
+          <button type="button" className="text-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyRuby('plain')}>
+            去掉注音
           </button>
         </span>
       </div>

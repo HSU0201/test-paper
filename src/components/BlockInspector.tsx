@@ -139,11 +139,11 @@ function sectionScoreDescription(section: Section): string {
   if (!n) return '尚未加入小題。新題使用下方預設配分，每題分數之後仍可各自調整。'
   if (section.scoreMode === 'blank') {
     const unit = sectionBlankUnit(section)
-    return `每格 ${unit} 分，合計 ${total} 分。各題格數不同也不會標在題號前面，配分寫在標題最後。`
+    return `每格 ${unit} 分，合計 ${total} 分。各題格數不同也不會標在題目上，配分寫在標題最後。`
   }
   const each = uniformQuestionScore(section)
   if (each == null) {
-    return `本大題共 ${n} 題，配分不完全相同，合計 ${total} 分。標題只寫總分，每題題號後會標出該題分數。`
+    return `本大題共 ${n} 題，配分不完全相同，合計 ${total} 分。標題只寫總分，每題最後會標出該題分數。`
   }
   return `本大題共 ${n} 題，每題 ${each} 分，合計 ${total} 分。標題最後會寫「每題 ${each} 分」。`
 }
@@ -156,7 +156,7 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
       <PanelSection title={sectionHeading(section, index)}>
         <div className="ui-field">
           <span className="ui-field__label">大題名稱</span>
-          <ColorField ariaLabel="大題名稱" value={section.title} onChange={(title) => set({ title })} />
+          <ColorField ariaLabel="大題名稱" value={section.title} placeholder="大題名稱" onChange={(title) => set({ title })} />
         </div>
         <div className="ui-field">
           <span className="ui-field__label">作答說明</span>
@@ -726,7 +726,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
             {hasFigureMark(q.stem)
               ? '題目裡的［圖］不會印在卷上，只代表圖片要插在這裡。可以剪到別的句子後面，半形的 [圖] 也有效。'
               : '圖片要出現在句子中間時，把游標點在那個位置，再按「插入圖片位置」。出現的［圖］不會印出來。'}
-            不想用這個標記，就直接在卷面上拖曳圖片。
+            不想用這個標記，就直接在卷面上拖曳圖片。選取國字後可加上右側注音，再改成方格或只留注音。
           </p>
         </div>
       </PanelSection>

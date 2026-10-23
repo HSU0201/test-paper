@@ -39,12 +39,26 @@ export type HeaderItem = {
 }
 
 export type HeaderLayout = {
-  /** 頁首區高度（px） */
+  /** 頁首區高度（px）。欄位把頁首撐高時會跟著變，取消欄位後回到手動高度 */
   height: number
+  /**
+   * 使用者在「頁首高度」設的高度。
+   * 顯示欄位造成的自動加高不會改這裡，取消欄位後頁首回到這個高度（仍會容納剩下的欄位）。
+   */
+  heightManual?: number
   /** 頁首下方分隔線 */
   rule: boolean
   /** 每頁都印頁首；否則只印第一頁 */
   repeat: boolean
+  /**
+   * 已把舊的真實校名、人名換成假資料。
+   * 設過之後，使用者再填回同一句會保留。
+   */
+  identityCleared?: boolean
+  /** 空白的內建欄位已補上假資料。之後使用者清空的欄位會維持空白 */
+  placeholdersApplied?: boolean
+  /** 已套上目前的學校與評量名稱。之後改過的標題會保留 */
+  headerTitleSet?: boolean
   items: HeaderItem[]
 }
 
@@ -97,13 +111,13 @@ export const HEADER_ROLE_LABEL: Record<HeaderRole, string> = {
 type Seed = Omit<HeaderItem, 'id' | 'label' | 'fill'> & { label?: string }
 
 const DEFAULT_ITEMS: Seed[] = [
-  { role: 'schoolName', value: '臺中市烏日區中興國民小學', showLabel: false, visible: true, xr: 0, wr: 1, y: 0, fontSize: 20, bold: true, align: 'center' },
-  { role: 'examTitle', value: '115 學年度第一學期二年級數學第一次定期評量', showLabel: false, visible: true, xr: 0, wr: 1, y: 0, fontSize: 20, bold: true, align: 'center' },
-  { role: 'teacher', label: '出題者', value: '陳大師 老師', showLabel: true, visible: true, xr: 0.02, wr: 0.24, y: 40, fontSize: 16, bold: false, align: 'left' },
-  { role: 'classInfo', value: '二年甲班', showLabel: false, visible: true, xr: 0.28, wr: 0.12, y: 40, fontSize: 16, bold: false, align: 'left' },
+  { role: 'schoolName', value: '臺中市北屯區北屯國民小學', showLabel: false, visible: true, xr: 0, wr: 1, y: 0, fontSize: 20, bold: true, align: 'center' },
+  { role: 'examTitle', value: '115學年度第一學期二年級數學第一次定期評量', showLabel: false, visible: true, xr: 0, wr: 1, y: 0, fontSize: 20, bold: true, align: 'center' },
+  { role: 'teacher', label: '出題者', value: '○○○ 老師', showLabel: true, visible: true, xr: 0.02, wr: 0.24, y: 40, fontSize: 16, bold: false, align: 'left' },
+  { role: 'classInfo', value: '○年○班', showLabel: false, visible: true, xr: 0.28, wr: 0.12, y: 40, fontSize: 16, bold: false, align: 'left' },
   { role: 'studentName', value: '', showLabel: true, visible: true, xr: 0.42, wr: 0.27, y: 40, fontSize: 16, bold: false, align: 'left' },
   { role: 'parentSign', label: '家長簽名', value: '', showLabel: true, visible: true, xr: 0.71, wr: 0.27, y: 40, fontSize: 16, bold: false, align: 'left' },
-  { role: 'subject', value: '數學', showLabel: true, visible: false, xr: 0.02, wr: 0.18, y: 74, fontSize: 16, bold: false, align: 'left' },
+  { role: 'subject', value: '', showLabel: true, visible: false, xr: 0.02, wr: 0.18, y: 74, fontSize: 16, bold: false, align: 'left' },
   { role: 'seatNo', value: '', showLabel: true, visible: false, xr: 0.22, wr: 0.16, y: 74, fontSize: 16, bold: false, align: 'left' },
   { role: 'examDate', value: '', showLabel: true, visible: false, xr: 0.4, wr: 0.22, y: 74, fontSize: 16, bold: false, align: 'left' },
   { role: 'duration', value: '', showLabel: true, visible: false, xr: 0.64, wr: 0.18, y: 74, fontSize: 16, bold: false, align: 'left' },
@@ -137,8 +151,19 @@ export function createCustomHeaderItem(y: number): HeaderItem {
   })
 }
 
+export const DEFAULT_HEADER_HEIGHT = 74
+
 export function createDefaultHeader(): HeaderLayout {
-  return { height: 74, rule: true, repeat: false, items: DEFAULT_ITEMS.map(createHeaderItem) }
+  return {
+    height: DEFAULT_HEADER_HEIGHT,
+    heightManual: DEFAULT_HEADER_HEIGHT,
+    rule: true,
+    repeat: false,
+    identityCleared: true,
+    placeholdersApplied: true,
+    headerTitleSet: true,
+    items: DEFAULT_ITEMS.map(createHeaderItem),
+  }
 }
 
 const TITLE_BAND_ROLES = new Set<HeaderRole>(['schoolName', 'examTitle'])
@@ -156,12 +181,68 @@ export function titleBandItems(items: HeaderItem[]): HeaderItem[] | null {
   return [...mates].sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role))
 }
 
-/** 舊版預設文字。還原版型或升級舊檔時，沒改過的欄位才換成現在的範例 */
-const LEGACY_HEADER_VALUE: Partial<Record<HeaderRole, string>> = {
-  schoolName: '○○市立○○國民中學',
-  examTitle: '115 學年度第一學期 第一次段考',
-  subject: '數學',
-  teacher: '○○○ 老師',
+/** 舊版預設文字。還原版型或升級舊檔時，沒改過的欄位才換成現在的假資料 */
+const LEGACY_HEADER_VALUE: Partial<Record<HeaderRole, readonly string[]>> = {
+  schoolName: ['○○市立○○國民中學', '○○國民小學', '臺中市烏日區中興國民小學', '備份還原測試中學'],
+  examTitle: [
+    '115 學年度第一學期 第一次段考',
+    '115 學年度第一學期二年級數學第一次定期評量',
+    '○○學年度第○學期○○科定期評量',
+  ],
+  subject: ['數學'],
+  teacher: ['○○○ 老師', '陳大師 老師'],
+  classInfo: ['二年甲班'],
+}
+
+function headerValueIsLegacy(role: HeaderRole, value: string): boolean {
+  const legacy = LEGACY_HEADER_VALUE[role]
+  return legacy ? legacy.includes(value) : value.trim() === ''
+}
+
+function defaultHeaderValue(role: HeaderRole): string {
+  return DEFAULT_ITEMS.find((item) => item.role === role)?.value ?? ''
+}
+
+/** 舊的真實校名、人名換成假資料，只做一次。自行輸入的句子保留 */
+function blankFactoryHeader(header: HeaderLayout): HeaderLayout {
+  if (header.identityCleared) return header
+  return {
+    ...header,
+    identityCleared: true,
+    items: header.items.map((it) => {
+      const legacy = LEGACY_HEADER_VALUE[it.role]
+      return legacy?.includes(it.value) ? { ...it, value: defaultHeaderValue(it.role) } : it
+    }),
+  }
+}
+
+/** 還停在舊校名、測試名稱或圓圈假資料時，換成目前的學校與評量名稱，只做一次 */
+function applyNamedHeader(header: HeaderLayout): HeaderLayout {
+  if (header.headerTitleSet) return header
+  return {
+    ...header,
+    headerTitleSet: true,
+    items: header.items.map((it) => {
+      if (it.role !== 'schoolName' && it.role !== 'examTitle') return it
+      const legacy = LEGACY_HEADER_VALUE[it.role]
+      if (it.value.trim() && !legacy?.includes(it.value)) return it
+      return { ...it, value: defaultHeaderValue(it.role) }
+    }),
+  }
+}
+
+/** 內建欄位還是空白時補上假資料，只做一次。姓名、家長簽名維持空白底線 */
+function fillEmptyHeaderPlaceholders(header: HeaderLayout): HeaderLayout {
+  if (header.placeholdersApplied) return header
+  return {
+    ...header,
+    placeholdersApplied: true,
+    items: header.items.map((it) => {
+      const fallback = defaultHeaderValue(it.role)
+      if (!fallback || it.value.trim()) return it
+      return { ...it, value: fallback }
+    }),
+  }
 }
 
 const LEGACY_HEADER_LABEL: Partial<Record<HeaderRole, string>> = {
@@ -213,8 +294,7 @@ export function withDefaultHeaderPlacement(old: HeaderLayout): HeaderLayout {
   const items = defaults.items.map((d) => {
     const prev = old.items.find((it) => it.role === d.role)
     if (!prev) return d
-    const legacyValue = LEGACY_HEADER_VALUE[d.role]
-    const valueIsLegacy = legacyValue !== undefined ? prev.value === legacyValue : prev.value.trim() === ''
+    const valueIsLegacy = headerValueIsLegacy(d.role, prev.value)
     const value = valueIsLegacy ? d.value : prev.value
     const label =
       prev.label === d.label || prev.label === HEADER_ROLE_LABEL[d.role] || prev.label === LEGACY_HEADER_LABEL[d.role]
@@ -225,11 +305,10 @@ export function withDefaultHeaderPlacement(old: HeaderLayout): HeaderLayout {
   })
   const customs = old.items.filter((it) => it.role === 'custom')
   const placed = [...items, ...customs]
-  const bottom = placed
-    .filter((it) => it.visible)
-    .reduce((max, it) => Math.max(max, it.y + Math.ceil(it.fontSize * 1.4) + 6), defaults.height)
+  const bottom = headerContentBottom(placed)
   return {
-    height: Math.min(400, Math.max(defaults.height, Math.ceil(bottom))),
+    height: Math.min(400, Math.max(defaults.height, bottom)),
+    heightManual: defaults.height,
     rule: old.rule,
     repeat: old.repeat,
     items: placed,
@@ -265,6 +344,42 @@ export function headerItemHeight(item: HeaderItem): number {
   return Math.ceil(item.fontSize * 1.4)
 }
 
+/** 可見欄位底端再留一點空隙，避免文字貼到頁首分隔線 */
+const HEADER_FIT_PAD = 8
+
+export function headerContentBottom(items: HeaderItem[]): number {
+  let bottom = 0
+  for (const it of items) {
+    if (!it.visible) continue
+    bottom = Math.max(bottom, it.y + headerItemHeight(it) + HEADER_FIT_PAD)
+  }
+  return Math.ceil(bottom)
+}
+
+/**
+ * 還沒存過手動高度時：比內容還高的空白視為使用者留的；
+ * 高度剛好貼齊內容（多半是顯示欄位時自動撐高）則以預設高度當復原點。
+ */
+export function restingHeaderHeight(header: Pick<HeaderLayout, 'height' | 'heightManual' | 'items'>): number {
+  if (typeof header.heightManual === 'number' && Number.isFinite(header.heightManual)) {
+    return clamp(header.heightManual, 0, 400)
+  }
+  const content = headerContentBottom(header.items)
+  if (header.height > content + 2) return clamp(header.height, 0, 400)
+  return clamp(Math.min(header.height, DEFAULT_HEADER_HEIGHT), 0, 400)
+}
+
+/** 欄位變高時加高頁首；欄位取消或上移後，收回自動加高的部分，手動高度留著 */
+export function refitHeaderHeight(prev: HeaderLayout, items: HeaderItem[]): HeaderLayout {
+  const heightManual = restingHeaderHeight(prev)
+  const prevContent = headerContentBottom(prev.items)
+  const nextContent = headerContentBottom(items)
+  let height = prev.height
+  if (nextContent > prevContent) height = Math.max(height, nextContent)
+  if (nextContent < prevContent) height = Math.max(heightManual, nextContent)
+  return { ...prev, items, height: clamp(height, 0, 400), heightManual }
+}
+
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
 const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback)
 
@@ -287,11 +402,23 @@ export function normalizeLayout(raw: unknown): PaperLayout {
     const h = rh as Partial<HeaderLayout>
     header = {
       height: clamp(num(h.height, base.header.height), 0, 400),
+      heightManual:
+        typeof h.heightManual === 'number' && Number.isFinite(h.heightManual) ? clamp(h.heightManual, 0, 400) : undefined,
       rule: h.rule ?? true,
       repeat: h.repeat ?? false,
+      identityCleared: h.identityCleared === true,
+      placeholdersApplied: h.placeholdersApplied === true,
+      headerTitleSet: h.headerTitleSet === true,
       items: (h.items ?? []).map((it) => ({ ...createHeaderItem({ ...DEFAULT_ITEMS[0], role: 'custom' }), ...it })),
     }
+    const cleared = header.identityCleared === true
+    const applied = header.placeholdersApplied === true
+    const titled = header.headerTitleSet === true
     if (headerNeedsBannerPlacement(header)) header = withDefaultHeaderPlacement(header)
+    header = blankFactoryHeader({ ...header, identityCleared: cleared })
+    header = fillEmptyHeaderPlaceholders({ ...header, placeholdersApplied: applied })
+    header = applyNamedHeader({ ...header, headerTitleSet: titled })
+    if (header.heightManual == null) header = { ...header, heightManual: restingHeaderHeight(header) }
   } else if (rh) {
     const legacy = rh as LegacyHeader
     header = {
@@ -302,6 +429,7 @@ export function normalizeLayout(raw: unknown): PaperLayout {
         return old ? { ...it, label: old.label ?? it.label, value: old.value ?? it.value, visible: old.visible ?? it.visible } : it
       }),
     }
+    header = applyNamedHeader(fillEmptyHeaderPlaceholders(blankFactoryHeader(header)))
   }
 
   const c: Partial<ColumnLayout> & { leftRatio?: number } = r.columns ?? {}

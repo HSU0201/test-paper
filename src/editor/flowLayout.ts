@@ -26,7 +26,8 @@ import {
   type Section,
 } from '../types/exam'
 import { toVerticalGlyph, type SpacingSettings } from '../types/layout'
-import { paintText, plainText, richChars } from './richText'
+import { layoutRubyRun, type InkPiece } from './rubyLayout'
+import { hasRubyMarkup, paintText, plainText, richChars } from './richText'
 import { clusterUnits, needsManualWrap, textAtoms } from './zhuyin'
 
 export type TextStyle = { fontSize: number; fill: string; bold?: boolean }
@@ -62,6 +63,9 @@ export type FlowRun = {
   /** 已依欄寬切成單行時為 1，拖曳用這個行數，不再用高度反推 */
   lineCount?: number
   align?: 'left' | 'center' | 'right'
+  /** 國字右側注音。有這欄時不再把 text 交給一般文字框 */
+  ink?: InkPiece[]
+  inkStep?: number
 }
 
 export type FlowRule = {
@@ -275,6 +279,12 @@ function stripMarks(stem: string) {
   return stem.replace(/[\[［]\s*圖\s*[\]］]/g, '')
 }
 
+/** 配分接在題目最後，並先收掉題幹裡還沒關的上色，避免分數被塗成同一色。 */
+function stemWithScore(stem: string, scoreMark: string): string {
+  if (!scoreMark) return stem
+  return stem ? `${stem}{{/}}${scoreMark}` : stem
+}
+
 function buildQuestion(
   q: Question,
   num: number,
@@ -291,8 +301,10 @@ function buildQuestion(
   const rules: FlowRule[] = []
   const images: FlowImage[] = []
   const lh = body.fontSize * mt.lineHeight
-  const prefix = scoreMark ? `${num}.${scoreMark}` : `${num}.`
+  const prefix = `${num}.`
   const innerW = Math.max(40, w - indent)
+  const rawStem = q.stem.trim()
+  const scoredStem = stemWithScore(rawStem, scoreMark)
 
   const right = q.figures.find((f) => f.placement === 'right')
   const middle = q.figures.filter((f) => f.placement === 'middle')
@@ -312,6 +324,25 @@ function buildQuestion(
   }
 
   const pushStem = (text: string, key: string, y: number, placeholder = false, colors?: string[], singleLine = false) => {
+    if (!placeholder && !colors && hasRubyMarkup(text)) {
+      const laid = layoutRubyRun(text, stemW, body.fontSize, mt.lineHeight, (sample) =>
+        m(sample, 10000, body, mt.lineHeight).naturalWidth,
+      )
+      runs.push({
+        key,
+        x: indent,
+        y,
+        width: stemW,
+        height: laid.height,
+        text: plainText(text),
+        style: body,
+        lineHeight: mt.lineHeight,
+        ink: laid.pieces,
+        inkStep: laid.step,
+        lineCount: laid.lineCount,
+      })
+      return laid.height
+    }
     const painted = placeholder ? { text, colors: undefined as string[] | undefined } : paintText(text)
     const height = runHeight(painted.text, stemW, body, mt.lineHeight, m)
     runs.push({
@@ -355,7 +386,7 @@ function buildQuestion(
 
   let h = 0
   const layoutAnchored = (list: Figure[]) => {
-    const raw = stripMarks(q.stem.trim())
+    const raw = stripMarks(scoredStem)
     const painted = paintText(raw)
     const pieces = wrapLines(painted.text, stemW, body, mt.lineHeight, m)
     const atOf = (f: Figure) => Math.max(0, Math.min(pieces.length, f.afterLine ?? 1))
@@ -379,16 +410,17 @@ function buildQuestion(
   }
 
   const anchored = !hasFigureMark(q.stem) && middle.some((f) => typeof f.afterLine === 'number')
-  if (!q.stem.trim()) {
+  if (!rawStem) {
     const before = anchored ? middle.filter((f) => (f.afterLine ?? 1) <= 0) : []
     const rest = anchored ? middle.filter((f) => (f.afterLine ?? 1) > 0) : middle
     if (before.length) h = pushFigures(before, h, 'middle')
     h += pushStem(EMPTY_STEM, 'stem', h, true)
     h = pushFigures(rest, h, 'middle')
-  } else if (anchored) {
+    if (scoreMark) h += pushStem(scoreMark, 'score', h)
+  } else if (anchored && !hasRubyMarkup(q.stem)) {
     layoutAnchored(middle)
   } else {
-    const plan = planStemFigures(q.stem.trim(), middle.length)
+    const plan = planStemFigures(scoredStem, middle.length)
     let figAt = 0
     plan.parts.forEach((part, i) => {
       if (part) h += pushStem(part, i === 0 ? 'stem' : `stem-${i}`, h)
@@ -484,36 +516,17 @@ function formatNum(n: number, style: NumberStyle): string {
 }
 
 function questionLead(it: Extract<Item, { kind: 'question' }>): string {
-  const n = formatNum(it.num, it.section.numberStyle)
-  return it.scoreMark ? `${n}${it.scoreMark}` : n
+  return formatNum(it.num, it.section.numberStyle)
 }
 
-/** 配分不同時，同一大題的題幹對齊到最寬的「題號＋分數」之後 */
+/** 題幹對齊在題號後面。配分寫在題目最後，不佔題號的寬度。 */
 function questionIndents(items: Item[], c: Ctx): Map<string, number> {
   const map = new Map<string, number>()
-  let group: Extract<Item, { kind: 'question' }>[] = []
-  const flush = () => {
-    if (!group.length) return
-    const marked = group.some((q) => q.scoreMark)
-    let shared = 0
-    for (const q of group) {
-      const body = resolveStyle(c.st.body, q.question.bodyStyle)
-      const base = Math.ceil(body.fontSize * 2)
-      if (!marked) {
-        map.set(q.question.id, base)
-        continue
-      }
-      const measured = c.m(questionLead(q), 10000, body, c.mt.lineHeight).naturalWidth
-      shared = Math.max(shared, base, Math.ceil(measured + body.fontSize * 0.35))
-    }
-    if (marked) for (const q of group) map.set(q.question.id, shared)
-    group = []
-  }
   for (const it of items) {
-    if (it.kind === 'question') group.push(it)
-    else flush()
+    if (it.kind !== 'question') continue
+    const body = resolveStyle(c.st.body, it.question.bodyStyle)
+    map.set(it.question.id, Math.ceil(body.fontSize * 2))
   }
-  flush()
   return map
 }
 
@@ -1132,7 +1145,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
           (sum, q) =>
             sum +
             textWidth(
-              plainText(`${questionLead(q)}${stripMarks(q.question.stem)}`),
+              plainText(`${questionLead(q)}${stripMarks(q.question.stem)}${q.scoreMark}`),
               resolveStyle(st.body, q.question.bodyStyle).fontSize,
               fh,
             ),
@@ -1174,6 +1187,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     const below = q.figures.filter((f) => f.placement !== 'right' && f.placement !== 'middle' && f.placement !== 'afterChoices')
     right.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id))
     const stem = q.stem.trim()
+    const scoredStem = stemWithScore(stem, it.scoreMark)
     const lead = questionLead(it)
     const anchored = !hasFigureMark(stem) && middle.some((f) => typeof f.afterLine === 'number')
     if (!stem) {
@@ -1181,6 +1195,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
       closeOpen()
       write(EMPTY_STEM, body, 'stem', true)
       middle.forEach((f) => (anchored ? emitInColumn(f, body) : emitImage(f.assetId, f.widthRatio, f.id, 'middle')))
+      if (it.scoreMark) write(it.scoreMark, body, 'score')
     } else if (anchored) {
       const units = richChars(stripMarks(stem))
       const visible = units.filter((unit) => unit.ch !== '\n').length
@@ -1218,8 +1233,9 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
           placeAt(seen)
         }
       }
+      if (it.scoreMark) for (const ch of it.scoreMark) pushChar(ch)
     } else {
-      const plan = planStemFigures(stem, middle.length)
+      const plan = planStemFigures(scoredStem, middle.length)
       let figAt = 0
       plan.parts.forEach((part, i) => {
         const text = i === 0 ? `${lead}${part}` : part

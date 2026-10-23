@@ -1,16 +1,41 @@
-/** 考卷內文的局部上色，以及「這幾個字印成注音」。標記只存在資料裡，畫面與排版都用拆開後的字。 */
+/** 考卷內文的局部上色、換成注音，以及國字右側的直排注音。標記只存在資料裡。 */
 import { readingsFor } from './hanToZhuyin'
 import { textAtoms } from './zhuyin'
 
 const OPEN = /^\{\{#([0-9a-fA-F]{6})\}\}/
 const CLOSE = '{{/}}'
 const ZY = /^\{\{z:([^|}]+)\|([^}]*)\}\}/
+const RUBY = /^\{\{y([br])?:([^|}]+)\|([^}]*)\}\}/
+const TONE_MARK = new Set(['\u02c7', '\u02c9', '\u02ca', '\u02cb', '\u02d9'])
 
 export type RichChar = { ch: string; color?: string }
+
+/** char：國字＋注音。box：方格＋注音。reading：只留注音。 */
+export type RubyFace = 'char' | 'box' | 'reading'
 
 type Seg =
   | { kind: 'ch'; ch: string; color?: string }
   | { kind: 'zy'; han: string; reading: string; color?: string }
+  | { kind: 'ruby'; face: RubyFace; han: string; reading: string; color?: string }
+
+function rubyFace(mark: string | undefined): RubyFace {
+  if (mark === 'b') return 'box'
+  if (mark === 'r') return 'reading'
+  return 'char'
+}
+
+function rubyMark(face: RubyFace): string {
+  if (face === 'box') return 'yb'
+  if (face === 'reading') return 'yr'
+  return 'y'
+}
+
+/** 畫面上這一格佔幾個字。方格和國字算 1，只留注音時算注音的字數。 */
+function rubyShown(face: RubyFace, han: string, reading: string): string {
+  if (face === 'box') return '□'
+  if (face === 'reading') return reading || han
+  return han
+}
 
 function parseSegments(input: string): Seg[] {
   const out: Seg[] = []
@@ -27,6 +52,12 @@ function parseSegments(input: string): Seg[] {
       const hex = `#${open[1].toLowerCase()}`
       color = hex === '#000000' ? undefined : hex
       i += open[0].length
+      continue
+    }
+    const ruby = RUBY.exec(input.slice(i))
+    if (ruby) {
+      out.push({ kind: 'ruby', face: rubyFace(ruby[1]), han: ruby[2], reading: ruby[3], color })
+      i += ruby[0].length
       continue
     }
     const zy = ZY.exec(input.slice(i))
@@ -47,6 +78,59 @@ export function hasZhuyinMarkup(input: string): boolean {
   return input.includes('{{z:')
 }
 
+export function hasRubyMarkup(input: string): boolean {
+  return /\{\{y[br]?:/.test(input)
+}
+
+export type InkAtom =
+  | { kind: 'text'; text: string; color?: string }
+  | { kind: 'ruby'; face: RubyFace; han: string; reading: string; color?: string }
+
+/** 一般字連成一段；右側注音每一格單獨一段，給排版量寬度。 */
+export function inkAtoms(input: string): InkAtom[] {
+  const out: InkAtom[] = []
+  let buf = ''
+  let color: string | undefined
+  let prevZy = false
+  const flush = () => {
+    if (!buf) return
+    out.push(color ? { kind: 'text', text: buf, color } : { kind: 'text', text: buf })
+    buf = ''
+  }
+  const pushText = (text: string, next?: string) => {
+    if (!text) return
+    if (next !== color) {
+      flush()
+      color = next
+    }
+    buf += text
+  }
+  for (const seg of parseSegments(input)) {
+    if (seg.kind === 'ruby') {
+      flush()
+      out.push({
+        kind: 'ruby',
+        face: seg.face,
+        han: seg.han,
+        reading: seg.reading,
+        ...(seg.color ? { color: seg.color } : {}),
+      })
+      prevZy = false
+      continue
+    }
+    if (seg.kind === 'zy') {
+      const reading = seg.reading || seg.han
+      pushText(prevZy && reading ? ` ${reading}` : reading, seg.color)
+      prevZy = Boolean(reading)
+      continue
+    }
+    prevZy = false
+    pushText(seg.ch, seg.color)
+  }
+  flush()
+  return out
+}
+
 export type RichPiece = { text: string; color: string; x: number; line: number }
 
 export const INK_PALETTE: { hex: string; label: string }[] = [
@@ -64,6 +148,13 @@ export function richChars(input: string): RichChar[] {
   const out: RichChar[] = []
   let prevZy = false
   for (const seg of parseSegments(input)) {
+    if (seg.kind === 'ruby') {
+      prevZy = false
+      for (const ch of rubyShown(seg.face, seg.han, seg.reading)) {
+        out.push(seg.color ? { ch, color: seg.color } : { ch })
+      }
+      continue
+    }
     if (seg.kind === 'zy') {
       const reading = seg.reading || seg.han
       if (prevZy && reading) out.push({ ch: ' ' })
@@ -134,6 +225,24 @@ export function layoutRichLines(
   return pieces
 }
 
+function splitTone(reading: string): { letters: string[]; tone: string } {
+  const letters: string[] = []
+  let tone = ''
+  for (const ch of reading) {
+    if (TONE_MARK.has(ch)) tone = ch
+    else letters.push(ch)
+  }
+  return { letters, tone }
+}
+
+function rubyHtml(face: RubyFace, han: string, reading: string): string {
+  const { letters, tone } = splitTone(reading)
+  const lettersHtml = (letters.length ? letters : ['·']).map((ch) => escapeHtml(ch)).join('<br>')
+  const toneHtml = tone ? `<span class="ruby__tone">${escapeHtml(tone)}</span>` : ''
+  const base = face === 'char' ? escapeHtml(han) : ''
+  return `<span class="ruby ruby--${face}" contenteditable="false" data-face="${face}" data-han="${escapeAttr(han)}" data-reading="${escapeAttr(reading)}"><span class="ruby__base">${base}</span><span class="ruby__ann"><span class="ruby__letters">${lettersHtml}</span>${toneHtml}</span></span>`
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
@@ -154,6 +263,15 @@ export function markupToHtml(input: string): string {
     buf = ''
   }
   for (const seg of parseSegments(input)) {
+    if (seg.kind === 'ruby') {
+      flush()
+      const span = rubyHtml(seg.face, seg.han, seg.reading)
+      const ink = seg.color ?? ''
+      html += ink ? `<span style="color:${ink}">${span}</span>` : span
+      prevZy = false
+      color = ''
+      continue
+    }
     if (seg.kind === 'zy') {
       flush()
       const reading = seg.reading || seg.han
@@ -237,6 +355,13 @@ export function htmlToMarkup(root: HTMLElement): string {
       lines.push('')
       return
     }
+    if (el.classList.contains('ruby')) {
+      const face = el.dataset.face === 'box' ? 'b' : el.dataset.face === 'reading' ? 'r' : ''
+      const han = (el.dataset.han ?? '').replace(/[|}]/g, '')
+      const reading = (el.dataset.reading ?? '').replace(/[|}]/g, '')
+      if (han) pushText(`{{y${face}:${han}|${reading}}}`, color)
+      return
+    }
     if (el.dataset.han) {
       const han = el.dataset.han.replace(/[|}]/g, '')
       const shown = (el.textContent ?? '').replace(/\u00a0/g, ' ').replace(/}/g, '').trim()
@@ -270,6 +395,13 @@ function placeSegments(segs: Seg[]): Placed[] {
   let n = 0
   let prevZy = false
   for (const seg of segs) {
+    if (seg.kind === 'ruby') {
+      const len = Math.max(1, [...rubyShown(seg.face, seg.han, seg.reading)].length)
+      out.push({ ...seg, start: n, len })
+      n += len
+      prevZy = false
+      continue
+    }
     if (seg.kind === 'zy') {
       const reading = seg.reading || seg.han
       if (prevZy && reading) {
@@ -301,7 +433,9 @@ function serializeSegments(pieces: Placed[]): string {
   for (const piece of pieces) {
     if (piece.gap) continue
     setColor(piece.color)
-    out += piece.kind === 'zy' ? `{{z:${piece.han}|${piece.reading}}}` : piece.ch
+    if (piece.kind === 'zy') out += `{{z:${piece.han}|${piece.reading}}}`
+    else if (piece.kind === 'ruby') out += `{{${rubyMark(piece.face)}:${piece.han}|${piece.reading}}}`
+    else out += piece.ch
   }
   if (color) out += CLOSE
   return out
@@ -378,4 +512,65 @@ export function convertAllToZhuyin(input: string): string {
 
 export function revertAllZhuyin(input: string): string {
   return editZhuyin(input, 0, Number.MAX_SAFE_INTEGER, 'to-han')
+}
+
+export type RubyEdit = 'char' | 'box' | 'reading' | 'plain'
+
+/** 把畫面上 [start, end) 加上右側注音、改印法，或去掉注音。位置以印出來的字為準。 */
+export function editRuby(input: string, start: number, end: number, mode: RubyEdit): string {
+  if (end <= start) return input
+  const pieces = placeSegments(parseSegments(input))
+  let changed = false
+  if (mode === 'plain') {
+    const next = pieces.map((piece) => {
+      if (piece.kind !== 'ruby' || !overlaps(piece, start, end)) return piece
+      changed = true
+      const han: Placed = { kind: 'ch', ch: piece.han, color: piece.color, start: piece.start, len: [...piece.han].length }
+      return han
+    })
+    return changed ? serializeSegments(next) : input
+  }
+  const replaced = pieces.slice()
+  replaced.forEach((piece, index) => {
+    if (piece.kind !== 'ruby' || !overlaps(piece, start, end) || piece.face === mode) return
+    changed = true
+    replaced[index] = { ...piece, face: mode }
+  })
+  const groups: number[][] = []
+  let current: number[] = []
+  replaced.forEach((piece, index) => {
+    const take =
+      piece.kind === 'ch' &&
+      !piece.gap &&
+      overlaps(piece, start, end) &&
+      isHan(piece.ch) &&
+      !isProtectedFigure(replaced, index)
+    if (!take) {
+      if (current.length) groups.push(current)
+      current = []
+      return
+    }
+    current.push(index)
+  })
+  if (current.length) groups.push(current)
+  for (const group of groups) {
+    const hans = group.map((index) => (replaced[index] as { ch: string }).ch).join('')
+    const readings = readingsFor(hans)
+    group.forEach((index, k) => {
+      const reading = readings[k]
+      const prev = replaced[index]
+      if (!reading || prev.kind !== 'ch') return
+      changed = true
+      replaced[index] = {
+        kind: 'ruby',
+        face: mode,
+        han: prev.ch,
+        reading,
+        color: prev.color,
+        start: prev.start,
+        len: [...rubyShown(mode, prev.ch, reading)].length,
+      }
+    })
+  }
+  return changed ? serializeSegments(replaced) : input
 }
