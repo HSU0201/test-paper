@@ -319,11 +319,11 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
         </div>
         <div className="exam-style">
           <div className="exam-style__head">
-            <span className="exam-style__label">用注音出題</span>
-            <Switch checked={section.zhuyin === true} label="用注音出題" onChange={(zhuyin) => set({ zhuyin })} />
+            <span className="exam-style__label">整題換成注音</span>
+            <Switch checked={section.zhuyin === true} label="整題換成注音" onChange={(zhuyin) => set({ zhuyin })} />
           </div>
           <p className="exam-style__follow">
-            適合低年級。選擇、填充、問答都可以。題幹裡一旦有注音，音節就不會被拆開，例如ㄓㄨㄥˋ會整組換行；（　　）和連續底線也留在同一行。注音符號用內建注音字型，國字仍用全卷字型。沒有另外設定的小題會跟著這裡。
+            打開後，這個大題的題幹和選項會改成注音，關掉會改回國字。只要某幾個字換成注音，不必開這裡，在文字裡選取後按「轉成注音」。讀音不對就直接改注音符號。音節和作答空格換行時不會被拆開。
           </p>
         </div>
       </PanelSection>
@@ -632,15 +632,15 @@ function QuestionEditor({ questionId }: { questionId: string }) {
         </div>
         <div className="exam-style">
           <div className="exam-style__head">
-            <span className="exam-style__label">這一題用注音</span>
+            <span className="exam-style__label">這一題換成注音</span>
             <Switch
               checked={questionUsesZhuyin(section, q)}
-              label="這一題用注音"
+              label="這一題換成注音"
               onChange={(zhuyin) => set({ zhuyin })}
             />
           </div>
           <p className="exam-style__follow">
-            音節和作答空格換行時不會被拆開。注音符號用內建注音字型。
+            打開會把這一題的題幹和選項改成注音，關掉會改回國字。只換幾個字時，在下面選取後按「轉成注音」。
             {typeof q.zhuyin === 'boolean' ? (
               <>
                 {' '}
@@ -650,7 +650,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
                 </button>
               </>
             ) : (
-              <> 目前跟隨大題（{section.zhuyin ? '用注音' : '不用注音'}）。</>
+              <> 目前跟隨大題（{section.zhuyin ? '整題注音' : '不自動改'}）。</>
             )}
           </p>
         </div>
@@ -715,7 +715,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
             value={q.stem}
             placeholder={
               questionUsesZhuyin(section, q)
-                ? '例：ㄒㄧㄠˇ ㄇㄧㄥˊ ㄧㄡˇ ㄐㄧ ㄍㄜ˙ ㄆㄧㄥˊ ㄍㄨㄛˇ？'
+                ? '例：小明有ㄐㄧˇ ˙ㄍㄜ蘋果？'
                 : q.type === 'fill_blank'
                   ? '例：3 + 4 = ＿＿＿＿'
                   : '輸入題目內容'

@@ -40,7 +40,7 @@ export function FontPanel() {
             ㄅㄆㄇㄈ　ㄓㄨˋ ㄧㄣ　˙ㄉㄜ
           </span>
           <span className="font-choice__note">
-            題目出現注音時自動使用，不必換掉全卷字型。用注音出題的大題，音節不會從中間被拆開。
+            題目裡的注音符號自動用這個字型，國字仍用上面選的正黑體或標楷體。可以只把選到的幾個字換成注音。
           </span>
         </div>
       </PanelSection>

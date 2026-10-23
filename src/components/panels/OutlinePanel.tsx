@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useId, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { useEditor } from '../../editor/EditorContext'
-import { plainText } from '../../editor/richText'
+import { hasZhuyinMarkup, plainText } from '../../editor/richText'
 import {
   examTotals,
   FOOTER_CONTINUE_ID,
@@ -248,7 +248,10 @@ export function OutlinePanel() {
                           {plainText(q.stem).trim() || <em>（未輸入題目）</em>}
                         </span>
                         {questionRowGroup(s, qi) ? <span className="outline-row__badge">並列</span> : null}
-                        {q.zhuyin === true && !s.zhuyin ? <span className="outline-row__badge">注音</span> : null}
+                        {(q.zhuyin === true || hasZhuyinMarkup(q.stem) || q.choices.some((c) => hasZhuyinMarkup(c.text))) &&
+                        !s.zhuyin ? (
+                          <span className="outline-row__badge">注音</span>
+                        ) : null}
                         {q.figures.length ? (
                           <span className="outline-row__fig" title={`${q.figures.length} 張附圖`}>
                             圖

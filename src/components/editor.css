@@ -2262,6 +2262,17 @@ kbd {
   gap: 6px;
 }
 
+.color-field__actions {
+  display: inline-flex;
+  gap: 10px;
+  margin-left: 4px;
+}
+
+.color-field__box .zy {
+  background: rgba(138, 94, 0, 0.14);
+  border-radius: 3px;
+}
+
 .color-field__swatch {
   width: 18px;
   height: 18px;

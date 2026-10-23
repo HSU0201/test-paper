@@ -1,3 +1,4 @@
+import { convertAllToZhuyin, revertAllZhuyin } from './richText'
 import {
   createChoice,
   createQuestion,
@@ -67,6 +68,15 @@ export const EXAM_ACTION_TYPES = new Set<string>([
 ])
 
 type ExamSlice = { exam: ExamContent; selectedBlock: BlockRef | null }
+
+function applyZhuyinText<T extends { stem: string; choices: Choice[] }>(question: T, on: boolean): T {
+  const map = on ? convertAllToZhuyin : revertAllZhuyin
+  return {
+    ...question,
+    stem: map(question.stem),
+    choices: question.choices.map((choice) => ({ ...choice, text: map(choice.text) })),
+  }
+}
 
 export function findQuestion(exam: ExamContent, id: string) {
   for (let si = 0; si < exam.sections.length; si++) {
@@ -138,7 +148,17 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
       return {
         ...state,
         exam: mapSection(exam, action.id, (s) => {
-          const next = { ...s, ...action.patch }
+          let next = { ...s, ...action.patch }
+          if (typeof action.patch.zhuyin === 'boolean') {
+            const on = action.patch.zhuyin
+            next = {
+              ...next,
+              questions: next.questions.map((q) => {
+                if (on ? q.zhuyin === false : q.zhuyin === true) return q
+                return applyZhuyinText(q, on)
+              }),
+            }
+          }
           if (action.patch.rowSize === undefined) return next
           const size = next.rowSize === 2 || next.rowSize === 'all' ? next.rowSize : 1
           return {
@@ -185,6 +205,13 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
     case 'UPDATE_QUESTION': {
       let nextExam = mapQuestion(exam, action.id, (q) => {
         const next = { ...q, ...action.patch }
+        if ('zhuyin' in action.patch) {
+          const follow = findQuestion(exam, action.id)?.section.zhuyin === true
+          const on = typeof action.patch.zhuyin === 'boolean' ? action.patch.zhuyin : follow
+          const map = on ? convertAllToZhuyin : revertAllZhuyin
+          next.stem = map(next.stem)
+          next.choices = next.choices.map((choice) => ({ ...choice, text: map(choice.text) }))
+        }
         if (action.patch.type && isChoiceType(action.patch.type) && next.choices.length === 0) {
           next.choices = [createChoice(), createChoice(), createChoice(), createChoice()]
         }

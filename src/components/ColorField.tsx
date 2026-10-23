@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
-import { htmlToMarkup, INK_PALETTE, markupToHtml, plainText } from '../editor/richText'
+import { editZhuyin, htmlToMarkup, INK_PALETTE, markupToHtml, plainText } from '../editor/richText'
 
 type ColorFieldProps = {
   value: string
@@ -68,6 +68,40 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
     const html = markupToHtml(value)
     if (el.innerHTML !== html) el.innerHTML = html
   }, [value])
+
+  const displayIndex = (node: Node, offset: number) => {
+    const el = ref.current
+    if (!el) return 0
+    const range = document.createRange()
+    range.setStart(el, 0)
+    range.setEnd(node, offset)
+    const holder = document.createElement('div')
+    holder.appendChild(range.cloneContents())
+    return plainText(htmlToMarkup(holder)).length
+  }
+
+  const applyZhuyin = (mode: 'to-zhuyin' | 'to-han') => {
+    const el = ref.current
+    const sel = window.getSelection()
+    const live = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null
+    const range =
+      live && el?.contains(live.startContainer) && el.contains(live.endContainer) ? live : rangeRef.current
+    if (!el || !range || range.collapsed || !el.contains(range.startContainer) || !el.contains(range.endContainer)) {
+      setMsg(mode === 'to-zhuyin' ? '請先選取要換成注音的字' : '請先選取要改回國字的注音')
+      return
+    }
+    const start = displayIndex(range.startContainer, range.startOffset)
+    const end = displayIndex(range.endContainer, range.endOffset)
+    const current = htmlToMarkup(el)
+    const next = editZhuyin(current, Math.min(start, end), Math.max(start, end), mode)
+    if (next === current) {
+      setMsg(mode === 'to-zhuyin' ? '選取的範圍裡沒有可換的國字' : '選取的範圍裡沒有注音')
+      return
+    }
+    setMsg(null)
+    el.innerHTML = markupToHtml(next)
+    onChange(next)
+  }
 
   const apply = (color: string) => {
     const el = ref.current
@@ -141,6 +175,24 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
           <span className="visually-hidden">自訂顏色</span>
           <input type="color" defaultValue="#d92d20" onChange={(e) => apply(e.target.value)} />
         </label>
+        <span className="color-field__actions">
+          <button
+            type="button"
+            className="text-btn"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => applyZhuyin('to-zhuyin')}
+          >
+            轉成注音
+          </button>
+          <button
+            type="button"
+            className="text-btn"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => applyZhuyin('to-han')}
+          >
+            改回國字
+          </button>
+        </span>
       </div>
       {msg ? <p className="color-field__hint">{msg}</p> : null}
     </div>
