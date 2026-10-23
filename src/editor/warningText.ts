@@ -1,4 +1,5 @@
 import type { FrameRef, LayoutWarning } from './flowLayout'
+import { plainText } from './richText'
 import { questionNumbers, sectionHeading, type BlockRef, type ExamContent } from '../types/exam'
 
 function frameName(f: FrameRef, frames: number, stacked: boolean): string {
@@ -11,6 +12,11 @@ function blockName(exam: ExamContent, ref: BlockRef): string {
     const i = exam.sections.findIndex((s) => s.id === ref.id)
     return i >= 0 ? sectionHeading(exam.sections[i], i) : '大題'
   }
+  if (ref.kind === 'notice') {
+    const text = plainText((exam.notices ?? []).find((n) => n.id === ref.id)?.text ?? '').trim()
+    return text || '提示'
+  }
+  if (ref.kind === 'header') return '頁首'
   const n = questionNumbers(exam).get(ref.id)
   return n ? `第 ${n} 題` : '題目'
 }

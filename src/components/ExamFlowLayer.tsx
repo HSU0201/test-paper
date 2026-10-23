@@ -1,6 +1,6 @@
 import { Group, Image as KonvaImage, Line, Rect, Text } from 'react-konva'
 import type { EditorAction } from '../editor/reducer'
-import type { FlowImage, FlowRun, PlacedBlock } from '../editor/flowLayout'
+import type { FlowFrame, FlowImage, FlowRun, PlacedBlock } from '../editor/flowLayout'
 import { FLOW_WRAP, measureText } from '../editor/konvaMeasure'
 import { layoutRichLines } from '../editor/richText'
 import type { Asset, BlockRef } from '../types/exam'
@@ -10,6 +10,7 @@ import { useHtmlImage } from './useHtmlImage'
 
 type ExamFlowLayerProps = {
   blocks: PlacedBlock[]
+  frames: FlowFrame[]
   assets: Record<string, Asset>
   selected: BlockRef | null
   /** 有版面提示（標題被移動、超出欄高）的區塊 */
@@ -218,7 +219,7 @@ function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
       fontFamily={fontFamily}
       fontStyle={fontStyle}
       fill={base}
-      align={r.vertical ? 'center' : 'left'}
+      align={r.align ?? (r.vertical ? 'center' : 'left')}
       lineHeight={r.lineHeight}
       wrap={r.vertical ? 'none' : FLOW_WRAP}
       listening={false}
@@ -227,9 +228,32 @@ function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
 }
 
 /** 大題與小題由排版自動定位。題目附圖可在卷面上拖曳，改它接在題幹的哪裡 */
-export function ExamFlowLayer({ blocks, assets, selected, flagged, interactive, dispatch, fontFamily }: ExamFlowLayerProps) {
+export function ExamFlowLayer({
+  blocks,
+  frames,
+  assets,
+  selected,
+  flagged,
+  interactive,
+  dispatch,
+  fontFamily,
+}: ExamFlowLayerProps) {
   return (
     <Group>
+      {frames.map((f) => (
+        <Group key={f.key} listening={false}>
+          <Rect x={f.x} y={f.y} width={f.w} height={f.h} stroke="#111111" strokeWidth={1.25} listening={false} />
+          {f.rules.map((r) => (
+            <Line
+              key={r.key}
+              points={[r.x1, r.y1, r.x2, r.y2]}
+              stroke={r.stroke ?? '#111111'}
+              strokeWidth={r.strokeWidth ?? 1.25}
+              listening={false}
+            />
+          ))}
+        </Group>
+      ))}
       {blocks.map((b) => {
         const isSel = selected?.id === b.ref.id
         const isFlag = flagged.has(b.ref.id)
@@ -238,7 +262,13 @@ export function ExamFlowLayer({ blocks, assets, selected, flagged, interactive, 
         return (
           <Group key={`${b.ref.kind}:${b.ref.id}:${b.page}:${b.frame}:${Math.round(b.box.x)}`}>
             {b.rules.map((r) => (
-              <Line key={r.key} points={[r.x1, r.y1, r.x2, r.y2]} stroke="#94a3b8" strokeWidth={1} listening={false} />
+              <Line
+                key={r.key}
+                points={[r.x1, r.y1, r.x2, r.y2]}
+                stroke={r.stroke ?? '#94a3b8'}
+                strokeWidth={r.strokeWidth ?? 1}
+                listening={false}
+              />
             ))}
             {b.images
               .filter((im) => !im.movable)

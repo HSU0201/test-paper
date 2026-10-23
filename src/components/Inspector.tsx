@@ -76,12 +76,16 @@ export function Inspector() {
     body = (
       <>
         <div className="inspector__head">
-          <span className="inspector__badge">{block.kind === 'section' ? '大題' : '小題'}</span>
+          <span className="inspector__badge">
+            {block.kind === 'section' ? '大題' : block.kind === 'notice' ? '提示' : '小題'}
+          </span>
           <div className="inspector__tools">
             <button
               type="button"
               className="icon-btn icon-btn--danger"
-              title={block.kind === 'section' ? '刪除大題（含所有小題）' : '刪除小題'}
+              title={
+                block.kind === 'section' ? '刪除大題（含所有小題）' : block.kind === 'notice' ? '刪除提示' : '刪除小題'
+              }
               onClick={() => dispatch({ type: 'DELETE_SELECTED' })}
             >
               <Icon name="trash" />

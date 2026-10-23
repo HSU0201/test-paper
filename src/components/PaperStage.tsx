@@ -100,6 +100,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
       [sortedObjects, pageIndex],
     )
     const pageBlocks = useMemo(() => flow.blocks.filter((b) => b.page === pageIndex), [flow.blocks, pageIndex])
+    const pageFrames = useMemo(() => (flow.frames ?? []).filter((f) => f.page === pageIndex), [flow.frames, pageIndex])
     const flagged = useMemo(() => {
       const s = new Set<string>()
       for (const w of flow.warnings) {
@@ -305,6 +306,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
               ) : null}
               <ExamFlowLayer
                 blocks={pageBlocks}
+                frames={pageFrames}
                 assets={state.exam.assets}
                 selected={state.selectedBlock}
                 flagged={flagged}

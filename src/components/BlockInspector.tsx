@@ -15,12 +15,18 @@ import {
   sectionHeading,
   sectionScore,
   uniformQuestionScore,
+  NOTICE_CONTINUE,
+  NOTICE_END,
   type Choice,
   type ChoiceLayout,
   type FontOverride,
+  type Notice,
+  type NumberStyle,
   type QuestionType,
   type ScoreMode,
   type Section,
+  type SectionFrame,
+  type SectionLayout,
 } from '../types/exam'
 import { Icon, NumberField, PanelSection, Segmented, Switch } from './ui'
 import { ColorField } from './ColorField'
@@ -224,6 +230,59 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
             ))}
           </select>
         </label>
+      </PanelSection>
+
+      <PanelSection
+        title="卷面格式"
+        description="外框把這一題圍起來。直式表格是每一題一列，右側可以再拆一欄寫驗算。"
+      >
+        <div className="ui-field">
+          <span className="ui-field__label">外框</span>
+          <Segmented<SectionFrame>
+            label="外框"
+            value={section.frame ?? 'none'}
+            options={[
+              { value: 'none', label: '無' },
+              { value: 'body', label: '只框題目' },
+              { value: 'all', label: '連標題' },
+            ]}
+            onChange={(frame) => set({ frame })}
+          />
+        </div>
+        <div className="ui-field">
+          <span className="ui-field__label">排列</span>
+          <Segmented<SectionLayout>
+            label="排列"
+            value={section.layout ?? 'flow'}
+            options={[
+              { value: 'flow', label: '一般' },
+              { value: 'rows', label: '直式表格' },
+            ]}
+            onChange={(layout) => set({ layout })}
+          />
+        </div>
+        {(section.layout ?? 'flow') === 'rows' ? (
+          <NumberField
+            label="每列至少"
+            suffix="行"
+            min={2}
+            max={12}
+            value={section.rowLines ?? 4}
+            onChange={(v) => set({ rowLines: Math.min(12, Math.max(2, Math.round(v))) })}
+          />
+        ) : null}
+        <div className="ui-field">
+          <span className="ui-field__label">題號</span>
+          <Segmented<NumberStyle>
+            label="題號"
+            value={section.numberStyle ?? 'dot'}
+            options={[
+              { value: 'dot', label: '1.' },
+              { value: 'paren', label: '(1)' },
+            ]}
+            onChange={(numberStyle) => set({ numberStyle })}
+          />
+        </div>
       </PanelSection>
 
       <PanelSection title="跨欄保護" description="標題不會單獨留在欄位底部。">
@@ -595,8 +654,30 @@ function QuestionEditor({ questionId }: { questionId: string }) {
 
       <FiguresEditor questionId={q.id} />
 
-      {q.type === 'short_answer' ? (
-        <PanelSection title="作答區">
+      {(section.layout ?? 'flow') === 'rows' ? (
+        <PanelSection title="直式格子" description="這一列的高度。右側欄留空就跟其他列一樣寬；要驗算就填「驗算：」。">
+          <NumberField
+            label="這一列高度"
+            suffix="行"
+            min={2}
+            max={20}
+            value={q.answerLines > 0 ? q.answerLines : (section.rowLines ?? 4)}
+            onChange={(v) => set({ answerLines: Math.max(2, Math.round(v)) })}
+          />
+          <div className="ui-field">
+            <span className="ui-field__label">右側欄</span>
+            <input
+              className="ui-input"
+              value={q.aside ?? ''}
+              placeholder="例如：驗算："
+              onChange={(e) => set({ aside: e.target.value })}
+            />
+          </div>
+        </PanelSection>
+      ) : null}
+
+      {q.type === 'short_answer' && (section.layout ?? 'flow') !== 'rows' ? (
+        <PanelSection title="作答區" description="行數是留給學生寫的空白。只留白就不會畫底線。">
           <NumberField
             label="作答行數"
             suffix="行"
@@ -605,6 +686,18 @@ function QuestionEditor({ questionId }: { questionId: string }) {
             value={q.answerLines}
             onChange={(v) => set({ answerLines: Math.max(0, Math.round(v)) })}
           />
+          <div className="ui-field">
+            <span className="ui-field__label">底線</span>
+            <Segmented<'line' | 'blank'>
+              label="底線"
+              value={q.answerRuled === false ? 'blank' : 'line'}
+              options={[
+                { value: 'line', label: '畫底線' },
+                { value: 'blank', label: '只留白' },
+              ]}
+              onChange={(v) => set({ answerRuled: v === 'line' })}
+            />
+          </div>
         </PanelSection>
       ) : null}
 
@@ -629,6 +722,48 @@ function QuestionEditor({ questionId }: { questionId: string }) {
   )
 }
 
+function NoticeEditor({ id }: { id: string }) {
+  const { state, dispatch } = useEditor()
+  const notice = (state.exam.notices ?? []).find((n) => n.id === id)
+  if (!notice) return null
+  const set = (patch: Partial<Pick<Notice, 'text' | 'afterSectionId'>>) =>
+    dispatch({ type: 'UPDATE_NOTICE', id, patch })
+  const anchor = notice.afterSectionId && state.exam.sections.some((s) => s.id === notice.afterSectionId) ? notice.afterSectionId : ''
+  return (
+    <div className="inspector__body">
+      <PanelSection title="提示框" description="會印成置中、帶框的一行字。常用在頁末或整份試卷的最後。">
+        <div className="ui-field">
+          <span className="ui-field__label">文字</span>
+          <ColorField ariaLabel="提示文字" value={notice.text} onChange={(text) => set({ text })} />
+        </div>
+        <div className="notice-presets">
+          <button type="button" className="btn btn--ghost" onClick={() => set({ text: NOTICE_CONTINUE })}>
+            {NOTICE_CONTINUE}
+          </button>
+          <button type="button" className="btn btn--ghost" onClick={() => set({ text: NOTICE_END })}>
+            {NOTICE_END}
+          </button>
+        </div>
+        <label className="ui-field">
+          <span className="ui-field__label">位置</span>
+          <select
+            className="ui-input"
+            value={anchor}
+            onChange={(e) => set({ afterSectionId: e.target.value || null })}
+          >
+            {state.exam.sections.map((s, i) => (
+              <option key={s.id} value={s.id}>
+                接在{sectionHeading(s, i)}之後
+              </option>
+            ))}
+            <option value="">卷末</option>
+          </select>
+        </label>
+      </PanelSection>
+    </div>
+  )
+}
+
 export function BlockInspector() {
   const { state } = useEditor()
   const ref = state.selectedBlock
@@ -638,5 +773,6 @@ export function BlockInspector() {
     if (index < 0) return null
     return <SectionEditor section={state.exam.sections[index]} index={index} />
   }
+  if (ref.kind === 'notice') return <NoticeEditor id={ref.id} />
   return <QuestionEditor questionId={ref.id} />
 }

@@ -14,6 +14,8 @@ import {
   type ExamContent,
   type Figure,
   type FontOverride,
+  type Notice,
+  type NumberStyle,
   type Question,
   type Section,
 } from '../types/exam'
@@ -52,9 +54,29 @@ export type FlowRun = {
   stemFrom?: number
   /** 已依欄寬切成單行時為 1，拖曳用這個行數，不再用高度反推 */
   lineCount?: number
+  align?: 'left' | 'center' | 'right'
 }
 
-export type FlowRule = { key: string; x1: number; y1: number; x2: number; y2: number }
+export type FlowRule = {
+  key: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  stroke?: string
+  strokeWidth?: number
+}
+
+/** 跨過好幾個題塊的外框，例如整題框線、直式表格 */
+export type FlowFrame = {
+  key: string
+  page: number
+  x: number
+  y: number
+  w: number
+  h: number
+  rules: FlowRule[]
+}
 
 export type FlowImage = {
   key: string
@@ -89,6 +111,7 @@ export type LayoutWarning =
 
 export type FlowResult = {
   blocks: PlacedBlock[]
+  frames: FlowFrame[]
   pageCount: number
   /** 實際採用的壓縮程度（0 = 未壓縮，1 = 壓到下限） */
   squeeze: number
@@ -100,6 +123,10 @@ export type FlowResult = {
 const SQUEEZE_LEVELS = [0, 0.25, 0.5, 0.75, 1]
 const MAX_PAGES = 60
 const EMPTY_STEM = '（請輸入題目）'
+const FRAME_PAD = 10
+/** 直式表格左側題幹佔內容寬的比例，剩下給右側欄 */
+const ASIDE_SPLIT = 0.62
+const BOX_STROKE = '#111111'
 
 function resolveStyle(base: TextStyle, over?: FontOverride): TextStyle {
   if (!over || (over.fontSize == null && over.bold == null)) return base
@@ -127,6 +154,55 @@ function metricsAt(sp: SpacingSettings, t: number): Metrics {
 type Built = { height: number; runs: FlowRun[]; rules: FlowRule[]; images: FlowImage[] }
 
 type Ctx = { st: FlowStyles; m: MeasureFn; mt: Metrics; assets: Record<string, Asset> }
+
+function insetBuilt(built: Built, pad: number): Built {
+  if (pad <= 0) return built
+  return {
+    height: built.height + pad * 2,
+    runs: built.runs.map((r) => ({ ...r, x: r.x + pad, y: r.y + pad })),
+    rules: built.rules.map((r) => ({ ...r, x1: r.x1 + pad, y1: r.y1 + pad, x2: r.x2 + pad, y2: r.y2 + pad })),
+    images: built.images.map((im) => ({ ...im, x: im.x + pad, y: im.y + pad })),
+  }
+}
+
+function boxRules(w: number, h: number): FlowRule[] {
+  return [
+    { key: 'box-t', x1: 0, y1: 0.5, x2: w, y2: 0.5, stroke: BOX_STROKE, strokeWidth: 1.25 },
+    { key: 'box-b', x1: 0, y1: h - 0.5, x2: w, y2: h - 0.5, stroke: BOX_STROKE, strokeWidth: 1.25 },
+    { key: 'box-l', x1: 0.5, y1: 0, x2: 0.5, y2: h, stroke: BOX_STROKE, strokeWidth: 1.25 },
+    { key: 'box-r', x1: w - 0.5, y1: 0, x2: w - 0.5, y2: h, stroke: BOX_STROKE, strokeWidth: 1.25 },
+  ]
+}
+
+function buildNotice(text: string, w: number, c: Ctx): Built {
+  const body = { ...c.st.body, bold: true }
+  const raw = text.trim()
+  const painted = paintText(raw || '（請輸入提示）')
+  const padX = 12
+  const inner = Math.max(40, w - padX * 2)
+  const textH = c.m(painted.text, inner, body, c.mt.lineHeight).height
+  const height = Math.max(textH + 28, Math.round(body.fontSize * c.mt.lineHeight * 2.4))
+  return {
+    height,
+    runs: [
+      {
+        key: 'text',
+        x: padX,
+        y: (height - textH) / 2,
+        width: inner,
+        height: textH,
+        text: painted.text,
+        colors: raw ? painted.colors : undefined,
+        style: body,
+        lineHeight: c.mt.lineHeight,
+        align: 'center',
+        placeholder: raw ? undefined : true,
+      },
+    ],
+    rules: boxRules(w, height),
+    images: [],
+  }
+}
 
 function buildSectionHead(s: Section, index: number, w: number, c: Ctx): Built {
   const { st, m, mt } = c
@@ -187,7 +263,16 @@ function stripMarks(stem: string) {
   return stem.replaceAll(FIGURE_MARK, '')
 }
 
-function buildQuestion(q: Question, num: number, scoreMark: string, indent: number, w: number, c: Ctx): Built {
+function buildQuestion(
+  q: Question,
+  num: number,
+  scoreMark: string,
+  indent: number,
+  w: number,
+  c: Ctx,
+  ruled: boolean,
+  reserveAnswers: boolean,
+): Built {
   const { m, mt } = c
   const body = resolveStyle(c.st.body, q.bodyStyle)
   const runs: FlowRun[] = []
@@ -365,11 +450,11 @@ function buildQuestion(q: Question, num: number, scoreMark: string, indent: numb
   }
   h = pushFigures(after, h, 'after')
 
-  if (q.type === 'short_answer' && q.answerLines > 0) {
+  if (reserveAnswers && q.type === 'short_answer' && q.answerLines > 0) {
     h += 4
     for (let i = 0; i < q.answerLines; i++) {
       h += lh * 1.25
-      rules.push({ key: `ans-${i}`, x1: indent, y1: h, x2: indent + innerW, y2: h })
+      if (ruled) rules.push({ key: `ans-${i}`, x1: indent, y1: h, x2: indent + innerW, y2: h })
     }
     h += 4
   }
@@ -379,10 +464,16 @@ function buildQuestion(q: Question, num: number, scoreMark: string, indent: numb
 
 type Item =
   | { kind: 'section'; section: Section; index: number }
-  | { kind: 'question'; question: Question; num: number; firstOfSection: boolean; scoreMark: string }
+  | { kind: 'question'; question: Question; section: Section; num: number; firstOfSection: boolean; scoreMark: string }
+  | { kind: 'notice'; notice: Notice }
+
+function formatNum(n: number, style: NumberStyle): string {
+  return style === 'paren' ? `(${n})` : `${n}.`
+}
 
 function questionLead(it: Extract<Item, { kind: 'question' }>): string {
-  return it.scoreMark ? `${it.num}.${it.scoreMark}` : `${it.num}.`
+  const n = formatNum(it.num, it.section.numberStyle)
+  return it.scoreMark ? `${n}${it.scoreMark}` : n
 }
 
 /** 配分不同時，同一大題的題幹對齊到最寬的「題號＋分數」之後 */
@@ -407,27 +498,78 @@ function questionIndents(items: Item[], c: Ctx): Map<string, number> {
     group = []
   }
   for (const it of items) {
-    if (it.kind === 'section') flush()
-    else group.push(it)
+    if (it.kind === 'question') group.push(it)
+    else flush()
   }
   flush()
   return map
 }
 
 function itemRef(it: Item): BlockRef {
-  return it.kind === 'section' ? { kind: 'section', id: it.section.id } : { kind: 'question', id: it.question.id }
+  if (it.kind === 'section') return { kind: 'section', id: it.section.id }
+  if (it.kind === 'notice') return { kind: 'notice', id: it.notice.id }
+  return { kind: 'question', id: it.question.id }
 }
 
-type PaginateResult = Omit<FlowResult, 'squeeze' | 'lineHeight'> & { headMoves: number }
+type Chrome = { pad: number; aside: string; minH: number; ruled: boolean }
+
+function questionChrome(section: Section, q: Question, c: Ctx): Chrome {
+  const body = resolveStyle(c.st.body, q.bodyStyle)
+  const lh = body.fontSize * c.mt.lineHeight
+  const rows = section.layout === 'rows'
+  const boxed = section.frame === 'body' || section.frame === 'all' || rows
+  const pad = boxed ? FRAME_PAD : 0
+  const lines = q.answerLines > 0 ? q.answerLines : section.rowLines
+  return {
+    pad,
+    aside: rows ? (q.aside ?? '').trim() : '',
+    minH: rows ? Math.round(Math.max(2, lines) * lh + pad * 2) : 0,
+    ruled: q.answerRuled !== false && !rows,
+  }
+}
+
+type PaginateResult = Omit<FlowResult, 'squeeze' | 'lineHeight' | 'frames'> & { headMoves: number }
 
 function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): PaginateResult {
   const indents = questionIndents(items, c)
-  const build = (it: Item, w: number): Built =>
-    it.kind === 'section'
-      ? buildSectionHead(it.section, it.index, w, c)
-      : buildQuestion(it.question, it.num, it.scoreMark, indents.get(it.question.id) ?? Math.ceil(c.st.body.fontSize * 2), w, c)
-  const gapBefore = (it: Item) =>
-    it.kind === 'section' ? c.mt.sectionGap : it.firstOfSection ? 0 : c.mt.questionGap
+  const build = (it: Item, w: number): Built => {
+    if (it.kind === 'notice') return buildNotice(it.notice.text, w, c)
+    if (it.kind === 'section') {
+      const pad = it.section.frame === 'all' ? FRAME_PAD : 0
+      return insetBuilt(buildSectionHead(it.section, it.index, Math.max(40, w - pad * 2), c), pad)
+    }
+    const chrome = questionChrome(it.section, it.question, c)
+    const inner = Math.max(40, w - chrome.pad * 2)
+    const left = chrome.aside ? Math.round(inner * ASIDE_SPLIT) : inner
+    const stemW = chrome.aside ? Math.max(40, left - 8) : left
+    const indent = indents.get(it.question.id) ?? Math.ceil(c.st.body.fontSize * 2)
+    let built = insetBuilt(
+      buildQuestion(it.question, it.num, it.scoreMark, indent, stemW, c, chrome.ruled, it.section.layout !== 'rows'),
+      chrome.pad,
+    )
+    if (chrome.aside) {
+      const body = resolveStyle(c.st.body, it.question.bodyStyle)
+      const ax = chrome.pad + left + 6
+      const painted = paintText(chrome.aside)
+      built.runs.push({
+        key: 'aside',
+        x: ax,
+        y: chrome.pad,
+        width: Math.max(24, w - chrome.pad - ax),
+        text: painted.text,
+        colors: painted.colors,
+        style: body,
+        lineHeight: c.mt.lineHeight,
+      })
+    }
+    if (chrome.minH > built.height) built = { ...built, height: chrome.minH }
+    return built
+  }
+  const gapBefore = (it: Item) => {
+    if (it.kind === 'section' || it.kind === 'notice') return c.mt.sectionGap
+    if (it.section.layout === 'rows') return it.firstOfSection ? 8 : 0
+    return it.firstOfSection ? 0 : c.mt.questionGap
+  }
 
   /** 大題標題後必須同欄的高度：整個大題（放得進空欄時）或第一題 */
   const keepHeight = (headIndex: number, frame: Box): number => {
@@ -819,7 +961,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     else x = Math.max(box.x, ix - 6)
   }
 
-  const emitAnswers = (count: number, fontSize: number) => {
+  const emitAnswers = (count: number, fontSize: number, draw: boolean) => {
     closeOpen()
     const p = colPitchOf(fontSize)
     for (let i = 0; i < count; i++) {
@@ -827,8 +969,10 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
       const f = frame()
       let slotLeft = x - p
       if (slotLeft < f.x) slotLeft = f.x
-      const cx = slotLeft + p / 2
-      acc.rules.push({ key: `ans-${acc.rules.length}`, x1: cx, y1: f.y + 8, x2: cx, y2: f.y + f.h - 8 })
+      if (draw) {
+        const cx = slotLeft + p / 2
+        acc.rules.push({ key: `ans-${acc.rules.length}`, x1: cx, y1: f.y + 8, x2: cx, y2: f.y + f.h - 8 })
+      }
       track(slotLeft, slotLeft + colWidthOf(fontSize), f.y + f.h - 8)
       x = slotLeft
     }
@@ -853,7 +997,10 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     const heading = it.kind === 'section' ? resolveStyle(st.heading, it.section.headingStyle) : st.heading
     const instruction = it.kind === 'section' ? resolveStyle(st.instruction, it.section.instructionStyle) : st.instruction
     const body = it.kind === 'question' ? resolveStyle(st.body, it.question.bodyStyle) : st.body
-    applyGap(it.kind === 'section' ? mt.sectionGap : it.firstOfSection ? 0 : mt.questionGap, it.kind === 'section' ? heading.fontSize : body.fontSize)
+    applyGap(
+      it.kind === 'section' || it.kind === 'notice' ? mt.sectionGap : it.firstOfSection ? 0 : mt.questionGap,
+      it.kind === 'question' ? body.fontSize : heading.fontSize,
+    )
 
     if (it.kind === 'section' && !atStart()) {
       const fh = frame().h
@@ -894,6 +1041,12 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
         closeOpen()
         write(it.section.instruction.trim(), instruction, 'inst')
       }
+      continue
+    }
+
+    if (it.kind === 'notice') {
+      const raw = it.notice.text.trim()
+      write(raw || '（請輸入提示）', { ...body, bold: true }, 'notice', !raw)
       continue
     }
 
@@ -959,12 +1112,108 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
       })
     }
     after.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id, 'after'))
-    if (q.type === 'short_answer' && q.answerLines > 0) emitAnswers(q.answerLines, body.fontSize)
+    if (q.type === 'short_answer' && q.answerLines > 0) emitAnswers(q.answerLines, body.fontSize, q.answerRuled !== false)
+    const aside = it.section.layout === 'rows' ? (q.aside ?? '').trim() : ''
+    if (aside) write(aside, body, 'aside')
   }
   closeOpen()
   flush()
 
   return { blocks, pageCount: page + 1, warnings, headMoves }
+}
+
+function noticesOf(exam: ExamContent): Notice[] {
+  return exam.notices ?? []
+}
+
+/** 外框與直式表格的內部分隔線。提示框的框線已經畫在題塊上。 */
+function decorate(exam: ExamContent, blocks: PlacedBlock[], vertical: boolean): FlowFrame[] {
+  const frames: FlowFrame[] = []
+  const sectionOf = new Map<string, Section>()
+  for (const s of exam.sections) for (const q of s.questions) sectionOf.set(q.id, s)
+
+  for (const section of exam.sections) {
+    const table = section.layout === 'rows' && !vertical
+    const drawOuter = section.frame === 'body' || section.frame === 'all' || table
+    if (!drawOuter) continue
+    const includeHead = section.frame === 'all'
+    const members = blocks.filter((b) => {
+      if (b.ref.kind === 'question') return sectionOf.get(b.ref.id)?.id === section.id
+      return includeHead && b.ref.kind === 'section' && b.ref.id === section.id
+    })
+    const groups = new Map<string, PlacedBlock[]>()
+    for (const b of members) {
+      const key = `${b.page}:${b.frame}`
+      const list = groups.get(key) ?? []
+      list.push(b)
+      groups.set(key, list)
+    }
+    for (const [key, group] of groups) {
+      if (!group.length) continue
+      group.sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x)
+      const x = Math.min(...group.map((b) => b.box.x))
+      const y = Math.min(...group.map((b) => b.box.y))
+      const right = Math.max(...group.map((b) => b.box.x + b.box.w))
+      const bottom = Math.max(...group.map((b) => b.box.y + b.box.h))
+      if (right - x < 4 || bottom - y < 4) continue
+      const rules: FlowRule[] = []
+      if (table) {
+        const questions = group.filter((b) => b.ref.kind === 'question')
+        const head = group.find((b) => b.ref.kind === 'section')
+        if (head && questions.length) {
+          const yy = questions[0].box.y
+          rules.push({ key: 'head', x1: x, y1: yy, x2: right, y2: yy, stroke: BOX_STROKE, strokeWidth: 1.25 })
+        }
+        for (let i = 0; i < questions.length - 1; i++) {
+          const yy = questions[i + 1].box.y
+          rules.push({
+            key: `row-${questions[i].ref.id}`,
+            x1: x,
+            y1: yy,
+            x2: right,
+            y2: yy,
+            stroke: BOX_STROKE,
+            strokeWidth: 1.25,
+          })
+        }
+        for (const qb of questions) {
+          const q = section.questions.find((item) => item.id === qb.ref.id)
+          if (!(q?.aside ?? '').trim()) continue
+          const left = Math.round((qb.box.w - FRAME_PAD * 2) * ASIDE_SPLIT)
+          const sx = qb.box.x + FRAME_PAD + left
+          rules.push({
+            key: `aside-${qb.ref.id}`,
+            x1: sx,
+            y1: qb.box.y,
+            x2: sx,
+            y2: qb.box.y + qb.box.h,
+            stroke: BOX_STROKE,
+            strokeWidth: 1.25,
+          })
+        }
+      }
+      frames.push({ key: `${section.id}:${key}`, page: group[0].page, x, y, w: right - x, h: bottom - y, rules })
+    }
+  }
+
+  for (const b of blocks) {
+    if (b.ref.kind !== 'notice' || !b.runs.some((r) => r.vertical)) continue
+    const runs = b.runs
+    const x = Math.min(...runs.map((r) => r.x)) - 8
+    const y = Math.min(...runs.map((r) => r.y)) - 6
+    const right = Math.max(...runs.map((r) => r.x + r.width)) + 8
+    const bottom = Math.max(...runs.map((r) => r.y + (r.height ?? r.style.fontSize))) + 6
+    frames.push({
+      key: `notice-${b.ref.id}-${b.page}-${b.frame}`,
+      page: b.page,
+      x,
+      y,
+      w: Math.max(8, right - x),
+      h: Math.max(8, bottom - y),
+      rules: [],
+    })
+  }
+  return frames
 }
 
 /**
@@ -984,18 +1233,31 @@ export function layoutExam(
 ): FlowResult {
   const nums = questionNumbers(exam)
   const items: Item[] = []
+  const notices = noticesOf(exam)
+  const after = new Map<string, Notice[]>()
+  const atEnd: Notice[] = []
+  for (const n of notices) {
+    if (n.afterSectionId && exam.sections.some((s) => s.id === n.afterSectionId)) {
+      const list = after.get(n.afterSectionId) ?? []
+      list.push(n)
+      after.set(n.afterSectionId, list)
+    } else atEnd.push(n)
+  }
   exam.sections.forEach((section, index) => {
     items.push({ kind: 'section', section, index })
     section.questions.forEach((question, qi) =>
       items.push({
         kind: 'question',
         question,
+        section,
         num: nums.get(question.id) ?? 0,
         firstOfSection: qi === 0,
         scoreMark: questionScoreMark(section, question),
       }),
     )
+    for (const n of after.get(section.id) ?? []) items.push({ kind: 'notice', notice: n })
   })
+  for (const n of atEnd) items.push({ kind: 'notice', notice: n })
 
   const run = (t: number) => {
     const mt = metricsAt(spacing, t)
@@ -1024,6 +1286,7 @@ export function layoutExam(
   }
   return {
     blocks: best.r.blocks,
+    frames: decorate(exam, best.r.blocks, vertical),
     pageCount: best.r.pageCount,
     squeeze: best.t,
     lineHeight: best.mt.lineHeight,

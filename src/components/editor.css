@@ -854,6 +854,54 @@ kbd {
   white-space: nowrap;
 }
 
+.outline-row__badge {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  color: var(--c-text-2);
+}
+
+.outline-row--notice {
+  margin-top: 4px;
+}
+
+.outline-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.outline__adds {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.outline__adds .outline__add-section {
+  margin-top: 0;
+}
+
+.notice-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.notice-presets .btn {
+  justify-content: flex-start;
+  height: auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  white-space: normal;
+  text-align: left;
+}
+
 .outline-row__score {
   flex-shrink: 0;
   font-size: 12px;

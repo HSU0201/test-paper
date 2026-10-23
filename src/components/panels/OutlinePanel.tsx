@@ -4,12 +4,15 @@ import { useEditor } from '../../editor/EditorContext'
 import { plainText } from '../../editor/richText'
 import {
   examTotals,
+  NOTICE_CONTINUE,
+  NOTICE_END,
   QUESTION_TYPE_LABEL,
   questionNumbers,
   questionPoints,
   sectionHeading,
   sectionScore,
   type BlockRef,
+  type Notice,
 } from '../../types/exam'
 import { easeOut, layoutSpring } from '../../motion/presets'
 import { ExamTextStyle } from '../BlockInspector'
@@ -83,6 +86,53 @@ export function OutlinePanel() {
   }
 
   const dropClass = (match: boolean, pos: 'before' | 'after') => (match ? ` is-drop-${pos}` : '')
+  const notices = exam.notices ?? []
+  const noticesAfter = (sectionId: string | null) =>
+    notices.filter((n) => {
+      const anchor = n.afterSectionId && exam.sections.some((s) => s.id === n.afterSectionId) ? n.afterSectionId : null
+      return anchor === sectionId
+    })
+  const noticeAnchor = (): string | null => {
+    const sel = selectedBlock
+    if (sel?.kind === 'section') return sel.id
+    if (sel?.kind === 'question') {
+      return exam.sections.find((s) => s.questions.some((q) => q.id === sel.id))?.id ?? exam.sections.at(-1)?.id ?? null
+    }
+    if (sel?.kind === 'notice') {
+      const n = notices.find((item) => item.id === sel.id)
+      if (n?.afterSectionId && exam.sections.some((s) => s.id === n.afterSectionId)) return n.afterSectionId
+      return null
+    }
+    return exam.sections.at(-1)?.id ?? null
+  }
+
+  const renderNotice = (n: Notice) => {
+    const text = plainText(n.text).trim()
+    return (
+      <div
+        key={n.id}
+        className={`outline-row outline-row--notice${isSel(n.id) ? ' is-selected' : ''}`}
+        role="button"
+        tabIndex={0}
+        onClick={() => select({ kind: 'notice', id: n.id })}
+        onKeyDown={(e) => {
+          if (e.key === 'Delete' || e.key === 'Backspace') {
+            e.preventDefault()
+            e.stopPropagation()
+            dispatch({ type: 'REMOVE_NOTICE', id: n.id })
+          } else if (e.key === ' ') {
+            e.preventDefault()
+            select({ kind: 'notice', id: n.id })
+          }
+        }}
+      >
+        <SelectMark on={isSel(n.id)} />
+        <span className="outline-row__badge">提示</span>
+        <span className="outline-row__title">{text || '（空白提示）'}</span>
+        {pageOf.has(n.id) ? <span className="outline-row__page">P{pageOf.get(n.id)! + 1}</span> : null}
+      </div>
+    )
+  }
 
   return (
     <div className="side-panel__scroll outline">
@@ -190,6 +240,8 @@ export function OutlinePanel() {
                   ⋮⋮
                 </span>
                 <span className="outline-row__title">{sectionHeading(s, si)}</span>
+                {(s.frame ?? 'none') !== 'none' ? <span className="outline-row__badge">框</span> : null}
+                {(s.layout ?? 'flow') === 'rows' ? <span className="outline-row__badge">表</span> : null}
                 {pageOf.has(s.id) ? <span className="outline-row__page">P{pageOf.get(s.id)! + 1}</span> : null}
                 <span className="outline-row__score">{sectionScore(s)} 分</span>
               </div>
@@ -275,19 +327,38 @@ export function OutlinePanel() {
                   </button>
                 </li>
               </ol>
+              {noticesAfter(s.id).length ? <div className="outline-notices">{noticesAfter(s.id).map(renderNotice)}</div> : null}
             </li>
           )
         })}
       </ol>
 
-      <button
-        type="button"
-        className="outline__add-section"
-        onClick={() => dispatch({ type: 'ADD_SECTION', afterId: exam.sections.at(-1)?.id })}
-      >
-        <Icon name="plus" />
-        新增大題
-      </button>
+      {noticesAfter(null).length ? <div className="outline-notices">{noticesAfter(null).map(renderNotice)}</div> : null}
+
+      <div className="outline__adds">
+        <button
+          type="button"
+          className="outline__add-section"
+          onClick={() => dispatch({ type: 'ADD_NOTICE', text: NOTICE_CONTINUE, afterSectionId: noticeAnchor() })}
+        >
+          下一頁還有題目
+        </button>
+        <button
+          type="button"
+          className="outline__add-section"
+          onClick={() => dispatch({ type: 'ADD_NOTICE', text: NOTICE_END, afterSectionId: null })}
+        >
+          作答結束提示
+        </button>
+        <button
+          type="button"
+          className="outline__add-section"
+          onClick={() => dispatch({ type: 'ADD_SECTION', afterId: exam.sections.at(-1)?.id })}
+        >
+          <Icon name="plus" />
+          新增大題
+        </button>
+      </div>
 
       <p className="outline__tip">
         拖曳可調整順序；選取後按 <kbd>Enter</kbd> 在下方新增小題、<kbd>Delete</kbd> 刪除。

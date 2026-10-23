@@ -8,6 +8,7 @@ import {
   type Choice,
   type Figure,
   type ExamContent,
+  type Notice,
   type Question,
   type QuestionNumbering,
   type Section,
@@ -30,6 +31,9 @@ export type ExamAction =
   | { type: 'SET_CHOICE_IMAGE'; questionId: string; choiceId: string; asset: Asset | null }
   | { type: 'SET_CHOICE_IMAGE_RATIO'; questionId: string; choiceId: string; widthRatio: number }
   | { type: 'SET_NUMBERING'; numbering: QuestionNumbering }
+  | { type: 'ADD_NOTICE'; text: string; afterSectionId: string | null }
+  | { type: 'UPDATE_NOTICE'; id: string; patch: Partial<Pick<Notice, 'text' | 'afterSectionId'>> }
+  | { type: 'REMOVE_NOTICE'; id: string }
   | { type: 'ADD_FIGURE'; questionId: string; asset: Asset }
   | { type: 'UPDATE_FIGURE'; questionId: string; figureId: string; patch: Partial<Omit<Figure, 'id' | 'assetId'>> }
   | { type: 'REMOVE_FIGURE'; questionId: string; figureId: string }
@@ -54,6 +58,9 @@ export const EXAM_ACTION_TYPES = new Set<string>([
   'SET_CHOICE_IMAGE',
   'SET_CHOICE_IMAGE_RATIO',
   'SET_NUMBERING',
+  'ADD_NOTICE',
+  'UPDATE_NOTICE',
+  'REMOVE_NOTICE',
 ])
 
 type ExamSlice = { exam: ExamContent; selectedBlock: BlockRef | null }
@@ -128,8 +135,11 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
       const selGone =
         sel &&
         (sel.id === action.id || (sel.kind === 'question' && removed?.questions.some((q) => q.id === sel.id)))
+      const notices = (exam.notices ?? []).map((n) =>
+        n.afterSectionId === action.id ? { ...n, afterSectionId: null } : n,
+      )
       return {
-        exam: pruneAssets({ ...exam, sections }, removed?.questions.flatMap(questionAssetIds) ?? []),
+        exam: pruneAssets({ ...exam, sections, notices }, removed?.questions.flatMap(questionAssetIds) ?? []),
         selectedBlock: selGone ? null : sel,
       }
     }
@@ -262,6 +272,33 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
       }
     case 'SET_NUMBERING':
       return { ...state, exam: { ...exam, numbering: action.numbering } }
+    case 'ADD_NOTICE': {
+      const notice: Notice = {
+        id: crypto.randomUUID(),
+        text: action.text,
+        afterSectionId:
+          action.afterSectionId && exam.sections.some((s) => s.id === action.afterSectionId)
+            ? action.afterSectionId
+            : null,
+      }
+      return {
+        exam: { ...exam, notices: [...(exam.notices ?? []), notice] },
+        selectedBlock: { kind: 'notice', id: notice.id },
+      }
+    }
+    case 'UPDATE_NOTICE':
+      return {
+        ...state,
+        exam: {
+          ...exam,
+          notices: (exam.notices ?? []).map((n) => (n.id === action.id ? { ...n, ...action.patch } : n)),
+        },
+      }
+    case 'REMOVE_NOTICE':
+      return {
+        exam: { ...exam, notices: (exam.notices ?? []).filter((n) => n.id !== action.id) },
+        selectedBlock: state.selectedBlock?.id === action.id ? null : state.selectedBlock,
+      }
 
     case 'ADD_FIGURE': {
       const assetId = crypto.randomUUID()

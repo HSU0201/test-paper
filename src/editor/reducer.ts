@@ -317,7 +317,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
             ? { type: 'REMOVE_SECTION', id: block.id }
             : block.kind === 'question'
               ? { type: 'REMOVE_QUESTION', id: block.id }
-              : { type: 'REMOVE_HEADER_ITEM', id: block.id },
+              : block.kind === 'notice'
+                ? { type: 'REMOVE_NOTICE', id: block.id }
+                : { type: 'REMOVE_HEADER_ITEM', id: block.id },
         )
       }
       if (!state.selectedId) return state

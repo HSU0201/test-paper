@@ -41,6 +41,26 @@ export type Figure = {
 /** each：每題配分；blank：每格固定分數，各題格數可以不同 */
 export type ScoreMode = 'each' | 'blank'
 
+/** none：不畫框；body：只框題目；all：標題和題目一起框 */
+export type SectionFrame = 'none' | 'body' | 'all'
+
+/** flow：由上往下；rows：每一題一列，適合直式計算 */
+export type SectionLayout = 'flow' | 'rows'
+
+/** dot：1. ；paren：(1) */
+export type NumberStyle = 'dot' | 'paren'
+
+/** 卷面上的提示框，例如「下一頁還有題目！」 */
+export type Notice = {
+  id: string
+  text: string
+  /** 接在這個大題後面。null 表示放在卷末 */
+  afterSectionId: string | null
+}
+
+export const NOTICE_CONTINUE = '下一頁還有題目！'
+export const NOTICE_END = '作答結束，請仔細檢查！'
+
 export type Asset = { src: string; width: number; height: number }
 
 /** 個別字級。沒填的欄位跟隨全卷預設 */
@@ -58,8 +78,12 @@ export type Question = {
   choices: Choice[]
   choiceLayout: ChoiceLayout
   answer: string
-  /** 問答題留給學生作答的行數 */
+  /** 問答題留給學生作答的行數。直式表格時，這是這一列的高度 */
   answerLines: number
+  /** 問答留白是否畫底線。false 只留空白 */
+  answerRuled: boolean
+  /** 直式表格右側欄，例如「驗算：」。空字串表示這一列不拆開 */
+  aside: string
   figures: Figure[]
   /**
    * 每格計分時的格數。未設則依題幹裡的（ ）與底線計算，
@@ -91,6 +115,14 @@ export type Section = {
   headingStyle?: FontOverride
   /** 作答說明；未設則用全卷「作答說明」 */
   instructionStyle?: FontOverride
+  /** 這一題要不要用線框起來 */
+  frame: SectionFrame
+  /** 題目直向排列，或收成直式表格 */
+  layout: SectionLayout
+  /** 直式表格每一列至少幾行。小題若填了作答行數，用該題的行數 */
+  rowLines: number
+  /** 小題題號寫成 1. 或 (1) */
+  numberStyle: NumberStyle
 }
 
 export type QuestionNumbering = 'continuous' | 'perSection'
@@ -100,10 +132,12 @@ export type ExamContent = {
   sections: Section[]
   /** 圖片資料（data URL），由 Figure.assetId 參照 */
   assets: Record<string, Asset>
+  /** 提示框。位置由 afterSectionId 決定，不跟大題混在同一個陣列 */
+  notices: Notice[]
 }
 
-/** header：頁首欄位 */
-export type BlockRef = { kind: 'section' | 'question' | 'header'; id: string }
+/** header：頁首欄位；notice：提示框 */
+export type BlockRef = { kind: 'section' | 'question' | 'header' | 'notice'; id: string }
 
 const newId = () => crypto.randomUUID()
 
@@ -269,6 +303,8 @@ export function createQuestion(type: QuestionType, score: number): Question {
     choiceLayout: 'auto',
     answer: '',
     answerLines: type === 'short_answer' ? 3 : 0,
+    answerRuled: true,
+    aside: '',
     figures: [],
   }
 }
@@ -288,6 +324,10 @@ export function createSection(title = '新大題', defaultType: QuestionType = '
     defaultType,
     keepTogether: 'firstChild',
     questions: [],
+    frame: 'none',
+    layout: 'flow',
+    rowLines: 4,
+    numberStyle: 'dot',
   }
 }
 
@@ -331,11 +371,11 @@ export function createSampleExam(): ExamContent {
   essay.questions = [
     { ...q('short_answer', 10, '小明買了 3 枝筆和 2 本筆記本共花了 110 元，已知一枝筆 20 元，請問一本筆記本多少元？'), answerLines: 4 },
   ]
-  return { numbering: 'continuous', sections: [choice, fill, essay], assets: {} }
+  return { numbering: 'continuous', sections: [choice, fill, essay], assets: {}, notices: [] }
 }
 
 export function createEmptyExam(): ExamContent {
-  return { numbering: 'continuous', sections: [], assets: {} }
+  return { numbering: 'continuous', sections: [], assets: {}, notices: [] }
 }
 
 const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]
@@ -344,6 +384,26 @@ const FIGURE_PLACEMENTS: FigurePlacement[] = ['below', 'middle', 'right', 'after
 function clampScore(n: unknown, fallback: number): number {
   const v = typeof n === 'number' && Number.isFinite(n) ? n : fallback
   return Math.min(100, Math.max(0, Math.round(v)))
+}
+
+function clampRowLines(n: unknown): number {
+  const v = typeof n === 'number' && Number.isFinite(n) ? Math.round(n) : 4
+  return Math.min(12, Math.max(2, v))
+}
+
+function normalizeNotices(raw: unknown): Notice[] {
+  if (!Array.isArray(raw)) return []
+  const out: Notice[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const n = item as Partial<Notice>
+    out.push({
+      id: typeof n.id === 'string' && n.id ? n.id : crypto.randomUUID(),
+      text: typeof n.text === 'string' ? n.text : '',
+      afterSectionId: typeof n.afterSectionId === 'string' && n.afterSectionId ? n.afterSectionId : null,
+    })
+  }
+  return out
 }
 
 function normalizeFigure(f: Figure | undefined, assets: Record<string, Asset>): Figure | null {
@@ -388,6 +448,7 @@ export function normalizeExam(raw: unknown): ExamContent {
   return {
     numbering: r.numbering === 'perSection' ? 'perSection' : 'continuous',
     assets,
+    notices: normalizeNotices(r.notices),
     sections: sections.map((s) => {
       const base = createSection()
       const defaultType = QUESTION_TYPES.includes(s.defaultType) ? s.defaultType : base.defaultType
@@ -398,6 +459,10 @@ export function normalizeExam(raw: unknown): ExamContent {
         keepTogether: s.keepTogether === 'whole' ? 'whole' : 'firstChild',
         scoreMode: s.scoreMode === 'blank' ? 'blank' : 'each',
         blankScore: clampScore(s.blankScore, clampScore(s.defaultScore, base.defaultScore)),
+        frame: s.frame === 'body' || s.frame === 'all' ? s.frame : 'none',
+        layout: s.layout === 'rows' ? 'rows' : 'flow',
+        rowLines: clampRowLines(s.rowLines),
+        numberStyle: s.numberStyle === 'paren' ? 'paren' : 'dot',
         headingStyle: normalizeFontOverride(s.headingStyle),
         instructionStyle: normalizeFontOverride(s.instructionStyle),
         questions: (Array.isArray(s.questions) ? s.questions : []).map((item) => {
@@ -411,6 +476,8 @@ export function normalizeExam(raw: unknown): ExamContent {
             ...item,
             type,
             blanks,
+            answerRuled: item.answerRuled === false ? false : true,
+            aside: typeof item.aside === 'string' ? item.aside : '',
             bodyStyle: normalizeFontOverride(item.bodyStyle),
             choices: (Array.isArray(item.choices) ? item.choices : []).map((c) =>
               c.image && !assets[c.image.assetId] ? { id: c.id, text: c.text } : c,
