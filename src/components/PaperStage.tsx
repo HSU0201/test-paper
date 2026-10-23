@@ -297,6 +297,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                   registerRef={registerRef}
                   setGuides={setGuides}
                   clearGuides={clearGuides}
+                  fontFamily={state.paperFontFamily}
                 />
               ) : null}
               <ExamFlowLayer
@@ -306,6 +307,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                 flagged={flagged}
                 interactive={!state.textPlacementMode}
                 dispatch={dispatch}
+                fontFamily={state.paperFontFamily}
               />
               {pageObjects.map((obj) => {
                 if (obj.type === 'text') {

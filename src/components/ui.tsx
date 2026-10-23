@@ -154,6 +154,7 @@ export type IconName =
   | 'layout'
   | 'insert'
   | 'page'
+  | 'font'
   | 'text'
   | 'line'
   | 'rect'
@@ -190,6 +191,12 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M6 3h9l4 4v14H6z" />
       <path d="M15 3v4h4" />
+    </>
+  ),
+  font: (
+    <>
+      <path d="M5 19 12 5l7 14" />
+      <path d="M7.5 14h9" />
     </>
   ),
   text: <path d="M5 6V4h14v2M12 4v16M9 20h6" />,

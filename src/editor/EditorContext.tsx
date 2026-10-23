@@ -12,7 +12,7 @@ import {
 import type { EditorAction } from './reducer'
 import { historyReducer, initialHistory } from './history'
 import { layoutExam, type FlowResult } from './flowLayout'
-import { measureWithKonva } from './konvaMeasure'
+import { measureWithFont } from './konvaMeasure'
 import { documentSignature, serializeDocument, toLoadAction } from './documentIO'
 import {
   listSnapshots,
@@ -83,6 +83,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     return (page: number): PageGeometry => (page === 0 ? first : rest)
   }, [state.layout, state.pageWidth, state.pageHeight])
 
+  const measure = useMemo(() => measureWithFont(state.paperFontFamily), [state.paperFontFamily])
+
   const flow = useMemo(() => {
     const o = state.textLevelOverrides
     const heading = mergeTextLevelPreset('section_heading', o)
@@ -97,10 +99,10 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         body: { fontSize: body.fontSize, fill: '#000000', bold: body.bold },
       },
       state.layout.spacing,
-      measureWithKonva,
+      measure,
       state.pageWidth > state.pageHeight,
     )
-  }, [state.exam, state.textLevelOverrides, state.layout.spacing, state.pageWidth, state.pageHeight, pageGeometry])
+  }, [state.exam, state.textLevelOverrides, state.layout.spacing, state.pageWidth, state.pageHeight, pageGeometry, measure])
 
   const pageCount = useMemo(() => {
     const objMax = state.objects.reduce((m, o) => Math.max(m, (o.page ?? 0) + 1), 0)
@@ -111,7 +113,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     () => serializeDocument(state),
     // 只在可存檔的內容變動時重新序列化（選取、放置模式不觸發暫存）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.objects, state.layout, state.exam, state.pageWidth, state.pageHeight, state.textLevelOverrides, state.userTextTiers, state.defaultNewTextTierId],
+    [state.objects, state.layout, state.exam, state.pageWidth, state.pageHeight, state.textLevelOverrides, state.userTextTiers, state.defaultNewTextTierId, state.paperFontFamily],
   )
   useEffect(() => {
     docRef.current = docForSave

@@ -312,6 +312,8 @@ export type EditorState = {
   selectedBlock: BlockRef | null
   /** 最近點選的頁面，新增線條／方框／圖片時放在這一頁 */
   activePage: number
+  /** 頁首、題目與新文字共用的字型 */
+  paperFontFamily: string
 }
 
 export function isText(o: CanvasObject): o is TextObject {

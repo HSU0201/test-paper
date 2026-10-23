@@ -3,12 +3,14 @@ import {
   choiceLabel,
   isChoiceType,
   questionNumbers,
+  questionScoreMark,
   sectionHeading,
   sectionScoreNote,
   toChineseNumeral,
   type Asset,
   type BlockRef,
   type ExamContent,
+  type FontOverride,
   type Question,
   type Section,
 } from '../types/exam'
@@ -80,6 +82,18 @@ const SQUEEZE_LEVELS = [0, 0.25, 0.5, 0.75, 1]
 const MAX_PAGES = 60
 const EMPTY_STEM = '（請輸入題目）'
 
+function resolveStyle(base: TextStyle, over?: FontOverride): TextStyle {
+  if (!over || (over.fontSize == null && over.bold == null)) return base
+  const fontSize = over.fontSize == null ? base.fontSize : Math.min(72, Math.max(8, Math.round(over.fontSize)))
+  const bold = over.bold ?? !!base.bold
+  if (fontSize === base.fontSize && bold === !!base.bold) return base
+  return { fontSize, fill: base.fill, bold }
+}
+
+function sameStyle(a: TextStyle, b: TextStyle) {
+  return a.fontSize === b.fontSize && a.fill === b.fill && !!a.bold === !!b.bold
+}
+
 type Metrics = { lineHeight: number; questionGap: number; sectionGap: number }
 
 function metricsAt(sp: SpacingSettings, t: number): Metrics {
@@ -97,15 +111,17 @@ type Ctx = { st: FlowStyles; m: MeasureFn; mt: Metrics; assets: Record<string, A
 
 function buildSectionHead(s: Section, index: number, w: number, c: Ctx): Built {
   const { st, m, mt } = c
+  const heading = resolveStyle(st.heading, s.headingStyle)
+  const instruction = resolveStyle(st.instruction, s.instructionStyle)
   const runs: FlowRun[] = []
   const title = paintText(`${toChineseNumeral(index + 1)}、${s.title}${sectionScoreNote(s)}`)
-  runs.push({ key: 'title', x: 0, y: 0, width: w, text: title.text, colors: title.colors, style: st.heading, lineHeight: mt.lineHeight })
-  let h = m(title.text, w, st.heading, mt.lineHeight).height
+  runs.push({ key: 'title', x: 0, y: 0, width: w, text: title.text, colors: title.colors, style: heading, lineHeight: mt.lineHeight })
+  let h = m(title.text, w, heading, mt.lineHeight).height
   if (plainText(s.instruction).trim()) {
     h += 2
     const inst = paintText(s.instruction)
-    runs.push({ key: 'inst', x: 0, y: h, width: w, text: inst.text, colors: inst.colors, style: st.instruction, lineHeight: mt.lineHeight })
-    h += m(inst.text, w, st.instruction, mt.lineHeight).height
+    runs.push({ key: 'inst', x: 0, y: h, width: w, text: inst.text, colors: inst.colors, style: instruction, lineHeight: mt.lineHeight })
+    h += m(inst.text, w, instruction, mt.lineHeight).height
   }
   return { height: h + 4, runs, rules: [], images: [] }
 }
@@ -117,13 +133,14 @@ function figureSize(c: Ctx, assetId: string, maxW: number, ratio: number) {
   return { w, h: (w * a.height) / Math.max(1, a.width) }
 }
 
-function buildQuestion(q: Question, num: number, w: number, c: Ctx): Built {
-  const { st, m, mt } = c
+function buildQuestion(q: Question, num: number, scoreMark: string, indent: number, w: number, c: Ctx): Built {
+  const { m, mt } = c
+  const body = resolveStyle(c.st.body, q.bodyStyle)
   const runs: FlowRun[] = []
   const rules: FlowRule[] = []
   const images: FlowImage[] = []
-  const lh = st.body.fontSize * mt.lineHeight
-  const indent = Math.ceil(st.body.fontSize * 2)
+  const lh = body.fontSize * mt.lineHeight
+  const prefix = scoreMark ? `${num}.${scoreMark}` : `${num}.`
   const innerW = Math.max(40, w - indent)
   const stemPainted = paintText(q.stem.trim() || EMPTY_STEM)
   const stem = stemPainted.text
@@ -132,7 +149,7 @@ function buildQuestion(q: Question, num: number, w: number, c: Ctx): Built {
   const below = q.figures.filter((f) => f !== right && f.placement !== 'afterChoices')
   const after = q.figures.filter((f) => f !== right && f.placement === 'afterChoices')
 
-  runs.push({ key: 'num', x: 0, y: 0, width: indent, text: `${num}.`, style: st.body, lineHeight: mt.lineHeight })
+  runs.push({ key: 'num', x: 0, y: 0, width: indent, text: prefix, style: body, lineHeight: mt.lineHeight })
 
   let stemW = innerW
   let rightBox: { w: number; h: number } | null = null
@@ -150,11 +167,11 @@ function buildQuestion(q: Question, num: number, w: number, c: Ctx): Built {
     width: stemW,
     text: stem,
     colors: q.stem.trim() ? stemPainted.colors : undefined,
-    style: st.body,
+    style: body,
     lineHeight: mt.lineHeight,
     placeholder: !q.stem.trim(),
   })
-  let h = m(stem, stemW, st.body, mt.lineHeight).height
+  let h = m(stem, stemW, body, mt.lineHeight).height
   if (rightBox) h = Math.max(h, rightBox.h + 4)
 
   const pushFigures = (list: typeof below) => {
@@ -178,7 +195,7 @@ function buildQuestion(q: Question, num: number, w: number, c: Ctx): Built {
         : paintText(hasImage(ch) ? choiceLabel(i) : `${choiceLabel(i)} \u3000`),
     )
     const anyImage = q.choices.some(hasImage)
-    const widest = Math.max(...labels.map((t) => m(t.text, 10000, st.body, mt.lineHeight).naturalWidth))
+    const widest = Math.max(...labels.map((t) => m(t.text, 10000, body, mt.lineHeight).naturalWidth))
     let cols: number = q.choiceLayout === 'auto' ? 1 : q.choiceLayout
     if (q.choiceLayout === 'auto') {
       if (anyImage) cols = labels.length <= 4 && innerW / 4 >= 110 ? 4 : 2
@@ -202,13 +219,13 @@ function buildQuestion(q: Question, num: number, w: number, c: Ctx): Built {
           width: textW,
           text: labels[i].text,
           colors: labels[i].colors,
-          style: st.body,
+          style: body,
           lineHeight: mt.lineHeight,
         })
-        let cellH = m(labels[i].text, textW, st.body, mt.lineHeight).height
+        let cellH = m(labels[i].text, textW, body, mt.lineHeight).height
         if (ch.image && hasImage(ch)) {
           const inline = !plainText(ch.text).trim()
-          const labelW = m(`${choiceLabel(i)} `, 10000, st.body, mt.lineHeight).naturalWidth
+          const labelW = m(`${choiceLabel(i)} `, 10000, body, mt.lineHeight).naturalWidth
           const maxW = inline ? Math.max(24, textW - labelW) : textW
           const size = figureSize(c, ch.image.assetId, maxW, ch.image.widthRatio)
           if (size) {
@@ -245,7 +262,40 @@ function buildQuestion(q: Question, num: number, w: number, c: Ctx): Built {
 
 type Item =
   | { kind: 'section'; section: Section; index: number }
-  | { kind: 'question'; question: Question; num: number; firstOfSection: boolean }
+  | { kind: 'question'; question: Question; num: number; firstOfSection: boolean; scoreMark: string }
+
+function questionLead(it: Extract<Item, { kind: 'question' }>): string {
+  return it.scoreMark ? `${it.num}.${it.scoreMark}` : `${it.num}.`
+}
+
+/** 配分不同時，同一大題的題幹對齊到最寬的「題號＋分數」之後 */
+function questionIndents(items: Item[], c: Ctx): Map<string, number> {
+  const map = new Map<string, number>()
+  let group: Extract<Item, { kind: 'question' }>[] = []
+  const flush = () => {
+    if (!group.length) return
+    const marked = group.some((q) => q.scoreMark)
+    let shared = 0
+    for (const q of group) {
+      const body = resolveStyle(c.st.body, q.question.bodyStyle)
+      const base = Math.ceil(body.fontSize * 2)
+      if (!marked) {
+        map.set(q.question.id, base)
+        continue
+      }
+      const measured = c.m(questionLead(q), 10000, body, c.mt.lineHeight).naturalWidth
+      shared = Math.max(shared, base, Math.ceil(measured + body.fontSize * 0.35))
+    }
+    if (marked) for (const q of group) map.set(q.question.id, shared)
+    group = []
+  }
+  for (const it of items) {
+    if (it.kind === 'section') flush()
+    else group.push(it)
+  }
+  flush()
+  return map
+}
 
 function itemRef(it: Item): BlockRef {
   return it.kind === 'section' ? { kind: 'section', id: it.section.id } : { kind: 'question', id: it.question.id }
@@ -254,8 +304,11 @@ function itemRef(it: Item): BlockRef {
 type PaginateResult = Omit<FlowResult, 'squeeze' | 'lineHeight'> & { headMoves: number }
 
 function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): PaginateResult {
+  const indents = questionIndents(items, c)
   const build = (it: Item, w: number): Built =>
-    it.kind === 'section' ? buildSectionHead(it.section, it.index, w, c) : buildQuestion(it.question, it.num, w, c)
+    it.kind === 'section'
+      ? buildSectionHead(it.section, it.index, w, c)
+      : buildQuestion(it.question, it.num, it.scoreMark, indents.get(it.question.id) ?? Math.ceil(c.st.body.fontSize * 2), w, c)
   const gapBefore = (it: Item) =>
     it.kind === 'section' ? c.mt.sectionGap : it.firstOfSection ? 0 : c.mt.questionGap
 
@@ -507,7 +560,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
 
   const writeChunk = (text: string, style: TextStyle, key: string, placeholder = false) => {
     const chars = richChars(text).filter((unit) => unit.ch !== '\n')
-    const room = open && open.style === style && !!open.placeholder === placeholder ? open.cap - open.chars.length : 0
+    const room = open && sameStyle(open.style, style) && !!open.placeholder === placeholder ? open.cap - open.chars.length : 0
     if (room < chars.length) closeOpen()
     write(text, style, key, placeholder)
   }
@@ -518,7 +571,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
         closeOpen()
         continue
       }
-      if (open && (open.style !== style || !!open.placeholder !== placeholder || open.chars.length >= open.cap)) closeOpen()
+      if (open && (!sameStyle(open.style, style) || !!open.placeholder !== placeholder || open.chars.length >= open.cap)) closeOpen()
       if (!open) startOpen(style, key, placeholder)
       const col = open
       if (col) col.chars.push({ g: toVerticalGlyph(unit.ch), color: unit.color })
@@ -555,9 +608,9 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     x = Math.max(host.x, ix - 6)
   }
 
-  const emitAnswers = (count: number) => {
+  const emitAnswers = (count: number, fontSize: number) => {
     closeOpen()
-    const p = colPitchOf(st.body.fontSize)
+    const p = colPitchOf(fontSize)
     for (let i = 0; i < count; i++) {
       reserve(p)
       const f = frame()
@@ -565,7 +618,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
       if (slotLeft < f.x) slotLeft = f.x
       const cx = slotLeft + p / 2
       acc.rules.push({ key: `ans-${acc.rules.length}`, x1: cx, y1: f.y + 8, x2: cx, y2: f.y + f.h - 8 })
-      track(slotLeft, slotLeft + colWidthOf(st.body.fontSize), f.y + f.h - 8)
+      track(slotLeft, slotLeft + colWidthOf(fontSize), f.y + f.h - 8)
       x = slotLeft
     }
   }
@@ -575,9 +628,9 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     return Math.max(1, Math.ceil(n / charsPerColumn(fontSize, lh, frameH))) * colPitchOf(fontSize)
   }
 
-  const applyGap = (px: number) => {
+  const applyGap = (px: number, fontSize: number) => {
     if (px <= 0 || atStart()) return
-    if (remain() - px < colPitchOf(st.body.fontSize)) nextFrame()
+    if (remain() - px < colPitchOf(fontSize)) nextFrame()
     else x -= px
   }
 
@@ -586,18 +639,25 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     flush()
     const it = items[i]
     acc = blank(itemRef(it))
-    applyGap(it.kind === 'section' ? mt.sectionGap : it.firstOfSection ? 0 : mt.questionGap)
+    const heading = it.kind === 'section' ? resolveStyle(st.heading, it.section.headingStyle) : st.heading
+    const instruction = it.kind === 'section' ? resolveStyle(st.instruction, it.section.instructionStyle) : st.instruction
+    const body = it.kind === 'question' ? resolveStyle(st.body, it.question.bodyStyle) : st.body
+    applyGap(it.kind === 'section' ? mt.sectionGap : it.firstOfSection ? 0 : mt.questionGap, it.kind === 'section' ? heading.fontSize : body.fontSize)
 
     if (it.kind === 'section' && !atStart()) {
       const fh = frame().h
       const title = `${sectionHeading(it.section, it.index)}${sectionScoreNote(it.section)}`
-      const headW = textWidth(title, st.heading.fontSize, fh) + (it.section.instruction.trim() ? textWidth(it.section.instruction, st.instruction.fontSize, fh) : 0)
+      const headW = textWidth(title, heading.fontSize, fh) + (plainText(it.section.instruction).trim() ? textWidth(it.section.instruction, instruction.fontSize, fh) : 0)
       const follower = items[i + 1]
-      const oneCol = colPitchOf(st.body.fontSize)
+      const followerSize = follower?.kind === 'question' ? resolveStyle(st.body, follower.question.bodyStyle).fontSize : st.body.fontSize
+      const oneCol = colPitchOf(followerSize)
       let keep = headW + oneCol
       if (follower?.kind === 'question' && it.section.keepTogether === 'whole') {
         const rest = items.slice(i + 1).filter((x) => x.kind === 'question') as Extract<Item, { kind: 'question' }>[]
-        const whole = rest.reduce((sum, q) => sum + textWidth(plainText(`${q.num}.${q.question.stem}`), st.body.fontSize, fh), headW)
+        const whole = rest.reduce(
+          (sum, q) => sum + textWidth(plainText(`${questionLead(q)}${q.question.stem}`), resolveStyle(st.body, q.question.bodyStyle).fontSize, fh),
+          headW,
+        )
         if (whole <= frame().w) keep = whole
       }
       if (keep <= frame().w && remain() < keep) {
@@ -612,10 +672,10 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     }
 
     if (it.kind === 'section') {
-      write(`${toChineseNumeral(it.index + 1)}、${it.section.title}${sectionScoreNote(it.section)}`, st.heading, 'title')
+      write(`${toChineseNumeral(it.index + 1)}、${it.section.title}${sectionScoreNote(it.section)}`, heading, 'title')
       if (plainText(it.section.instruction).trim()) {
         closeOpen()
-        write(it.section.instruction.trim(), st.instruction, 'inst')
+        write(it.section.instruction.trim(), instruction, 'inst')
       }
       continue
     }
@@ -626,22 +686,23 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     const after = q.figures.filter((f) => f.placement === 'afterChoices')
     right.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id))
     const stem = q.stem.trim()
-    if (stem) write(`${it.num}.${stem}`, st.body, 'stem')
+    const lead = questionLead(it)
+    if (stem) write(`${lead}${stem}`, body, 'stem')
     else {
-      write(`${it.num}.`, st.body, 'num')
+      write(lead, body, 'num')
       closeOpen()
-      write(EMPTY_STEM, st.body, 'stem', true)
+      write(EMPTY_STEM, body, 'stem', true)
     }
     below.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id))
     if (isChoiceType(q.type)) {
       q.choices.forEach((ch, ci) => {
         const label = plainText(ch.text).trim() ? `${choiceLabel(ci)} ${ch.text.trim()}` : choiceLabel(ci)
-        writeChunk(label, st.body, `ch-${ci}`)
+        writeChunk(label, body, `ch-${ci}`)
         if (ch.image) emitImage(ch.image.assetId, ch.image.widthRatio, `chimg-${ch.id}`)
       })
     }
     after.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id))
-    if (q.type === 'short_answer' && q.answerLines > 0) emitAnswers(q.answerLines)
+    if (q.type === 'short_answer' && q.answerLines > 0) emitAnswers(q.answerLines, body.fontSize)
   }
   closeOpen()
   flush()
@@ -669,7 +730,13 @@ export function layoutExam(
   exam.sections.forEach((section, index) => {
     items.push({ kind: 'section', section, index })
     section.questions.forEach((question, qi) =>
-      items.push({ kind: 'question', question, num: nums.get(question.id) ?? 0, firstOfSection: qi === 0 }),
+      items.push({
+        kind: 'question',
+        question,
+        num: nums.get(question.id) ?? 0,
+        firstOfSection: qi === 0,
+        scoreMark: questionScoreMark(section, question),
+      }),
     )
   })
 

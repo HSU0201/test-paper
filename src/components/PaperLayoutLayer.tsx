@@ -4,15 +4,13 @@ import { Group, Line, Rect, Text } from 'react-konva'
 import type { Box } from '../editor/bounds'
 import type { EditorAction } from '../editor/reducer'
 import { snapBoxPosition, type SnapGuides } from '../editor/snap'
-import { measureWithKonva } from '../editor/konvaMeasure'
+import { measureText } from '../editor/konvaMeasure'
 import { layoutRichLines, paintText, plainText } from '../editor/richText'
 import { EDITOR_GUIDE } from '../editor/theme'
 import { headerItemHeight, headerItemText, verticalHeaderText, type HeaderItem, type HeaderLayout, type PageGeometry } from '../types/layout'
 
 export const EDITOR_ONLY_NAME = 'editor-only'
 export const HEADER_REF_PREFIX = 'hdr:'
-
-const LAYOUT_FONT = '"Microsoft JhengHei", "PingFang TC", sans-serif'
 
 /** 版面骨架：內容區／欄位輔助底色、頁首分隔線、欄間分隔線 */
 export function PageDecorLayer({ geometry, showGuides }: { geometry: PageGeometry; showGuides: boolean }) {
@@ -42,15 +40,18 @@ function HeaderInk({
   item,
   painted,
   vertical,
+  fontFamily,
 }: {
   box: Box
   item: HeaderItem
   painted: { text: string; colors?: string[] }
   vertical: boolean
+  fontFamily: string
 }) {
   const fontStyle = item.bold ? 'bold' : 'normal'
   const widthOf = (sample: string) =>
-    measureWithKonva(sample, 10000, { fontSize: item.fontSize, fill: '#000000', bold: item.bold }, vertical ? 1.15 : 1).naturalWidth
+    measureText(fontFamily, sample, 10000, { fontSize: item.fontSize, fill: '#000000', bold: item.bold }, vertical ? 1.15 : 1)
+      .naturalWidth
   if (vertical) {
     const glyphs = [...painted.text].map((ch) => verticalHeaderText(ch))
     const step = item.fontSize * 1.15
@@ -67,7 +68,7 @@ function HeaderInk({
               y={y0 + i * step}
               text={g}
               fontSize={item.fontSize}
-              fontFamily={LAYOUT_FONT}
+              fontFamily={fontFamily}
               fontStyle={fontStyle}
               fill={painted.colors?.[i] || '#000000'}
               listening={false}
@@ -89,7 +90,7 @@ function HeaderInk({
           y={p.line * item.fontSize}
           text={p.text}
           fontSize={item.fontSize}
-          fontFamily={LAYOUT_FONT}
+          fontFamily={fontFamily}
           fontStyle={fontStyle}
           fill={p.color || '#000000'}
           listening={false}
@@ -112,6 +113,7 @@ type HeaderItemsLayerProps = {
   registerRef: (id: string) => (n: Konva.Node | null) => void
   setGuides: (g: SnapGuides) => void
   clearGuides: () => void
+  fontFamily: string
 }
 
 /** 頁首欄位：可拖曳、可左右拉寬，位置吸附到內容區邊緣、中線與其他欄位 */
@@ -127,6 +129,7 @@ export function HeaderItemsLayer({
   registerRef,
   setGuides,
   clearGuides,
+  fontFamily,
 }: HeaderItemsLayerProps) {
   const visible = header.items.filter((it) => it.visible)
   const inkRefs = useRef(new Map<string, Konva.Group>())
@@ -186,7 +189,7 @@ export function HeaderItemsLayer({
                 y={b.y}
                 listening={false}
               >
-                <HeaderInk box={b} item={it} painted={painted} vertical={vertical} />
+                <HeaderInk box={b} item={it} painted={painted} vertical={vertical} fontFamily={fontFamily} />
               </Group>
             ) : null}
             <Text
@@ -198,7 +201,7 @@ export function HeaderItemsLayer({
               height={vertical ? b.h : undefined}
               text={isPlaceholder ? (vertical ? verticalHeaderText(plainText(it.label)) : `（${plainText(it.label)}）`) : shown}
               fontSize={it.fontSize}
-              fontFamily={LAYOUT_FONT}
+              fontFamily={fontFamily}
               fontStyle={it.bold ? 'bold' : 'normal'}
               fill={isPlaceholder ? '#94a3b8' : colored ? 'rgba(0,0,0,0)' : '#000000'}
               align={vertical ? 'center' : it.align}

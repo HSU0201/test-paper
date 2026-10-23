@@ -1,7 +1,7 @@
 import { Group, Image as KonvaImage, Line, Rect, Text } from 'react-konva'
 import type { EditorAction } from '../editor/reducer'
 import type { FlowImage, FlowRun, PlacedBlock } from '../editor/flowLayout'
-import { FLOW_FONT, FLOW_WRAP, measureWithKonva } from '../editor/konvaMeasure'
+import { FLOW_WRAP, measureText } from '../editor/konvaMeasure'
 import { layoutRichLines } from '../editor/richText'
 import type { Asset, BlockRef } from '../types/exam'
 import { EDITOR_FLAG, EDITOR_SELECTION } from '../editor/theme'
@@ -16,6 +16,7 @@ type ExamFlowLayerProps = {
   flagged: Set<string>
   interactive: boolean
   dispatch: (a: EditorAction) => void
+  fontFamily: string
 }
 
 function FigureImage({ im, asset }: { im: FlowImage; asset: Asset | undefined }) {
@@ -26,7 +27,7 @@ function FigureImage({ im, asset }: { im: FlowImage; asset: Asset | undefined })
   return <KonvaImage image={el} x={im.x} y={im.y} width={im.w} height={im.h} listening={false} />
 }
 
-function FlowRunText({ r }: { r: FlowRun }) {
+function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
   const base = r.placeholder ? '#94a3b8' : r.style.fill || '#000000'
   const fontStyle = r.style.bold ? 'bold' : 'normal'
   const step = r.style.fontSize * r.lineHeight
@@ -51,7 +52,7 @@ function FlowRunText({ r }: { r: FlowRun }) {
             height={g.text.split('\n').length * step}
             text={g.text}
             fontSize={r.style.fontSize}
-            fontFamily={FLOW_FONT}
+            fontFamily={fontFamily}
             fontStyle={fontStyle}
             fill={g.color}
             align="center"
@@ -65,7 +66,7 @@ function FlowRunText({ r }: { r: FlowRun }) {
   }
   if (!r.vertical && r.colors?.some(Boolean)) {
     const pieces = layoutRichLines(r.text, r.colors, r.width, (sample) =>
-      measureWithKonva(sample, 10000, r.style, r.lineHeight).naturalWidth,
+      measureText(fontFamily, sample, 10000, r.style, r.lineHeight).naturalWidth,
     )
     return (
       <Group>
@@ -77,7 +78,7 @@ function FlowRunText({ r }: { r: FlowRun }) {
             y={r.y + p.line * step}
             text={p.text}
             fontSize={r.style.fontSize}
-            fontFamily={FLOW_FONT}
+            fontFamily={fontFamily}
             fontStyle={fontStyle}
             fill={p.color || base}
             wrap="none"
@@ -96,7 +97,7 @@ function FlowRunText({ r }: { r: FlowRun }) {
       height={r.height}
       text={r.text}
       fontSize={r.style.fontSize}
-      fontFamily={FLOW_FONT}
+      fontFamily={fontFamily}
       fontStyle={fontStyle}
       fill={base}
       align={r.vertical ? 'center' : 'left'}
@@ -108,7 +109,7 @@ function FlowRunText({ r }: { r: FlowRun }) {
 }
 
 /** 大題與小題由排版自動定位；點擊選取後到右側編輯，不可拖曳 */
-export function ExamFlowLayer({ blocks, assets, selected, flagged, interactive, dispatch }: ExamFlowLayerProps) {
+export function ExamFlowLayer({ blocks, assets, selected, flagged, interactive, dispatch, fontFamily }: ExamFlowLayerProps) {
   return (
     <Group>
       {blocks.map((b) => {
@@ -124,7 +125,7 @@ export function ExamFlowLayer({ blocks, assets, selected, flagged, interactive, 
               <FigureImage key={im.key} im={im} asset={assets[im.assetId]} />
             ))}
             {b.runs.map((r) => (
-              <FlowRunText key={r.key} r={r} />
+              <FlowRunText key={r.key} r={r} fontFamily={fontFamily} />
             ))}
             <Rect
               name={EDITOR_ONLY_NAME}

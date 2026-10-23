@@ -1,5 +1,5 @@
-import { motion } from 'motion/react'
-import { useState, type DragEvent, type KeyboardEvent } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import { useId, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { useEditor } from '../../editor/EditorContext'
 import { plainText } from '../../editor/richText'
 import {
@@ -10,7 +10,8 @@ import {
   sectionScore,
   type BlockRef,
 } from '../../types/exam'
-import { layoutSpring } from '../../motion/presets'
+import { easeOut, layoutSpring } from '../../motion/presets'
+import { ExamTextStyle } from '../BlockInspector'
 import { Icon, Segmented } from '../ui'
 
 function SelectMark({ on }: { on: boolean }) {
@@ -35,6 +36,8 @@ export function OutlinePanel() {
   const { exam, selectedBlock } = state
   const [drag, setDrag] = useState<Drag>(null)
   const [drop, setDrop] = useState<Drop>(null)
+  const [fontsOpen, setFontsOpen] = useState(false)
+  const fontsBodyId = useId()
   const nums = questionNumbers(exam)
   const totals = examTotals(exam)
   const overflowIds = new Set(flow.warnings.flatMap((w) => (w.type === 'oversize' ? [w.ref.id] : [])))
@@ -108,6 +111,43 @@ export function OutlinePanel() {
           ]}
           onChange={(v) => dispatch({ type: 'SET_NUMBERING', numbering: v })}
         />
+      </div>
+
+      <div className={`outline__fonts${fontsOpen ? ' is-open' : ''}`}>
+        <button
+          type="button"
+          className="outline__fonts-toggle"
+          aria-expanded={fontsOpen}
+          aria-controls={fontsBodyId}
+          onClick={() => setFontsOpen((open) => !open)}
+        >
+          <span>全卷字級</span>
+          <span className="outline__fonts-chevron" aria-hidden>
+            <Icon name="down" />
+          </span>
+        </button>
+        <AnimatePresence initial={false}>
+          {fontsOpen ? (
+            <motion.div
+              id={fontsBodyId}
+              key="fonts"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: easeOut }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div className="outline__fonts-body">
+                <p className="outline__fonts-hint">
+                  套用到所有大題與小題。某一題要不同，點選後在右側打開「單獨設定」。
+                </p>
+                <ExamTextStyle role="section_heading" label="大題標題" />
+                <ExamTextStyle role="instruction" label="作答說明" />
+                <ExamTextStyle role="question_body" label="小題題文" />
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </div>
 
       {exam.sections.length === 0 ? (

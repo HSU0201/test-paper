@@ -22,6 +22,7 @@ export function serializeDocument(state: EditorState) {
     textLevelOverrides: state.textLevelOverrides,
     userTextTiers: state.userTextTiers,
     defaultNewTextTierId: state.defaultNewTextTierId,
+    paperFontFamily: state.paperFontFamily,
     objects: state.objects,
   }
 }
@@ -63,6 +64,7 @@ export function toLoadAction(data: unknown): EditorAction | null {
     textLevelOverrides?: TextLevelOverrides
     userTextTiers?: UserTextTier[]
     defaultNewTextTierId?: string
+    paperFontFamily?: string
   }
   if (!Array.isArray(raw.objects)) return null
   return {
@@ -76,6 +78,7 @@ export function toLoadAction(data: unknown): EditorAction | null {
       textLevelOverrides: raw.textLevelOverrides,
       userTextTiers: raw.userTextTiers,
       defaultNewTextTierId: raw.defaultNewTextTierId,
+      paperFontFamily: raw.paperFontFamily,
     },
   }
 }

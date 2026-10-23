@@ -30,6 +30,7 @@ import {
   type SpacingSettings,
 } from '../types/layout'
 import { createEmptyExam, createSampleExam, normalizeExam } from '../types/exam'
+import { DEFAULT_PAPER_FONT, normalizePaperFont } from '../fonts/paperFont'
 import { EXAM_ACTION_TYPES, examReducer, type ExamAction } from './examReducer'
 
 export const initialEditorState = (): EditorState => ({
@@ -46,6 +47,7 @@ export const initialEditorState = (): EditorState => ({
   exam: createSampleExam(),
   selectedBlock: null,
   activePage: 0,
+  paperFontFamily: DEFAULT_PAPER_FONT,
 })
 
 function nextZ(objects: CanvasObject[]): number {
@@ -120,8 +122,10 @@ export type EditorAction =
         defaultNewTextTierId?: string
         layout?: unknown
         exam?: unknown
+        paperFontFamily?: string
       }
     }
+  | { type: 'SET_PAPER_FONT'; fontFamily: string }
   | { type: 'UPDATE_HEADER_ITEM'; id: string; patch: Partial<Omit<HeaderItem, 'id' | 'role'>> }
   | { type: 'ADD_HEADER_ITEM' }
   | { type: 'REMOVE_HEADER_ITEM'; id: string }
@@ -208,7 +212,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         y: py,
         width,
         text: '請輸入考題文字',
-        fontFamily: '"Microsoft JhengHei", "PingFang TC", sans-serif',
+        fontFamily: state.paperFontFamily,
         fontStyle: 'normal',
         align: 'left',
         textLevel: 'custom',
@@ -478,7 +482,19 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         exam: normalizeExam(action.doc.exam),
         selectedBlock: null,
         activePage: 0,
+        paperFontFamily: normalizePaperFont(action.doc.paperFontFamily),
       }
+    }
+    case 'SET_PAPER_FONT': {
+      const fontFamily = normalizePaperFont(action.fontFamily)
+      let changed = fontFamily !== state.paperFontFamily
+      const objects = state.objects.map((o) => {
+        if (o.type !== 'text' || o.fontFamily === fontFamily) return o
+        changed = true
+        return { ...o, fontFamily }
+      })
+      if (!changed) return state
+      return { ...state, paperFontFamily: fontFamily, objects }
     }
     case 'SET_ACTIVE_PAGE':
       return state.activePage === action.page ? state : { ...state, activePage: action.page }

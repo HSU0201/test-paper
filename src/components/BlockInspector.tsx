@@ -11,8 +11,10 @@ import {
   questionNumbers,
   sectionHeading,
   sectionScore,
+  uniformQuestionScore,
   type Choice,
   type ChoiceLayout,
+  type FontOverride,
   type QuestionType,
   type Section,
 } from '../types/exam'
@@ -23,8 +25,8 @@ import { mergeTextLevelPreset, type BuiltinTextLevelKey, type TextLevelPreset } 
 
 const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]
 
-/** 大題標題、作答說明、題文的字級與粗體；同一類文字整份試卷共用 */
-function ExamTextStyle({
+/** 全卷共用的大題標題、作答說明、小題題文字級與粗體 */
+export function ExamTextStyle({
   role,
   label,
 }: {
@@ -56,6 +58,71 @@ function ExamTextStyle({
   )
 }
 
+/** 某一題覆寫全卷字級；關閉時刪除覆寫，改回跟隨全卷 */
+function FontOverrideField({
+  role,
+  label,
+  value,
+  onChange,
+}: {
+  role: Extract<BuiltinTextLevelKey, 'section_heading' | 'instruction' | 'question_body'>
+  label: string
+  value?: FontOverride
+  onChange: (next: FontOverride | undefined) => void
+}) {
+  const { state } = useEditor()
+  const preset = mergeTextLevelPreset(role, state.textLevelOverrides)
+  const custom = value?.fontSize != null || value?.bold != null
+  const fontSize = value?.fontSize ?? preset.fontSize
+  const bold = value?.bold ?? !!preset.bold
+  return (
+    <div className="exam-style">
+      <div className="exam-style__head">
+        <span className="exam-style__label">{label}</span>
+        <span className="exam-style__override">
+          <span className="ui-field__label">單獨設定</span>
+          <Switch
+            checked={custom}
+            label={`${label}單獨設定`}
+            onChange={(on) => onChange(on ? { fontSize: preset.fontSize, bold: !!preset.bold } : undefined)}
+          />
+        </span>
+      </div>
+      {custom ? (
+        <div className="exam-style__row">
+          <NumberField
+            label="字級"
+            suffix="px"
+            min={8}
+            max={72}
+            value={fontSize}
+            onChange={(v) => onChange({ fontSize: Math.min(72, Math.max(8, Math.round(v))), bold })}
+          />
+          <div className="exam-style__bold">
+            <span className="ui-field__label">粗體</span>
+            <Switch checked={bold} label={`${label}粗體`} onChange={(v) => onChange({ fontSize, bold: v })} />
+          </div>
+        </div>
+      ) : (
+        <p className="exam-style__follow">
+          跟隨全卷 {preset.fontSize}px{preset.bold ? '・粗體' : ''}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function sectionScoreDescription(section: Section): string {
+  const n = section.questions.length
+  const total = sectionScore(section)
+  if (!n) return '尚未加入小題。新題使用下方預設配分，每題分數之後仍可各自調整。'
+  const each = uniformQuestionScore(section)
+  if (each == null) {
+    return `本大題共 ${n} 題，配分不完全相同，合計 ${total} 分。標題只寫總分，每題題號後會標出該題分數。`
+  }
+  return `本大題共 ${n} 題，每題 ${each} 分，合計 ${total} 分。標題會寫「每題 ${each} 分」。`
+}
+
 function SectionEditor({ section, index }: { section: Section; index: number }) {
   const { dispatch } = useEditor()
   const set = (patch: Partial<Section>) => dispatch({ type: 'UPDATE_SECTION', id: section.id, patch })
@@ -79,12 +146,22 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
         </div>
       </PanelSection>
 
-      <PanelSection title="文字樣式" description="大題標題與作答說明的字級、粗體會套用到整份試卷。">
-        <ExamTextStyle role="section_heading" label="大題標題" />
-        <ExamTextStyle role="instruction" label="作答說明" />
+      <PanelSection title="文字樣式" description="只影響這一大題。全卷預設在左側大綱的「全卷字級」。">
+        <FontOverrideField
+          role="section_heading"
+          label="大題標題"
+          value={section.headingStyle}
+          onChange={(headingStyle) => set({ headingStyle })}
+        />
+        <FontOverrideField
+          role="instruction"
+          label="作答說明"
+          value={section.instructionStyle}
+          onChange={(instructionStyle) => set({ instructionStyle })}
+        />
       </PanelSection>
 
-      <PanelSection title="配分" description={`本大題共 ${section.questions.length} 題，${sectionScore(section)} 分。`}>
+      <PanelSection title="配分" description={sectionScoreDescription(section)}>
         <div className="ui-grid-2 ui-grid-2--end">
           <NumberField
             label="每題預設"
@@ -387,8 +464,13 @@ function QuestionEditor({ questionId }: { questionId: string }) {
         </div>
       </PanelSection>
 
-      <PanelSection title="文字樣式" description="題號、題幹與選項共用這個字級與粗體，整份試卷一起套用。">
-        <ExamTextStyle role="question_body" label="題文" />
+      <PanelSection title="文字樣式" description="題號、題幹與選項一起套用，只影響這一題。全卷預設在左側大綱。">
+        <FontOverrideField
+          role="question_body"
+          label="題文"
+          value={q.bodyStyle}
+          onChange={(bodyStyle) => set({ bodyStyle })}
+        />
       </PanelSection>
 
       {isChoiceType(q.type) ? (

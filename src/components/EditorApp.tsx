@@ -13,14 +13,16 @@ import { InsertPanel } from './panels/InsertPanel'
 import { LayoutPanel } from './panels/LayoutPanel'
 import { OutlinePanel } from './panels/OutlinePanel'
 import { PagePanel } from './panels/PagePanel'
+import { FontPanel } from './panels/FontPanel'
 import { Icon, type IconName } from './ui'
 import './editor.css'
 
-type SideTab = 'outline' | 'layout' | 'insert' | 'page'
+type SideTab = 'outline' | 'layout' | 'font' | 'insert' | 'page'
 
 const SIDE_TABS: { id: SideTab; label: string; icon: IconName }[] = [
   { id: 'outline', label: '大綱', icon: 'outline' },
   { id: 'layout', label: '版型', icon: 'layout' },
+  { id: 'font', label: '字體', icon: 'font' },
   { id: 'insert', label: '插入', icon: 'insert' },
   { id: 'page', label: '頁面', icon: 'page' },
 ]
@@ -160,6 +162,8 @@ function EditorShell() {
                   <OutlinePanel />
                 ) : tab === 'layout' ? (
                   <LayoutPanel />
+                ) : tab === 'font' ? (
+                  <FontPanel />
                 ) : tab === 'insert' ? (
                   <InsertPanel />
                 ) : (

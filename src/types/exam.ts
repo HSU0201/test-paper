@@ -30,6 +30,12 @@ export type Figure = {
 
 export type Asset = { src: string; width: number; height: number }
 
+/** 個別字級。沒填的欄位跟隨全卷預設 */
+export type FontOverride = {
+  fontSize?: number
+  bold?: boolean
+}
+
 /** 小題（題目層） */
 export type Question = {
   id: string
@@ -42,6 +48,8 @@ export type Question = {
   /** 問答題留給學生作答的行數 */
   answerLines: number
   figures: Figure[]
+  /** 題號、題幹、選項；未設則用全卷「小題題文」 */
+  bodyStyle?: FontOverride
 }
 
 /** firstChild：標題至少與第一題同欄；whole：整個大題不跨欄 */
@@ -57,6 +65,10 @@ export type Section = {
   defaultType: QuestionType
   keepTogether: KeepTogether
   questions: Question[]
+  /** 大題標題；未設則用全卷「大題標題」 */
+  headingStyle?: FontOverride
+  /** 作答說明；未設則用全卷「作答說明」 */
+  instructionStyle?: FontOverride
 }
 
 export type QuestionNumbering = 'continuous' | 'perSection'
@@ -117,13 +129,30 @@ export function sectionHeading(s: Section, index: number): string {
   return `${toChineseNumeral(index + 1)}、${plainText(s.title)}`
 }
 
-/** 大題標題後的配分說明：每題同分時寫「每題 N 分」 */
+function questionPoints(q: Question): number {
+  const n = Number(q.score)
+  return Number.isFinite(n) ? n : 0
+}
+
+/** 大題內每題分數相同時回傳該分數；沒有小題或分數不一則為 null */
+export function uniformQuestionScore(s: Section): number | null {
+  if (!s.questions.length) return null
+  const first = questionPoints(s.questions[0])
+  return s.questions.every((q) => questionPoints(q) === first) ? first : null
+}
+
+/** 大題標題後的配分說明：每題同分時寫「每題 N 分」，否則只寫總分 */
 export function sectionScoreNote(s: Section): string {
   if (!s.questions.length) return ''
   const total = sectionScore(s)
-  const first = s.questions[0].score
-  const same = s.questions.every((q) => q.score === first)
-  return same ? `（每題 ${first} 分，共 ${total} 分）` : `（共 ${total} 分）`
+  const each = uniformQuestionScore(s)
+  return each == null ? `（共 ${total} 分）` : `（每題 ${each} 分，共 ${total} 分）`
+}
+
+/** 小題配分不同時印在題號後；全大題同分時不重複標示 */
+export function questionScoreMark(section: Section, q: Question): string {
+  if (uniformQuestionScore(section) != null) return ''
+  return `（${questionPoints(q)} 分）`
 }
 
 export function createQuestion(type: QuestionType, score: number): Question {
@@ -206,6 +235,18 @@ export function createEmptyExam(): ExamContent {
 
 const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]
 
+function normalizeFontOverride(raw: unknown): FontOverride | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const r = raw as FontOverride
+  const fontSize =
+    typeof r.fontSize === 'number' && Number.isFinite(r.fontSize)
+      ? Math.min(72, Math.max(8, Math.round(r.fontSize)))
+      : undefined
+  const bold = typeof r.bold === 'boolean' ? r.bold : undefined
+  if (fontSize == null && bold == null) return undefined
+  return { ...(fontSize != null ? { fontSize } : {}), ...(bold != null ? { bold } : {}) }
+}
+
 /** 載入檔案時補齊欄位；舊檔沒有題目資料則回傳空試卷 */
 export function normalizeExam(raw: unknown): ExamContent {
   if (!raw || typeof raw !== 'object') return createEmptyExam()
@@ -223,12 +264,15 @@ export function normalizeExam(raw: unknown): ExamContent {
         ...s,
         defaultType,
         keepTogether: s.keepTogether === 'whole' ? 'whole' : 'firstChild',
+        headingStyle: normalizeFontOverride(s.headingStyle),
+        instructionStyle: normalizeFontOverride(s.instructionStyle),
         questions: (Array.isArray(s.questions) ? s.questions : []).map((item) => {
           const type = QUESTION_TYPES.includes(item.type) ? item.type : 'single_choice'
           return {
             ...createQuestion(type, 0),
             ...item,
             type,
+            bodyStyle: normalizeFontOverride(item.bodyStyle),
             choices: (Array.isArray(item.choices) ? item.choices : []).map((c) =>
               c.image && !assets[c.image.assetId] ? { id: c.id, text: c.text } : c,
             ),

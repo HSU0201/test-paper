@@ -17,6 +17,7 @@ import {
   TEXT_PRESET_LEVEL_KEYS,
 } from '../types/document'
 import { MotionDialog } from './MotionDialog'
+import { PAPER_FONTS } from '../fonts/paperFont'
 
 function buildLevelDraft(overrides: TextLevelOverrides): Record<BuiltinTextLevelKey, TextLevelPreset> {
   const out = {} as Record<BuiltinTextLevelKey, TextLevelPreset>
@@ -26,13 +27,6 @@ function buildLevelDraft(overrides: TextLevelOverrides): Record<BuiltinTextLevel
   }
   return out
 }
-
-const FONT_PRESETS = [
-  '"Microsoft JhengHei", "PingFang TC", sans-serif',
-  '"Noto Sans TC", sans-serif',
-  'Georgia, serif',
-  'ui-monospace, Consolas, monospace',
-]
 
 export function PropertiesPanel() {
   const { state, dispatch } = useEditor()
@@ -133,17 +127,14 @@ export function PropertiesPanel() {
               })
             }
           >
-            {FONT_PRESETS.map((f) => (
-              <option key={f} value={f}>
-                {f.includes('JhengHei')
-                  ? '微軟正黑體'
-                  : f.includes('Noto')
-                    ? 'Noto Sans TC'
-                    : f.includes('Georgia')
-                      ? '襯線體'
-                      : '等寬字'}
+            {PAPER_FONTS.map((font) => (
+              <option key={font.id} value={font.family}>
+                {font.label}
               </option>
             ))}
+            {PAPER_FONTS.some((font) => font.family === obj.fontFamily) ? null : (
+              <option value={obj.fontFamily}>目前字型</option>
+            )}
           </select>
         </label>
         <label className="field">
