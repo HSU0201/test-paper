@@ -154,6 +154,7 @@ export type IconName =
   | 'plus'
   | 'fit'
   | 'grid'
+  | 'backup'
 
 const ICON_PATHS: Record<IconName, ReactNode> = {
   outline: <path d="M4 6h2M9 6h11M6 12h2M11 12h9M6 18h2M11 18h9" />,
@@ -210,6 +211,12 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
     <>
       <rect x="4" y="4" width="16" height="16" rx="1" strokeDasharray="3 3" />
       <path d="M12 4v16" strokeDasharray="3 3" />
+    </>
+  ),
+  backup: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8v4.5l2.5 1.5" />
     </>
   ),
 }

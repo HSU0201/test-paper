@@ -11,7 +11,7 @@ function timeLabel(at?: number) {
 }
 
 export function StatusBar({ onLocate }: { onLocate: (page: number) => void }) {
-  const { state, dispatch, flow, pageCount, saveStatus, pageGeometry } = useEditor()
+  const { state, dispatch, flow, pageCount, saveStatus, snapshots, pageGeometry } = useEditor()
   const [open, setOpen] = useState(false)
   const popRef = useRef<HTMLDivElement>(null)
   const totals = examTotals(state.exam)
@@ -43,6 +43,7 @@ export function StatusBar({ onLocate }: { onLocate: (page: number) => void }) {
           : saveStatus.at
             ? `已自動暫存 ${timeLabel(saveStatus.at)}`
             : '尚未暫存'
+  const backupNote = saveStatus.state !== 'loading' && snapshots.length ? ` · 備份 ${snapshots.length} 份` : ''
 
   return (
     <footer className="statusbar">
@@ -90,7 +91,10 @@ export function StatusBar({ onLocate }: { onLocate: (page: number) => void }) {
           ) : null}
         </div>
       ) : null}
-      <span className={`statusbar__save${saveStatus.state === 'error' ? ' is-error' : ''}`}>{save}</span>
+      <span className={`statusbar__save${saveStatus.state === 'error' ? ' is-error' : ''}`}>
+        {save}
+        {backupNote}
+      </span>
     </footer>
   )
 }

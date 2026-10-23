@@ -1,13 +1,15 @@
 import type Konva from 'konva'
-import { useRef, type RefObject } from 'react'
+import { useRef, useState, type RefObject } from 'react'
 import { useEditor } from '../editor/EditorContext'
 import { documentBaseName, downloadJson, readDocumentFile, serializeDocument } from '../editor/documentIO'
 import { exportStagesToPdf } from '../export/pdfFromStage'
+import { BackupDialog } from './BackupDialog'
 import { Icon } from './ui'
 
 export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null)[]> }) {
   const { state, dispatch, undo, redo, canUndo, canRedo, pageCount } = useEditor()
   const openRef = useRef<HTMLInputElement>(null)
+  const [backupOpen, setBackupOpen] = useState(false)
   const baseName = documentBaseName(state)
 
   return (
@@ -57,11 +59,15 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
           <Icon name="save" />
           儲存
         </button>
+        <button type="button" className="btn btn--ghost" title="定時備份、下載與匯入" onClick={() => setBackupOpen(true)}>
+          <Icon name="backup" />
+          備份
+        </button>
         <button
           type="button"
           className="btn btn--ghost btn--danger"
           onClick={() => {
-            if (window.confirm('確定要清空整份試卷？題目、版型與所有物件都會重設（可用復原找回）。')) dispatch({ type: 'RESET' })
+            if (window.confirm('確定要清空整份試卷？題目、版型與所有物件都會重設。清空前會先留下一份備份，也可以按復原找回。')) dispatch({ type: 'RESET' })
           }}
         >
           <Icon name="trash" />
@@ -80,6 +86,7 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
           匯出 PDF
         </button>
       </div>
+      {backupOpen ? <BackupDialog onClose={() => setBackupOpen(false)} /> : null}
     </header>
   )
 }

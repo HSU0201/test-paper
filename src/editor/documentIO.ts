@@ -26,6 +26,22 @@ export function serializeDocument(state: EditorState) {
   }
 }
 
+/** 比對兩份存檔是否相同；圖片本體不逐字比較，避免備份時整份重算太久 */
+export function documentSignature(doc: unknown): string {
+  const json = JSON.stringify(doc, (_key, value: unknown) => {
+    if (typeof value === 'string' && value.startsWith('data:') && value.length > 120) {
+      return `data:${value.length}:${value.slice(0, 48)}`
+    }
+    return value
+  })
+  let h = 2166136261
+  for (let i = 0; i < json.length; i++) {
+    h ^= json.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return `${(h >>> 0).toString(16)}:${json.length}`
+}
+
 /** 由學校名稱與試卷名稱組出檔名 */
 export function documentBaseName(state: EditorState): string {
   const valueOf = (role: string) =>
