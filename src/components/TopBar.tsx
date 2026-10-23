@@ -16,7 +16,7 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
     <header className="topbar">
       <div className="topbar__brand">
         <span className="topbar__logo" aria-hidden>
-          卷
+          <img src="/favicon.png" alt="" />
         </span>
         <div className="topbar__title">
           <span className="topbar__app">試卷編輯器</span>

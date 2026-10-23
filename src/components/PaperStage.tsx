@@ -256,6 +256,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
         }}
       >
         <div
+          className="paper-stage-scale"
           style={{
             width: pageW,
             height: pageH,

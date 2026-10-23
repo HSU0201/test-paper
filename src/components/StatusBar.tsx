@@ -3,6 +3,7 @@ import { useEditor } from '../editor/EditorContext'
 import { describeWarnings } from '../editor/warningText'
 import { examTotals } from '../types/exam'
 import { resolveSplit } from '../types/layout'
+import { APP_VERSION } from '../version'
 
 function timeLabel(at?: number) {
   if (!at) return ''
@@ -94,6 +95,9 @@ export function StatusBar({ onLocate }: { onLocate: (page: number) => void }) {
       <span className={`statusbar__save${saveStatus.state === 'error' ? ' is-error' : ''}`}>
         {save}
         {backupNote}
+      </span>
+      <span className="statusbar__version" title="應用程式版本">
+        v{APP_VERSION}
       </span>
     </footer>
   )

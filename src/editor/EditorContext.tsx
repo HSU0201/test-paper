@@ -55,6 +55,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const state = history.present
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ state: 'loading' })
   const [snapshots, setSnapshots] = useState<number[]>([])
+  /** 暫存讀取結束後才開始自動儲存；用 state 讓沒有舊稿時也會跑第一次 */
+  const [draftReady, setDraftReady] = useState(false)
   const ready = useRef(false)
   /** 載入完成當下的存檔；同一參照代表還沒有新的編輯 */
   const hydratedDoc = useRef<unknown>(undefined)
@@ -200,6 +202,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         lastSnapAt.current = Date.now()
       }
       ready.current = true
+      setDraftReady(true)
       setSaveStatus(draft ? { state: 'saved', at: draft.savedAt } : { state: 'idle' })
     })
     listSnapshots().then((keys) => {
@@ -215,13 +218,13 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (!ready.current) return
+    if (!draftReady) return
     const timer = window.setTimeout(() => {
       const doc = docRef.current
       if (doc) persistDraft(doc)
     }, AUTOSAVE_DELAY_MS)
     return () => window.clearTimeout(timer)
-  }, [docForSave, persistDraft])
+  }, [draftReady, docForSave, persistDraft])
 
   useEffect(() => {
     if (!ready.current) return

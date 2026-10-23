@@ -17,9 +17,9 @@
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
-  color-scheme: light dark;
+  color-scheme: light;
   color: var(--text);
-  background: var(--bg);
+  background: #f3e6c0;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -50,19 +50,25 @@
   }
 }
 
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #f3e6c0;
+}
+
 #root {
   width: 100%;
   max-width: 100%;
   margin: 0;
   text-align: initial;
-  min-height: 100svh;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-}
-
-body {
-  margin: 0;
 }
 
 h1,
