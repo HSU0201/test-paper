@@ -20,9 +20,10 @@ import {
 import {
   computePageGeometry,
   createCustomHeaderItem,
-  createDefaultHeader,
   createDefaultLayout,
+  headerItemHeight,
   normalizeLayout,
+  withDefaultHeaderPlacement,
   type ColumnLayout,
   type HeaderItem,
   type HeaderLayout,
@@ -127,6 +128,7 @@ export type EditorAction =
     }
   | { type: 'SET_PAPER_FONT'; fontFamily: string }
   | { type: 'UPDATE_HEADER_ITEM'; id: string; patch: Partial<Omit<HeaderItem, 'id' | 'role'>> }
+  | { type: 'UPDATE_HEADER_ITEMS'; updates: { id: string; patch: Partial<Omit<HeaderItem, 'id' | 'role'>> }[] }
   | { type: 'ADD_HEADER_ITEM' }
   | { type: 'REMOVE_HEADER_ITEM'; id: string }
   | { type: 'SET_HEADER'; patch: Partial<Omit<HeaderLayout, 'items'>> }
@@ -499,9 +501,23 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     case 'SET_ACTIVE_PAGE':
       return state.activePage === action.page ? state : { ...state, activePage: action.page }
     case 'UPDATE_HEADER_ITEM':
+      return withHeader(state, (h) => {
+        const items = h.items.map((it) => (it.id === action.id ? { ...it, ...action.patch } : it))
+        const shown = items.find((it) => it.id === action.id)
+        let height = h.height
+        if (shown?.visible) {
+          const bottom = shown.y + headerItemHeight(shown) + 8
+          if (bottom > height) height = Math.min(400, Math.ceil(bottom))
+        }
+        return { ...h, height, items }
+      })
+    case 'UPDATE_HEADER_ITEMS':
       return withHeader(state, (h) => ({
         ...h,
-        items: h.items.map((it) => (it.id === action.id ? { ...it, ...action.patch } : it)),
+        items: h.items.map((it) => {
+          const update = action.updates.find((u) => u.id === it.id)
+          return update ? { ...it, ...update.patch } : it
+        }),
       }))
     case 'ADD_HEADER_ITEM': {
       const item = createCustomHeaderItem(Math.max(0, state.layout.header.height - 22))
@@ -523,16 +539,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     }
     case 'SET_HEADER':
       return withHeader(state, (h) => ({ ...h, ...action.patch }))
-    case 'RESET_HEADER_LAYOUT': {
-      const defaults = createDefaultHeader()
-      const old = state.layout.header
-      const items = defaults.items.map((d) => {
-        const prev = old.items.find((it) => it.role === d.role)
-        return prev ? { ...d, id: prev.id, label: prev.label, value: prev.value, visible: prev.visible } : d
-      })
-      const customs = old.items.filter((it) => it.role === 'custom')
-      return withHeader(state, () => ({ ...defaults, items: [...items, ...customs] }))
-    }
+    case 'RESET_HEADER_LAYOUT':
+      return withHeader(state, (h) => withDefaultHeaderPlacement(h))
     case 'SET_COLUMNS':
       return {
         ...state,

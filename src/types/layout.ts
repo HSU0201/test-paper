@@ -13,6 +13,7 @@ export type HeaderRole =
   | 'duration'
   | 'totalScore'
   | 'teacher'
+  | 'parentSign'
   | 'custom'
 
 export type HeaderAlign = 'left' | 'center' | 'right'
@@ -88,23 +89,25 @@ export const HEADER_ROLE_LABEL: Record<HeaderRole, string> = {
   examDate: '日期',
   duration: '作答時間',
   totalScore: '滿分',
-  teacher: '出題老師',
+  teacher: '出題者',
+  parentSign: '家長簽名',
   custom: '自訂欄位',
 }
 
 type Seed = Omit<HeaderItem, 'id' | 'label' | 'fill'> & { label?: string }
 
 const DEFAULT_ITEMS: Seed[] = [
-  { role: 'schoolName', value: '○○市立○○國民中學', showLabel: false, visible: true, xr: 0, wr: 1, y: 0, fontSize: 24, bold: true, align: 'center' },
-  { role: 'examTitle', value: '115 學年度第一學期 第一次段考', showLabel: false, visible: true, xr: 0, wr: 1, y: 34, fontSize: 17, bold: false, align: 'center' },
-  { role: 'subject', value: '數學', showLabel: true, visible: true, xr: 0, wr: 0.16, y: 66, fontSize: 14, bold: false, align: 'left' },
-  { role: 'classInfo', value: '', showLabel: true, visible: false, xr: 0.16, wr: 0.18, y: 66, fontSize: 14, bold: false, align: 'left' },
-  { role: 'seatNo', value: '', showLabel: true, visible: false, xr: 0.34, wr: 0.15, y: 66, fontSize: 14, bold: false, align: 'left' },
-  { role: 'studentName', value: '', showLabel: true, visible: false, xr: 0.49, wr: 0.25, y: 66, fontSize: 14, bold: false, align: 'left' },
-  { role: 'teacher', value: '○○○ 老師', showLabel: true, visible: true, xr: 0.74, wr: 0.26, y: 66, fontSize: 14, bold: false, align: 'right' },
-  { role: 'examDate', value: '', showLabel: true, visible: false, xr: 0, wr: 0.3, y: 88, fontSize: 13, bold: false, align: 'left' },
-  { role: 'duration', value: '', showLabel: true, visible: false, xr: 0.35, wr: 0.3, y: 88, fontSize: 13, bold: false, align: 'center' },
-  { role: 'totalScore', value: '', showLabel: true, visible: false, xr: 0.7, wr: 0.3, y: 88, fontSize: 13, bold: false, align: 'right' },
+  { role: 'schoolName', value: '臺中市烏日區中興國民小學', showLabel: false, visible: true, xr: 0, wr: 1, y: 0, fontSize: 20, bold: true, align: 'center' },
+  { role: 'examTitle', value: '115 學年度第一學期二年級數學第一次定期評量', showLabel: false, visible: true, xr: 0, wr: 1, y: 0, fontSize: 20, bold: true, align: 'center' },
+  { role: 'teacher', label: '出題者', value: '陳大師 老師', showLabel: true, visible: true, xr: 0.02, wr: 0.24, y: 40, fontSize: 16, bold: false, align: 'left' },
+  { role: 'classInfo', value: '二年甲班', showLabel: false, visible: true, xr: 0.28, wr: 0.12, y: 40, fontSize: 16, bold: false, align: 'left' },
+  { role: 'studentName', value: '', showLabel: true, visible: true, xr: 0.42, wr: 0.27, y: 40, fontSize: 16, bold: false, align: 'left' },
+  { role: 'parentSign', label: '家長簽名', value: '', showLabel: true, visible: true, xr: 0.71, wr: 0.27, y: 40, fontSize: 16, bold: false, align: 'left' },
+  { role: 'subject', value: '數學', showLabel: true, visible: false, xr: 0.02, wr: 0.18, y: 74, fontSize: 16, bold: false, align: 'left' },
+  { role: 'seatNo', value: '', showLabel: true, visible: false, xr: 0.22, wr: 0.16, y: 74, fontSize: 16, bold: false, align: 'left' },
+  { role: 'examDate', value: '', showLabel: true, visible: false, xr: 0.4, wr: 0.22, y: 74, fontSize: 16, bold: false, align: 'left' },
+  { role: 'duration', value: '', showLabel: true, visible: false, xr: 0.64, wr: 0.18, y: 74, fontSize: 16, bold: false, align: 'left' },
+  { role: 'totalScore', value: '', showLabel: true, visible: false, xr: 0.84, wr: 0.14, y: 74, fontSize: 16, bold: false, align: 'left' },
 ]
 
 const HEADER_TEXT_COLOR = '#000000'
@@ -135,7 +138,76 @@ export function createCustomHeaderItem(y: number): HeaderItem {
 }
 
 export function createDefaultHeader(): HeaderLayout {
-  return { height: 92, rule: true, repeat: false, items: DEFAULT_ITEMS.map(createHeaderItem) }
+  return { height: 74, rule: true, repeat: false, items: DEFAULT_ITEMS.map(createHeaderItem) }
+}
+
+const TITLE_BAND_ROLES = new Set<HeaderRole>(['schoolName', 'examTitle'])
+
+/**
+ * 學校名稱與試卷名稱同一列、幾乎整行寬時，合成一行置中標題。
+ * 把寬度拉到 85% 以下，或拖離同一列，就恢復各自排版。字級與粗體仍各自生效。
+ */
+export function titleBandItems(items: HeaderItem[]): HeaderItem[] | null {
+  const mates = items.filter((it) => it.visible && TITLE_BAND_ROLES.has(it.role))
+  if (!mates.length) return null
+  const y0 = mates[0].y
+  if (!mates.every((it) => Math.abs(it.y - y0) <= 4 && it.wr >= 0.85)) return null
+  const order: HeaderRole[] = ['schoolName', 'examTitle']
+  return [...mates].sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role))
+}
+
+/** 舊版預設文字。還原版型或升級舊檔時，沒改過的欄位才換成現在的範例 */
+const LEGACY_HEADER_VALUE: Partial<Record<HeaderRole, string>> = {
+  schoolName: '○○市立○○國民中學',
+  examTitle: '115 學年度第一學期 第一次段考',
+  subject: '數學',
+  teacher: '○○○ 老師',
+}
+
+const LEGACY_HEADER_LABEL: Partial<Record<HeaderRole, string>> = {
+  teacher: '出題老師',
+}
+
+/** 還沒有家長簽名，或仍是第一版橫排座標時，套上目前的頁首位置 */
+function headerNeedsBannerPlacement(header: HeaderLayout): boolean {
+  if (!header.items.some((it) => it.role === 'parentSign')) return true
+  const teacher = header.items.find((it) => it.role === 'teacher')
+  const name = header.items.find((it) => it.role === 'studentName')
+  const school = header.items.find((it) => it.role === 'schoolName')
+  const title = header.items.find((it) => it.role === 'examTitle')
+  const oldInfoRow = teacher?.y === 38 && teacher.xr === 0.02 && teacher.wr === 0.26 && name?.xr === 0.43 && name.wr === 0.24
+  const smallTitle = school?.fontSize === 16 && !school.bold && title?.fontSize === 16 && !title.bold && school.y === 10
+  const overflowTitle = school?.fontSize === 22 && school.bold && title?.fontSize === 22 && title.bold && school.y === 0
+  return oldInfoRow || smallTitle || overflowTitle
+}
+
+/** 套用目前的頁首位置，已改過的文字與自訂欄位保留 */
+export function withDefaultHeaderPlacement(old: HeaderLayout): HeaderLayout {
+  const defaults = createDefaultHeader()
+  const items = defaults.items.map((d) => {
+    const prev = old.items.find((it) => it.role === d.role)
+    if (!prev) return d
+    const legacyValue = LEGACY_HEADER_VALUE[d.role]
+    const valueIsLegacy = legacyValue !== undefined ? prev.value === legacyValue : prev.value.trim() === ''
+    const value = valueIsLegacy ? d.value : prev.value
+    const label =
+      prev.label === d.label || prev.label === HEADER_ROLE_LABEL[d.role] || prev.label === LEGACY_HEADER_LABEL[d.role]
+        ? d.label
+        : prev.label
+    const visible = d.visible || (!valueIsLegacy && prev.visible)
+    return { ...d, id: prev.id, value, label, visible }
+  })
+  const customs = old.items.filter((it) => it.role === 'custom')
+  const placed = [...items, ...customs]
+  const bottom = placed
+    .filter((it) => it.visible)
+    .reduce((max, it) => Math.max(max, it.y + Math.ceil(it.fontSize * 1.4) + 6), defaults.height)
+  return {
+    height: Math.min(400, Math.max(defaults.height, Math.ceil(bottom))),
+    rule: old.rule,
+    repeat: old.repeat,
+    items: placed,
+  }
 }
 
 export function createDefaultLayout(): PaperLayout {
@@ -193,6 +265,7 @@ export function normalizeLayout(raw: unknown): PaperLayout {
       repeat: h.repeat ?? false,
       items: (h.items ?? []).map((it) => ({ ...createHeaderItem({ ...DEFAULT_ITEMS[0], role: 'custom' }), ...it })),
     }
+    if (headerNeedsBannerPlacement(header)) header = withDefaultHeaderPlacement(header)
   } else if (rh) {
     const legacy = rh as LegacyHeader
     header = {

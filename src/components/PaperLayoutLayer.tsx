@@ -7,7 +7,7 @@ import { snapBoxPosition, type SnapGuides } from '../editor/snap'
 import { measureText } from '../editor/konvaMeasure'
 import { layoutRichLines, paintText, plainText } from '../editor/richText'
 import { EDITOR_GUIDE } from '../editor/theme'
-import { headerItemHeight, headerItemText, verticalHeaderText, type HeaderItem, type HeaderLayout, type PageGeometry } from '../types/layout'
+import { headerItemHeight, headerItemText, titleBandItems, verticalHeaderText, type HeaderItem, type HeaderLayout, type PageGeometry } from '../types/layout'
 
 export const EDITOR_ONLY_NAME = 'editor-only'
 export const HEADER_REF_PREFIX = 'hdr:'
@@ -100,6 +100,44 @@ function HeaderInk({
   )
 }
 
+function textWidth(fontFamily: string, text: string, fontSize: number, bold: boolean): number {
+  return measureText(fontFamily, text, 10000, { fontSize, fill: '#000000', bold }, 1).naturalWidth
+}
+
+/** 標題列：學校名稱與試卷名稱排成一行，置中。字級與粗體沿用各欄位自己的設定 */
+function layoutTitleBand(items: HeaderItem[], box: Box, vertical: boolean, fontFamily: string): Map<string, Box> {
+  const band = titleBandItems(items)
+  const boxes = new Map<string, Box>()
+  if (!band) return boxes
+  const filled = band
+    .map((it) => ({ it, text: paintText(headerItemText(it)).text }))
+    .filter((p) => p.text)
+  const parts = filled.length ? filled : band.map((it) => ({ it, text: `（${plainText(it.label)}）` }))
+  const lineH = Math.max(...parts.map((p) => headerItemHeight(p.it)))
+  if (vertical) {
+    const step = Math.max(...parts.map((p) => p.it.fontSize)) * 1.15
+    const heights = parts.map((p) => Math.max(step, [...p.text].length * step))
+    const total = heights.reduce((sum, h) => sum + h, 0)
+    let y = box.y + Math.max(0, (box.h - total) / 2)
+    const x = box.x + box.w - band[0].y - lineH
+    parts.forEach((p, i) => {
+      boxes.set(p.it.id, { x, y, w: lineH, h: heights[i] })
+      y += heights[i]
+    })
+    return boxes
+  }
+  const gap = Math.round(Math.max(...parts.map((p) => p.it.fontSize)) * 0.35)
+  const widths = parts.map((p) => textWidth(fontFamily, p.text, p.it.fontSize, p.it.bold) + 2)
+  const total = widths.reduce((sum, w) => sum + w, 0) + gap * Math.max(0, parts.length - 1)
+  let x = box.x + Math.max(0, (box.w - total) / 2)
+  const y = box.y + band[0].y
+  parts.forEach((p, i) => {
+    boxes.set(p.it.id, { x, y, w: widths[i], h: lineH })
+    x += widths[i] + gap
+  })
+  return boxes
+}
+
 type HeaderItemsLayerProps = {
   header: HeaderLayout
   box: Box
@@ -133,7 +171,13 @@ export function HeaderItemsLayer({
 }: HeaderItemsLayerProps) {
   const visible = header.items.filter((it) => it.visible)
   const inkRefs = useRef(new Map<string, Konva.Group>())
+  const nodeRefs = useRef(new Map<string, Konva.Text>())
+  const ruleRefs = useRef(new Map<string, Konva.Line>())
+  const titleLayout = layoutTitleBand(header.items, box, vertical, fontFamily)
+  const band = titleBandItems(header.items)
   const itemBox = (id: string): Box | null => {
+    const preset = titleLayout.get(id)
+    if (preset) return preset
     const it = header.items.find((x) => x.id === id)
     if (!it) return null
     const col = headerItemHeight(it)
@@ -151,18 +195,36 @@ export function HeaderItemsLayer({
     y: Math.max(box.y, Math.min(y, box.y + Math.max(0, box.h - h))),
   })
 
+  const moveBand = (draggedId: string, y: number, xForVertical: number | null) => {
+    if (!band) return
+    for (const item of band) {
+      const node = nodeRefs.current.get(item.id)
+      const home = titleLayout.get(item.id)
+      if (!node || !home) continue
+      if (vertical) node.position({ x: xForVertical ?? home.x, y: home.y })
+      else node.position({ x: home.x, y })
+      if (item.id !== draggedId) inkRefs.current.get(item.id)?.position({ x: node.x(), y: node.y() })
+    }
+  }
+
   return (
     <Group>
       {visible.map((it) => {
+        if (band?.some((item) => item.id === it.id) && !titleLayout.has(it.id)) return null
         const b = itemBox(it.id)!
         const text = headerItemText(it, vertical ? b.h / 1.15 : b.w)
         const painted = paintText(text)
-        const shown = vertical && painted.text ? verticalHeaderText(painted.text) : painted.text
-        const colored = !!painted.colors?.some(Boolean)
+        const blankAt = !vertical && it.align === 'left' ? painted.text.indexOf('＿') : -1
+        const blankLabel = blankAt >= 0 ? painted.text.slice(0, blankAt) : painted.text
+        const blankWidth = blankAt >= 0 ? textWidth(fontFamily, blankLabel, it.fontSize, it.bold) : 0
+        const inkPainted = blankAt >= 0 ? { text: blankLabel, colors: painted.colors?.slice(0, [...blankLabel].length) } : painted
+        const shown = vertical && painted.text ? verticalHeaderText(painted.text) : blankAt >= 0 ? blankLabel : painted.text
+        const colored = !!inkPainted.colors?.some(Boolean)
         const isPlaceholder = !text
         const isSel = selectedId === it.id
         const syncInk = (n: Konva.Node) => {
           inkRefs.current.get(it.id)?.setAttrs({ x: n.x(), y: n.y(), scaleX: n.scaleX(), scaleY: n.scaleY() })
+          ruleRefs.current.get(it.id)?.position({ x: n.x(), y: n.y() })
         }
         return (
           <Group key={it.id}>
@@ -189,11 +251,29 @@ export function HeaderItemsLayer({
                 y={b.y}
                 listening={false}
               >
-                <HeaderInk box={b} item={it} painted={painted} vertical={vertical} fontFamily={fontFamily} />
+                <HeaderInk box={{ ...b, w: blankAt >= 0 ? blankWidth : b.w }} item={it} painted={inkPainted} vertical={vertical} fontFamily={fontFamily} />
               </Group>
             ) : null}
+            {blankAt >= 0 ? (
+              <Line
+                ref={(n) => {
+                  if (n) ruleRefs.current.set(it.id, n)
+                  else ruleRefs.current.delete(it.id)
+                }}
+                x={b.x}
+                y={b.y}
+                points={[blankWidth + 2, it.fontSize * 0.92, Math.max(blankWidth + 8, b.w - 1), it.fontSize * 0.92]}
+                stroke="#000000"
+                strokeWidth={1}
+                listening={false}
+              />
+            ) : null}
             <Text
-              ref={registerRef(`${HEADER_REF_PREFIX}${it.id}`) as (n: Konva.Text | null) => void}
+              ref={(n) => {
+                if (n) nodeRefs.current.set(it.id, n)
+                else nodeRefs.current.delete(it.id)
+                registerRef(`${HEADER_REF_PREFIX}${it.id}`)(n)
+              }}
               name={isPlaceholder ? EDITOR_ONLY_NAME : undefined}
               x={b.x}
               y={b.y}
@@ -208,7 +288,7 @@ export function HeaderItemsLayer({
               verticalAlign={vertical ? (it.align === 'left' ? 'top' : it.align === 'right' ? 'bottom' : 'middle') : 'middle'}
               lineHeight={vertical ? 1.15 : 1}
               wrap="none"
-              ellipsis={!vertical}
+              ellipsis={!vertical && !titleLayout.has(it.id)}
               draggable={interactive}
               listening={interactive}
               onMouseDown={(e) => {
@@ -218,6 +298,17 @@ export function HeaderItemsLayer({
               onTap={() => dispatch({ type: 'SELECT_BLOCK', ref: { kind: 'header', id: it.id } })}
               onDragMove={(e) => {
                 const n = e.target
+                if (titleLayout.has(it.id)) {
+                  if (vertical) {
+                    const x = Math.max(box.x, Math.min(n.x(), box.x + box.w - b.w))
+                    moveBand(it.id, b.y, x)
+                  } else {
+                    const y = Math.max(box.y, Math.min(n.y(), box.y + Math.max(0, box.h - b.h)))
+                    moveBand(it.id, y, null)
+                  }
+                  syncInk(n)
+                  return
+                }
                 syncInk(n)
                 const r = snapBoxPosition({ x: n.x(), y: n.y(), w: b.w, h: b.h }, otherBoxes(it.id), pageW, pageH)
                 n.position(clampToHeader(r.x, r.y, b.w, b.h))
@@ -227,6 +318,13 @@ export function HeaderItemsLayer({
               onDragEnd={(e) => {
                 const n = e.target
                 clearGuides()
+                if (band && titleLayout.has(it.id)) {
+                  const y = vertical
+                    ? Math.max(0, Math.round(box.x + box.w - n.x() - b.w))
+                    : Math.max(0, Math.min(Math.round(n.y() - box.y), Math.max(0, box.h - b.h)))
+                  dispatch({ type: 'UPDATE_HEADER_ITEMS', updates: band.map((item) => ({ id: item.id, patch: { y } })) })
+                  return
+                }
                 dispatch({
                   type: 'UPDATE_HEADER_ITEM',
                   id: it.id,

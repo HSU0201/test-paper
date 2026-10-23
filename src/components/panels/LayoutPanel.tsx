@@ -104,7 +104,7 @@ export function LayoutPanel() {
         description={
           landscape
             ? '橫向紙張的頁首改放在最右側，文字由上往下直排。拖曳可調整位置，上下把手調整長度。'
-            : '在紙張上可直接拖曳頁首文字調整位置、拉兩側把手改寬度；點選後右側可改字級與對齊。'
+            : '學校名稱和試卷名稱同一列、幾乎整行寬時，會合成一行置中標題。字級與粗體可在右側調整。其他欄位可直接拖曳，兩側把手改寬度。'
         }
         actions={
           <button type="button" className="text-btn" onClick={() => dispatch({ type: 'RESET_HEADER_LAYOUT' })}>

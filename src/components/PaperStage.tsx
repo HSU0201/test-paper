@@ -26,6 +26,7 @@ import type { EditorAction } from '../editor/reducer'
 import { getBoundingBox, lineSegmentBox, type Box } from '../editor/bounds'
 import { snapBoxPosition, type SnapGuides } from '../editor/snap'
 import type { CanvasObject, ImageObject, LineObject } from '../types/document'
+import { titleBandItems } from '../types/layout'
 
 type PaperStageProps = {
   pageIndex: number
@@ -165,7 +166,9 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
       const header = state.selectedBlock?.kind === 'header' ? state.selectedBlock.id : null
       if (header) {
         const hn = shapeRefs.current[`${HEADER_REF_PREFIX}${header}`]
-        tr.nodes(hn ? [hn] : [])
+        const band = titleBandItems(state.layout.header.items)
+        const bandLocked = !!band?.some((it) => it.id === header)
+        tr.nodes(bandLocked || !hn ? [] : [hn])
         tr.enabledAnchors(geometry.headerVertical ? ['top-center', 'bottom-center'] : ['middle-left', 'middle-right'])
         tr.rotateEnabled(false)
         tr.getLayer()?.batchDraw()
