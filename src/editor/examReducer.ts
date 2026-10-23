@@ -145,9 +145,7 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
       const section = exam.sections.find((s) => s.id === action.sectionId)
       if (!section) return state
       const after = action.afterId ? section.questions.findIndex((x) => x.id === action.afterId) : -1
-      const template = after >= 0 ? section.questions[after] : null
-      const nq = createQuestion(template?.type ?? section.defaultType, template?.score ?? section.defaultScore)
-      if (template) nq.choiceLayout = template.choiceLayout
+      const nq = createQuestion(section.defaultType, section.defaultScore)
       const questions = [...section.questions]
       questions.splice(after >= 0 ? after + 1 : questions.length, 0, nq)
       return {
