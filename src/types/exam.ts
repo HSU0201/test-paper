@@ -16,8 +16,11 @@ export type ChoiceImage = { assetId: string; widthRatio: number }
 
 export type Choice = { id: string; text: string; image?: ChoiceImage }
 
-/** below：題目下方；right：題目右側（文字繞排）；afterChoices：選項之後 */
-export type FigurePlacement = 'below' | 'right' | 'afterChoices'
+/** below：題幹之後；middle：題幹文字中間；right：題目右側；afterChoices：選項之後 */
+export type FigurePlacement = 'below' | 'middle' | 'right' | 'afterChoices'
+
+/** 題目文字裡的插圖位置。排版時會拿掉，不會印出來。 */
+export const FIGURE_MARK = '［圖］'
 
 /** 題目內的圖片，跟著題目一起排版、移動 */
 export type Figure = {
@@ -26,7 +29,17 @@ export type Figure = {
   placement: FigurePlacement
   /** 佔題目內容寬度的比例 */
   widthRatio: number
+  /** 0 靠左、1 靠右。未設時，文字中間靠左，其餘置中 */
+  align?: number
+  /**
+   * 文中：圖片前面留幾行題幹（直排則是幾個字）。0 表示題幹最前面。
+   * 在卷面上上下拖曳圖片會改這個值。
+   */
+  afterLine?: number
 }
+
+/** each：每題配分；blank：每格固定分數，各題格數可以不同 */
+export type ScoreMode = 'each' | 'blank'
 
 export type Asset = { src: string; width: number; height: number }
 
@@ -48,6 +61,11 @@ export type Question = {
   /** 問答題留給學生作答的行數 */
   answerLines: number
   figures: Figure[]
+  /**
+   * 每格計分時的格數。未設則依題幹裡的（ ）與底線計算，
+   * 所以第一題 5 格、第二題 4 格可以各自對上。
+   */
+  blanks?: number
   /** 題號、題幹、選項；未設則用全卷「小題題文」 */
   bodyStyle?: FontOverride
 }
@@ -62,6 +80,10 @@ export type Section = {
   instruction: string
   /** 新增小題時的預設配分 */
   defaultScore: number
+  /** 配分寫在大題標題最後：每題，或每格固定分數 */
+  scoreMode: ScoreMode
+  /** 每格幾分。scoreMode 為 blank 時使用 */
+  blankScore: number
   defaultType: QuestionType
   keepTogether: KeepTogether
   questions: Question[]
@@ -100,8 +122,31 @@ export function choiceLabel(index: number): string {
   return `(${String.fromCharCode(65 + index)})`
 }
 
+/** 題幹裡一個（ ）或一段底線算一格 */
+export function countAnswerBlanks(stem: string): number {
+  const text = plainText(stem).replaceAll(FIGURE_MARK, '')
+  return text.match(/（[\s　]*）|\([\s]*\)|＿{2,}|_{2,}/g)?.length ?? 0
+}
+
+export function questionBlankCount(q: Question): number {
+  if (typeof q.blanks === 'number' && Number.isFinite(q.blanks)) return Math.max(0, Math.round(q.blanks))
+  return countAnswerBlanks(q.stem)
+}
+
+export function sectionBlankUnit(s: Section): number {
+  const n = Number(s.blankScore)
+  return Number.isFinite(n) ? n : 0
+}
+
+/** 這一題實際占的分數。每格計分時是格數乘以每格分數 */
+export function questionPoints(s: Section, q: Question): number {
+  if (s.scoreMode === 'blank') return questionBlankCount(q) * sectionBlankUnit(s)
+  const n = Number(q.score)
+  return Number.isFinite(n) ? n : 0
+}
+
 export function sectionScore(s: Section): number {
-  return s.questions.reduce((sum, q) => sum + (Number(q.score) || 0), 0)
+  return s.questions.reduce((sum, q) => sum + questionPoints(s, q), 0)
 }
 
 export function examTotals(exam: ExamContent) {
@@ -129,30 +174,88 @@ export function sectionHeading(s: Section, index: number): string {
   return `${toChineseNumeral(index + 1)}、${plainText(s.title)}`
 }
 
-function questionPoints(q: Question): number {
+function storedScore(q: Question): number {
   const n = Number(q.score)
   return Number.isFinite(n) ? n : 0
 }
 
-/** 大題內每題分數相同時回傳該分數；沒有小題或分數不一則為 null */
+/** 大題內每題分數相同時回傳該分數；沒有小題或分數不一則為 null。每格計分不走這條 */
 export function uniformQuestionScore(s: Section): number | null {
-  if (!s.questions.length) return null
-  const first = questionPoints(s.questions[0])
-  return s.questions.every((q) => questionPoints(q) === first) ? first : null
+  if (s.scoreMode === 'blank' || !s.questions.length) return null
+  const first = storedScore(s.questions[0])
+  return s.questions.every((q) => storedScore(q) === first) ? first : null
 }
 
-/** 大題標題後的配分說明：每題同分時寫「每題 N 分」，否則只寫總分 */
+/**
+ * 配分一律接在大題標題最後。
+ * 每格固定分數時寫「每格N分・共T分」，即使各題格數不同也不拆開。
+ */
 export function sectionScoreNote(s: Section): string {
   if (!s.questions.length) return ''
   const total = sectionScore(s)
+  if (s.scoreMode === 'blank') return `（每格${sectionBlankUnit(s)}分・共${total}分）`
   const each = uniformQuestionScore(s)
   return each == null ? `（共 ${total} 分）` : `（每題 ${each} 分，共 ${total} 分）`
 }
 
-/** 小題配分不同時印在題號後；全大題同分時不重複標示 */
+/**
+ * 小題配分不同時印在題號後。
+ * 每格固定分數時各題總分可能不同（5 格、4 格），這種情況不列在題號前。
+ */
 export function questionScoreMark(section: Section, q: Question): string {
+  if (section.scoreMode === 'blank') return ''
   if (uniformQuestionScore(section) != null) return ''
-  return `（${questionPoints(q)} 分）`
+  return `（${storedScore(q)} 分）`
+}
+
+function tidySegment(text: string, index: number, count: number): string {
+  let t = text
+  if (index > 0) t = t.replace(/^\n/, '')
+  if (index < count - 1) t = t.replace(/\n$/, '')
+  return t
+}
+
+/**
+ * 題幹怎麼被「文字中間」的圖切開。
+ * parts 是要印出的文字；slots[i] 是這段文字後面要放幾張圖。
+ * 有［圖］就依標記切開；沒有標記時，有圖就放在第一行後面。
+ */
+export function planStemFigures(stem: string, middleCount: number): { parts: string[]; slots: number[] } {
+  const count = Math.max(0, middleCount)
+  if (stem.includes(FIGURE_MARK)) {
+    const raw = stem.split(FIGURE_MARK)
+    const parts = raw.map((p, i) => tidySegment(p, i, raw.length))
+    const slots: number[] = parts.map((_, i) => (i < parts.length - 1 ? 1 : 0))
+    const gaps = parts.length - 1
+    if (count > gaps) {
+      if (gaps > 0) slots[gaps - 1] += count - gaps
+      else slots[0] = count
+    } else {
+      for (let i = count; i < gaps; i++) slots[i] = 0
+    }
+    return { parts, slots }
+  }
+  if (count > 0) {
+    const nl = stem.indexOf('\n')
+    if (nl >= 0) return { parts: [stem.slice(0, nl), stem.slice(nl + 1)], slots: [count, 0] }
+    return { parts: [stem], slots: [count] }
+  }
+  return { parts: [stem], slots: [0] }
+}
+
+/** 讓題幹至少有 count 個［圖］。多的不刪，方便使用者自己搬位置。 */
+export function ensureFigureMarks(stem: string, count: number): string {
+  let next = stem
+  let have = next.split(FIGURE_MARK).length - 1
+  while (have < count) {
+    if (!next.trim()) next = FIGURE_MARK
+    else {
+      const nl = next.indexOf('\n')
+      next = nl < 0 ? `${next}\n${FIGURE_MARK}\n` : `${next.slice(0, nl)}\n${FIGURE_MARK}${next.slice(nl)}`
+    }
+    have += 1
+  }
+  return next
 }
 
 export function createQuestion(type: QuestionType, score: number): Question {
@@ -180,6 +283,8 @@ export function createSection(title = '新大題', defaultType: QuestionType = '
     title,
     instruction: '',
     defaultScore: 2,
+    scoreMode: 'each',
+    blankScore: 2,
     defaultType,
     keepTogether: 'firstChild',
     questions: [],
@@ -234,6 +339,33 @@ export function createEmptyExam(): ExamContent {
 }
 
 const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]
+const FIGURE_PLACEMENTS: FigurePlacement[] = ['below', 'middle', 'right', 'afterChoices']
+
+function clampScore(n: unknown, fallback: number): number {
+  const v = typeof n === 'number' && Number.isFinite(n) ? n : fallback
+  return Math.min(100, Math.max(0, Math.round(v)))
+}
+
+function normalizeFigure(f: Figure | undefined, assets: Record<string, Asset>): Figure | null {
+  if (!f?.assetId || !assets[f.assetId]) return null
+  const placement = FIGURE_PLACEMENTS.includes(f.placement) ? f.placement : 'below'
+  const widthRatio =
+    typeof f.widthRatio === 'number' && Number.isFinite(f.widthRatio) ? Math.min(1, Math.max(0.15, f.widthRatio)) : 0.6
+  const align =
+    typeof f.align === 'number' && Number.isFinite(f.align) ? Math.min(1, Math.max(0, f.align)) : undefined
+  const afterLine =
+    placement === 'middle' && typeof f.afterLine === 'number' && Number.isFinite(f.afterLine)
+      ? Math.max(0, Math.round(f.afterLine))
+      : undefined
+  return {
+    id: f.id || crypto.randomUUID(),
+    assetId: f.assetId,
+    placement,
+    widthRatio,
+    ...(align != null ? { align } : {}),
+    ...(afterLine != null ? { afterLine } : {}),
+  }
+}
 
 function normalizeFontOverride(raw: unknown): FontOverride | undefined {
   if (!raw || typeof raw !== 'object') return undefined
@@ -264,19 +396,28 @@ export function normalizeExam(raw: unknown): ExamContent {
         ...s,
         defaultType,
         keepTogether: s.keepTogether === 'whole' ? 'whole' : 'firstChild',
+        scoreMode: s.scoreMode === 'blank' ? 'blank' : 'each',
+        blankScore: clampScore(s.blankScore, clampScore(s.defaultScore, base.defaultScore)),
         headingStyle: normalizeFontOverride(s.headingStyle),
         instructionStyle: normalizeFontOverride(s.instructionStyle),
         questions: (Array.isArray(s.questions) ? s.questions : []).map((item) => {
           const type = QUESTION_TYPES.includes(item.type) ? item.type : 'single_choice'
+          const blanks =
+            typeof item.blanks === 'number' && Number.isFinite(item.blanks)
+              ? Math.min(30, Math.max(0, Math.round(item.blanks)))
+              : undefined
           return {
             ...createQuestion(type, 0),
             ...item,
             type,
+            blanks,
             bodyStyle: normalizeFontOverride(item.bodyStyle),
             choices: (Array.isArray(item.choices) ? item.choices : []).map((c) =>
               c.image && !assets[c.image.assetId] ? { id: c.id, text: c.text } : c,
             ),
-            figures: (Array.isArray(item.figures) ? item.figures : []).filter((f) => f && assets[f.assetId]),
+            figures: (Array.isArray(item.figures) ? item.figures : [])
+              .map((f) => normalizeFigure(f, assets))
+              .filter((f): f is Figure => !!f),
           }
         }),
       }

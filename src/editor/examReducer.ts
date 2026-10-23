@@ -272,14 +272,33 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
         exam: mapQuestion(withAsset, action.questionId, (q) => ({ ...q, figures: [...q.figures, figure] })),
       }
     }
-    case 'UPDATE_FIGURE':
-      return {
-        ...state,
-        exam: mapQuestion(exam, action.questionId, (q) => ({
-          ...q,
-          figures: q.figures.map((f) => (f.id === action.figureId ? { ...f, ...action.patch } : f)),
-        })),
-      }
+    case 'UPDATE_FIGURE': {
+      let changed = false
+      const examNext = mapQuestion(exam, action.questionId, (q) => ({
+        ...q,
+        figures: q.figures.map((f) => {
+          if (f.id !== action.figureId) return f
+          const next: Figure = { ...f, ...action.patch }
+          if (next.placement !== 'middle') delete next.afterLine
+          else {
+            if (f.placement !== 'middle' && next.align == null) next.align = 0
+            if (typeof next.afterLine !== 'number') next.afterLine = 1
+          }
+          if (
+            next.placement === f.placement &&
+            next.widthRatio === f.widthRatio &&
+            next.align === f.align &&
+            next.afterLine === f.afterLine
+          ) {
+            return f
+          }
+          changed = true
+          return next
+        }),
+      }))
+      if (!changed) return state
+      return { ...state, exam: examNext }
+    }
     case 'REMOVE_FIGURE': {
       const hit = findQuestion(exam, action.questionId)
       const fig = hit?.question.figures.find((f) => f.id === action.figureId)

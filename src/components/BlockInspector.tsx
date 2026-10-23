@@ -8,7 +8,10 @@ import {
   type FigurePlacement,
   isChoiceType,
   QUESTION_TYPE_LABEL,
+  questionBlankCount,
   questionNumbers,
+  questionPoints,
+  sectionBlankUnit,
   sectionHeading,
   sectionScore,
   uniformQuestionScore,
@@ -16,6 +19,7 @@ import {
   type ChoiceLayout,
   type FontOverride,
   type QuestionType,
+  type ScoreMode,
   type Section,
 } from '../types/exam'
 import { Icon, NumberField, PanelSection, Segmented, Switch } from './ui'
@@ -116,11 +120,15 @@ function sectionScoreDescription(section: Section): string {
   const n = section.questions.length
   const total = sectionScore(section)
   if (!n) return '尚未加入小題。新題使用下方預設配分，每題分數之後仍可各自調整。'
+  if (section.scoreMode === 'blank') {
+    const unit = sectionBlankUnit(section)
+    return `每格 ${unit} 分，合計 ${total} 分。各題格數不同也不會標在題號前面，配分寫在標題最後。`
+  }
   const each = uniformQuestionScore(section)
   if (each == null) {
     return `本大題共 ${n} 題，配分不完全相同，合計 ${total} 分。標題只寫總分，每題題號後會標出該題分數。`
   }
-  return `本大題共 ${n} 題，每題 ${each} 分，合計 ${total} 分。標題會寫「每題 ${each} 分」。`
+  return `本大題共 ${n} 題，每題 ${each} 分，合計 ${total} 分。標題最後會寫「每題 ${each} 分」。`
 }
 
 function SectionEditor({ section, index }: { section: Section; index: number }) {
@@ -162,24 +170,46 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
       </PanelSection>
 
       <PanelSection title="配分" description={sectionScoreDescription(section)}>
-        <div className="ui-grid-2 ui-grid-2--end">
+        <Segmented<ScoreMode>
+          label="配分方式"
+          value={section.scoreMode}
+          options={[
+            { value: 'each', label: '每題' },
+            { value: 'blank', label: '每格' },
+          ]}
+          onChange={(v) =>
+            set(v === 'blank' ? { scoreMode: 'blank', blankScore: section.blankScore || section.defaultScore || 2 } : { scoreMode: 'each' })
+          }
+        />
+        {section.scoreMode === 'blank' ? (
           <NumberField
-            label="每題預設"
+            label="每格分數"
             suffix="分"
             min={0}
             max={100}
-            value={section.defaultScore}
-            onChange={(v) => set({ defaultScore: v })}
+            value={section.blankScore}
+            onChange={(v) => set({ blankScore: v })}
           />
-          <button
-            type="button"
-            className="btn btn--ghost btn--block"
-            disabled={!section.questions.length}
-            onClick={() => dispatch({ type: 'APPLY_SECTION_SCORE', id: section.id })}
-          >
-            套用到全部小題
-          </button>
-        </div>
+        ) : (
+          <div className="ui-grid-2 ui-grid-2--end">
+            <NumberField
+              label="每題預設"
+              suffix="分"
+              min={0}
+              max={100}
+              value={section.defaultScore}
+              onChange={(v) => set({ defaultScore: v })}
+            />
+            <button
+              type="button"
+              className="btn btn--ghost btn--block"
+              disabled={!section.questions.length}
+              onClick={() => dispatch({ type: 'APPLY_SECTION_SCORE', id: section.id })}
+            >
+              套用到全部小題
+            </button>
+          </div>
+        )}
         <label className="ui-field">
           <span className="ui-field__label">新增小題的題型</span>
           <select
@@ -221,9 +251,10 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
 }
 
 const PLACEMENT_OPTIONS: { value: FigurePlacement; label: string }[] = [
-  { value: 'below', label: '題目下方' },
-  { value: 'right', label: '題目右側' },
-  { value: 'afterChoices', label: '選項下方' },
+  { value: 'below', label: '下方' },
+  { value: 'middle', label: '文中' },
+  { value: 'right', label: '右側' },
+  { value: 'afterChoices', label: '選後' },
 ]
 
 function FiguresEditor({ questionId }: { questionId: string }) {
@@ -251,7 +282,7 @@ function FiguresEditor({ questionId }: { questionId: string }) {
   return (
     <PanelSection
       title="題目附圖"
-      description="圖片會跟著題目一起排版、換頁；大圖會自動縮小到 1400px 以內。"
+      description="圖片跟著題目排版。在卷面上拖曳圖片，決定它接在題幹的哪裡；左右仍用拉霸。"
       actions={
         <button type="button" className="text-btn" onClick={() => fileRef.current?.click()}>
           ＋ 插入圖片
@@ -285,6 +316,8 @@ function FiguresEditor({ questionId }: { questionId: string }) {
         const asset = state.exam.assets[f.assetId]
         const setFig = (patch: Partial<Figure>) =>
           dispatch({ type: 'UPDATE_FIGURE', questionId, figureId: f.id, patch })
+        const align = f.align ?? (f.placement === 'middle' ? 0 : 0.5)
+        const alignLabel = align <= 0.34 ? '靠左' : align >= 0.66 ? '靠右' : '置中'
         return (
           <div key={f.id} className="figure-card">
             <div className="figure-card__top">
@@ -310,8 +343,24 @@ function FiguresEditor({ questionId }: { questionId: string }) {
               label="圖片位置"
               value={options.some((o) => o.value === f.placement) ? f.placement : 'below'}
               options={options}
-              onChange={(v) => setFig({ placement: v })}
+              onChange={(v) => {
+                const patch: Partial<Figure> = { placement: v }
+                if (v === 'middle' && f.align == null) patch.align = 0
+                setFig(patch)
+              }}
             />
+            {f.placement === 'middle' || f.placement === 'below' || f.placement === 'afterChoices' ? (
+              <p className="exam-style__follow">
+                {state.pageWidth > state.pageHeight
+                  ? '在卷面上按住圖片，拖到要接的那個字旁邊，鬆開後就接在它後面。'
+                  : '在卷面上按住圖片上下拖曳，鬆開後會接到最接近的那一行後面。'}
+                {f.placement === 'middle' && typeof f.afterLine === 'number'
+                  ? f.afterLine === 0
+                    ? '目前在題幹最前面。'
+                    : `目前接在第 ${f.afterLine} ${state.pageWidth > state.pageHeight ? '個字' : '行'}後面。`
+                  : null}
+              </p>
+            ) : null}
             <label className="ui-field">
               <span className="ui-field__label">
                 寬度 <strong>{Math.round(f.widthRatio * 100)}%</strong>
@@ -326,6 +375,22 @@ function FiguresEditor({ questionId }: { questionId: string }) {
                 onChange={(e) => setFig({ widthRatio: Number(e.target.value) / 100 })}
               />
             </label>
+            {f.placement !== 'right' ? (
+              <label className="ui-field">
+                <span className="ui-field__label">
+                  左右位置 <strong>{alignLabel}</strong>
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  aria-label="左右位置"
+                  value={Math.round(align * 100)}
+                  onChange={(e) => setFig({ align: Number(e.target.value) / 100 })}
+                />
+              </label>
+            ) : null}
           </div>
         )
       })}
@@ -449,8 +514,33 @@ function QuestionEditor({ questionId }: { questionId: string }) {
               ))}
             </select>
           </label>
-          <NumberField label="配分" suffix="分" min={0} max={100} value={q.score} onChange={(v) => set({ score: v })} />
+          {section.scoreMode === 'blank' ? (
+            <NumberField
+              label="格數"
+              suffix="格"
+              min={0}
+              max={30}
+              value={questionBlankCount(q)}
+              onChange={(v) => set({ blanks: Math.max(0, Math.round(v)) })}
+            />
+          ) : (
+            <NumberField label="配分" suffix="分" min={0} max={100} value={q.score} onChange={(v) => set({ score: v })} />
+          )}
         </div>
+        {section.scoreMode === 'blank' ? (
+          <div className="exam-style__follow">
+            每格 {sectionBlankUnit(section)} 分，這一題 {questionPoints(section, q)} 分。
+            {typeof q.blanks === 'number' ? '格數已手動指定。' : '尚未指定時，依題目裡的（ ）與底線計算。'}
+            {typeof q.blanks === 'number' ? (
+              <>
+                {' '}
+                <button type="button" className="text-btn" onClick={() => set({ blanks: undefined })}>
+                  改回自動計算
+                </button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         <div className="ui-field">
           <span className="ui-field__label">題目</span>
           <ColorField

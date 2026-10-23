@@ -6,6 +6,7 @@ import {
   examTotals,
   QUESTION_TYPE_LABEL,
   questionNumbers,
+  questionPoints,
   sectionHeading,
   sectionScore,
   type BlockRef,
@@ -240,7 +241,7 @@ export function OutlinePanel() {
                           </span>
                         ) : null}
                         <span className="outline-row__meta">
-                          {QUESTION_TYPE_LABEL[q.type].replace('題', '')}・{q.score}
+                          {QUESTION_TYPE_LABEL[q.type].replace('題', '')}・{questionPoints(s, q)}
                         </span>
                       </div>
                     </li>

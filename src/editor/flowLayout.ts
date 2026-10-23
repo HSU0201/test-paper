@@ -1,7 +1,9 @@
 import type { Box } from './bounds'
 import {
   choiceLabel,
+  FIGURE_MARK,
   isChoiceType,
+  planStemFigures,
   questionNumbers,
   questionScoreMark,
   sectionHeading,
@@ -10,6 +12,7 @@ import {
   type Asset,
   type BlockRef,
   type ExamContent,
+  type Figure,
   type FontOverride,
   type Question,
   type Section,
@@ -45,11 +48,27 @@ export type FlowRun = {
   /** 與 text 的每個字對應；空字串表示用 style.fill（黑色）。直排時不含換行。 */
   colors?: string[]
   height?: number
+  /** 直排題號佔用的前幾個字，不計入文中插入位置 */
+  stemFrom?: number
+  /** 已依欄寬切成單行時為 1，拖曳用這個行數，不再用高度反推 */
+  lineCount?: number
 }
 
 export type FlowRule = { key: string; x1: number; y1: number; x2: number; y2: number }
 
-export type FlowImage = { key: string; x: number; y: number; w: number; h: number; assetId: string }
+export type FlowImage = {
+  key: string
+  x: number
+  y: number
+  w: number
+  h: number
+  assetId: string
+  /** 卷面上可拖曳，用來改插在題幹的哪一行後面 */
+  movable?: boolean
+  /** middle 用 afterLine；below / after 拖到題幹中間才改成文中 */
+  anchor?: 'middle' | 'below' | 'after'
+  afterLine?: number
+}
 
 export type PlacedBlock = {
   ref: BlockRef
@@ -133,6 +152,41 @@ function figureSize(c: Ctx, assetId: string, maxW: number, ratio: number) {
   return { w, h: (w * a.height) / Math.max(1, a.width) }
 }
 
+/** 0 靠左、1 靠右。文字中間預設靠左，其餘預設置中 */
+function figureAlignRatio(f: Figure): number {
+  if (typeof f.align === 'number' && Number.isFinite(f.align)) return Math.min(1, Math.max(0, f.align))
+  return f.placement === 'middle' ? 0 : 0.5
+}
+
+function figureX(indent: number, innerW: number, w: number, align: number) {
+  return indent + Math.max(0, innerW - w) * align
+}
+
+/** 依字元寬度切開，換行結果用來決定圖片可以接在第幾行後面 */
+function wrapLines(text: string, width: number, style: TextStyle, lineHeight: number, m: MeasureFn): string[] {
+  if (!text) return []
+  const widthOf = (sample: string) => (sample ? m(sample, 10000, style, lineHeight).naturalWidth : 0)
+  const lines: string[] = []
+  let buf = ''
+  for (const ch of text) {
+    if (ch === '\n') {
+      lines.push(buf)
+      buf = ''
+      continue
+    }
+    if (buf && widthOf(buf + ch) > width + 0.5) {
+      lines.push(buf)
+      buf = ch
+    } else buf += ch
+  }
+  if (buf || lines.length === 0) lines.push(buf)
+  return lines
+}
+
+function stripMarks(stem: string) {
+  return stem.replaceAll(FIGURE_MARK, '')
+}
+
 function buildQuestion(q: Question, num: number, scoreMark: string, indent: number, w: number, c: Ctx): Built {
   const { m, mt } = c
   const body = resolveStyle(c.st.body, q.bodyStyle)
@@ -142,12 +196,11 @@ function buildQuestion(q: Question, num: number, scoreMark: string, indent: numb
   const lh = body.fontSize * mt.lineHeight
   const prefix = scoreMark ? `${num}.${scoreMark}` : `${num}.`
   const innerW = Math.max(40, w - indent)
-  const stemPainted = paintText(q.stem.trim() || EMPTY_STEM)
-  const stem = stemPainted.text
 
   const right = q.figures.find((f) => f.placement === 'right')
-  const below = q.figures.filter((f) => f !== right && f.placement !== 'afterChoices')
-  const after = q.figures.filter((f) => f !== right && f.placement === 'afterChoices')
+  const middle = q.figures.filter((f) => f.placement === 'middle')
+  const after = q.figures.filter((f) => f.placement === 'afterChoices')
+  const below = q.figures.filter((f) => f !== right && f.placement !== 'middle' && f.placement !== 'afterChoices')
 
   runs.push({ key: 'num', x: 0, y: 0, width: indent, text: prefix, style: body, lineHeight: mt.lineHeight })
 
@@ -160,31 +213,95 @@ function buildQuestion(q: Question, num: number, scoreMark: string, indent: numb
       images.push({ key: right.id, x: indent + innerW - rightBox.w, y: 2, w: rightBox.w, h: rightBox.h, assetId: right.assetId })
     }
   }
-  runs.push({
-    key: 'stem',
-    x: indent,
-    y: 0,
-    width: stemW,
-    text: stem,
-    colors: q.stem.trim() ? stemPainted.colors : undefined,
-    style: body,
-    lineHeight: mt.lineHeight,
-    placeholder: !q.stem.trim(),
-  })
-  let h = m(stem, stemW, body, mt.lineHeight).height
-  if (rightBox) h = Math.max(h, rightBox.h + 4)
 
-  const pushFigures = (list: typeof below) => {
+  const pushStem = (text: string, key: string, y: number, placeholder = false, colors?: string[], singleLine = false) => {
+    const painted = placeholder ? { text, colors: undefined as string[] | undefined } : paintText(text)
+    const height = m(painted.text, stemW, body, mt.lineHeight).height
+    runs.push({
+      key,
+      x: indent,
+      y,
+      width: stemW,
+      height,
+      text: colors ? text : painted.text,
+      colors: colors ?? painted.colors,
+      style: body,
+      lineHeight: mt.lineHeight,
+      placeholder,
+      lineCount: singleLine ? 1 : undefined,
+    })
+    return height
+  }
+
+  const pushFigures = (list: Figure[], y: number, anchor?: 'middle' | 'below' | 'after') => {
+    let cursor = y
     for (const f of list) {
       const size = figureSize(c, f.assetId, innerW, f.widthRatio)
       if (!size) continue
-      h += 6
-      images.push({ key: f.id, x: indent + (innerW - size.w) / 2, y: h, w: size.w, h: size.h, assetId: f.assetId })
-      h += size.h
+      cursor += 6
+      images.push({
+        key: f.id,
+        x: figureX(indent, innerW, size.w, figureAlignRatio(f)),
+        y: cursor,
+        w: size.w,
+        h: size.h,
+        assetId: f.assetId,
+        movable: anchor ? true : undefined,
+        anchor,
+        afterLine: anchor === 'middle' ? f.afterLine : undefined,
+      })
+      cursor += size.h
     }
-    if (list.length) h += 2
+    if (list.length) cursor += 2
+    return cursor
   }
-  pushFigures(below)
+
+  let h = 0
+  const layoutAnchored = (list: Figure[]) => {
+    const raw = stripMarks(q.stem.trim())
+    const painted = paintText(raw)
+    const pieces = wrapLines(painted.text, stemW, body, mt.lineHeight, m)
+    const atOf = (f: Figure) => Math.max(0, Math.min(pieces.length, f.afterLine ?? 1))
+    const placeAt = (index: number) => {
+      const batch = list.filter((f) => atOf(f) === index)
+      if (batch.length) h = pushFigures(batch, h, 'middle')
+    }
+    let char = 0
+    let lineNo = 0
+    placeAt(0)
+    for (const line of pieces) {
+      while (painted.text[char] === '\n') char += 1
+      const start = char
+      char += line.length
+      if (!line) continue
+      const colors = painted.colors?.slice(start, char)
+      h += pushStem(line, lineNo === 0 ? 'stem' : `stem-${lineNo}`, h, false, colors, true)
+      lineNo += 1
+      placeAt(lineNo)
+    }
+  }
+
+  const anchored = middle.some((f) => typeof f.afterLine === 'number')
+  if (!q.stem.trim()) {
+    const before = anchored ? middle.filter((f) => (f.afterLine ?? 1) <= 0) : []
+    const rest = anchored ? middle.filter((f) => (f.afterLine ?? 1) > 0) : middle
+    if (before.length) h = pushFigures(before, h, 'middle')
+    h += pushStem(EMPTY_STEM, 'stem', h, true)
+    h = pushFigures(rest, h, 'middle')
+  } else if (anchored) {
+    layoutAnchored(middle)
+  } else {
+    const plan = planStemFigures(q.stem.trim(), middle.length)
+    let figAt = 0
+    plan.parts.forEach((part, i) => {
+      if (part) h += pushStem(part, i === 0 ? 'stem' : `stem-${i}`, h)
+      const batch = middle.slice(figAt, figAt + plan.slots[i])
+      figAt += plan.slots[i]
+      if (batch.length) h = pushFigures(batch, h, 'middle')
+    })
+  }
+  if (rightBox) h = Math.max(h, rightBox.h + 4)
+  h = pushFigures(below, h, 'below')
 
   if (isChoiceType(q.type) && q.choices.length) {
     h += 4
@@ -246,7 +363,7 @@ function buildQuestion(q: Question, num: number, scoreMark: string, indent: numb
       h += rowH
     }
   }
-  pushFigures(after)
+  h = pushFigures(after, h, 'after')
 
   if (q.type === 'short_answer' && q.answerLines > 0) {
     h += 4
@@ -417,12 +534,15 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
   let slots = slotsOf(0)
   let si = 0
   let x = slots[0].box.x + slots[0].box.w
+  /** 圖片插在直排欄中間之後，下一字接在同一欄的這個高度 */
+  let resumeY: number | null = null
   const slot = () => slots[si]
   const frame = () => slot().box
   const atStart = () => x >= frame().x + frame().w - 0.5
   const remain = () => x - frame().x
 
   const nextFrame = (): boolean => {
+    resumeY = null
     if (si >= slots.length - 1 && page >= MAX_PAGES - 1) return false
     if (si >= slots.length - 1) {
       page += 1
@@ -509,6 +629,8 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     y: number
   }
   let open: Open | null = null
+  /** 題號寫進題幹欄時，前幾個字不算文中的插入位置 */
+  let pendingSkip = 0
 
   const closeOpen = () => {
     if (!open?.chars.length) {
@@ -518,6 +640,8 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     const step = open.style.fontSize * lh
     const height = open.chars.length * step
     const colors = open.chars.some((c) => c.color) ? open.chars.map((c) => c.color ?? '') : undefined
+    const skip = Math.min(pendingSkip, open.chars.length)
+    pendingSkip -= skip
     acc.runs.push({
       key: `${open.key}-${acc.runs.length}`,
       x: open.x,
@@ -530,6 +654,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
       lineHeight: lh,
       vertical: true,
       placeholder: open.placeholder || undefined,
+      stemFrom: skip > 0 ? skip : undefined,
     })
     track(open.x, open.x + open.w, open.y + height)
     open = null
@@ -545,17 +670,29 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
   const startOpen = (style: TextStyle, key: string, placeholder: boolean) => {
     const p = colPitchOf(style.fontSize)
     const cw = Math.min(colWidthOf(style.fontSize), p)
-    reserve(p)
     const f = frame()
+    if (resumeY != null) {
+      const y = resumeY
+      resumeY = null
+      const cap = Math.floor((f.y + f.h - y) / (style.fontSize * lh))
+      if (cap >= 1 && x >= f.x) {
+        let textX = x + (p - cw) / 2
+        if (textX < f.x) textX = f.x
+        open = { chars: [], style, key, placeholder, cap, x: textX, w: cw, y }
+        return
+      }
+    }
+    reserve(p)
+    const host = frame()
     let slotLeft = x - p
     let textX = slotLeft + (p - cw) / 2
-    if (slotLeft < f.x) {
-      textX = f.x
-      slotLeft = f.x
+    if (slotLeft < host.x) {
+      textX = host.x
+      slotLeft = host.x
       markOversize()
     }
     x = slotLeft
-    open = { chars: [], style, key, placeholder, cap: charsPerColumn(style.fontSize, lh, f.h), x: textX, w: cw, y: f.y }
+    open = { chars: [], style, key, placeholder, cap: charsPerColumn(style.fontSize, lh, host.h), x: textX, w: cw, y: host.y }
   }
 
   const writeChunk = (text: string, style: TextStyle, key: string, placeholder = false) => {
@@ -565,10 +702,12 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     write(text, style, key, placeholder)
   }
 
-  const write = (text: string, style: TextStyle, key: string, placeholder = false) => {
+  const write = (text: string, style: TextStyle, key: string, placeholder = false, stemFrom?: number) => {
+    if (typeof stemFrom === 'number') pendingSkip = stemFrom
     for (const unit of richChars(text)) {
       if (unit.ch === '\n') {
         closeOpen()
+        resumeY = null
         continue
       }
       if (open && (!sameStyle(open.style, style) || !!open.placeholder !== placeholder || open.chars.length >= open.cap)) closeOpen()
@@ -578,7 +717,8 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     }
   }
 
-  const emitImage = (assetId: string, ratio: number, key: string) => {
+  const emitImage = (assetId: string, ratio: number, key: string, anchor?: 'middle' | 'below' | 'after') => {
+    resumeY = null
     closeOpen()
     const asset = assets[assetId]
     if (!asset) return
@@ -603,9 +743,80 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
       ix = host.x
       markOversize()
     }
-    acc.images.push({ key, x: ix, y: host.y, w, h, assetId })
+    acc.images.push({
+      key,
+      x: ix,
+      y: host.y,
+      w,
+      h,
+      assetId,
+      movable: anchor ? true : undefined,
+      anchor,
+    })
     track(ix, ix + w, host.y + h)
     x = Math.max(host.x, ix - 6)
+  }
+
+  /** 直排文中：圖片接在目前這欄已經寫出的字下面，後面的字再接著往下排 */
+  const emitInColumn = (f: Figure, style: TextStyle) => {
+    const asset = assets[f.assetId]
+    const step = style.fontSize * lh
+    const box = frame()
+    const yTop = open ? open.y + open.chars.length * step : (resumeY ?? box.y)
+    const room = box.y + box.h - yTop
+    const inColumn = open != null || resumeY != null
+    if (!asset || !inColumn || room < 48) {
+      emitImage(f.assetId, f.widthRatio, f.id, 'middle')
+      const placed = acc.images[acc.images.length - 1]
+      if (placed && placed.key === f.id) placed.afterLine = f.afterLine
+      return
+    }
+    resumeY = null
+    const aspect = asset.width / Math.max(1, asset.height)
+    const p = colPitchOf(style.fontSize)
+    const maxW = Math.max(48, box.w * 0.45)
+    let h = box.h * Math.min(1, Math.max(0.25, f.widthRatio))
+    let w = h * aspect
+    if (w > maxW) {
+      w = maxW
+      h = w / aspect
+    }
+    if (h > room - 4) {
+      h = Math.max(16, room - 4)
+      w = h * aspect
+      if (w > maxW) {
+        w = maxW
+        h = w / aspect
+      }
+    }
+    if (h < 64) {
+      emitImage(f.assetId, f.widthRatio, f.id, 'middle')
+      const placed = acc.images[acc.images.length - 1]
+      if (placed && placed.key === f.id) placed.afterLine = f.afterLine
+      return
+    }
+    const slotRight = x + p
+    let ix = w <= p ? x + (p - w) / 2 : slotRight - w
+    if (ix < box.x) {
+      ix = box.x
+      markOversize()
+    }
+    closeOpen()
+    acc.images.push({
+      key: f.id,
+      x: ix,
+      y: yTop,
+      w,
+      h,
+      assetId: f.assetId,
+      movable: true,
+      anchor: 'middle',
+      afterLine: f.afterLine,
+    })
+    track(ix, ix + w, yTop + h)
+    const nextY = yTop + h + 4
+    if (w <= p && box.y + box.h - nextY >= step) resumeY = nextY
+    else x = Math.max(box.x, ix - 6)
   }
 
   const emitAnswers = (count: number, fontSize: number) => {
@@ -655,7 +866,13 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
       if (follower?.kind === 'question' && it.section.keepTogether === 'whole') {
         const rest = items.slice(i + 1).filter((x) => x.kind === 'question') as Extract<Item, { kind: 'question' }>[]
         const whole = rest.reduce(
-          (sum, q) => sum + textWidth(plainText(`${questionLead(q)}${q.question.stem}`), resolveStyle(st.body, q.question.bodyStyle).fontSize, fh),
+          (sum, q) =>
+            sum +
+            textWidth(
+              plainText(`${questionLead(q)}${q.question.stem.replaceAll('［圖］', '')}`),
+              resolveStyle(st.body, q.question.bodyStyle).fontSize,
+              fh,
+            ),
           headW,
         )
         if (whole <= frame().w) keep = whole
@@ -680,20 +897,60 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
       continue
     }
 
+    pendingSkip = 0
     const q = it.question
     const right = q.figures.filter((f) => f.placement === 'right')
-    const below = q.figures.filter((f) => f.placement !== 'right' && f.placement !== 'afterChoices')
+    const middle = q.figures.filter((f) => f.placement === 'middle')
     const after = q.figures.filter((f) => f.placement === 'afterChoices')
+    const below = q.figures.filter((f) => f.placement !== 'right' && f.placement !== 'middle' && f.placement !== 'afterChoices')
     right.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id))
     const stem = q.stem.trim()
     const lead = questionLead(it)
-    if (stem) write(`${lead}${stem}`, body, 'stem')
-    else {
+    const anchored = middle.some((f) => typeof f.afterLine === 'number')
+    if (!stem) {
       write(lead, body, 'num')
       closeOpen()
       write(EMPTY_STEM, body, 'stem', true)
+      middle.forEach((f) => (anchored ? emitInColumn(f, body) : emitImage(f.assetId, f.widthRatio, f.id, 'middle')))
+    } else if (anchored) {
+      const units = richChars(stripMarks(stem))
+      const visible = units.filter((unit) => unit.ch !== '\n').length
+      const atOf = (f: Figure) => Math.max(0, Math.min(visible, f.afterLine ?? 1))
+      write(lead, body, 'num')
+      const placeAt = (index: number) => {
+        for (const f of middle) if (atOf(f) === index) emitInColumn(f, body)
+      }
+      const pushChar = (ch: string, color?: string) => {
+        const col = open
+        if (col && (col.placeholder || !sameStyle(col.style, body) || col.chars.length >= col.cap)) closeOpen()
+        if (!open) startOpen(body, 'stem', false)
+        const next = open
+        if (next) next.chars.push({ g: toVerticalGlyph(ch), color })
+      }
+      let seen = 0
+      placeAt(0)
+      for (const unit of units) {
+        if (unit.ch === '\n') {
+          closeOpen()
+          resumeY = null
+          continue
+        }
+        pushChar(unit.ch, unit.color)
+        seen += 1
+        placeAt(seen)
+      }
+    } else {
+      const plan = planStemFigures(stem, middle.length)
+      let figAt = 0
+      plan.parts.forEach((part, i) => {
+        const text = i === 0 ? `${lead}${part}` : part
+        if (text) write(text, body, i === 0 ? 'stem' : `stem-${i}`, false, i === 0 ? [...lead].length : undefined)
+        const batch = middle.slice(figAt, figAt + plan.slots[i])
+        figAt += plan.slots[i]
+        batch.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id, 'middle'))
+      })
     }
-    below.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id))
+    below.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id, 'below'))
     if (isChoiceType(q.type)) {
       q.choices.forEach((ch, ci) => {
         const label = plainText(ch.text).trim() ? `${choiceLabel(ci)} ${ch.text.trim()}` : choiceLabel(ci)
@@ -701,7 +958,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
         if (ch.image) emitImage(ch.image.assetId, ch.image.widthRatio, `chimg-${ch.id}`)
       })
     }
-    after.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id))
+    after.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id, 'after'))
     if (q.type === 'short_answer' && q.answerLines > 0) emitAnswers(q.answerLines, body.fontSize)
   }
   closeOpen()
