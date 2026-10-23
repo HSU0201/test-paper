@@ -1,333 +1,297 @@
 import type { Box } from '../editor/bounds'
-import { mergeTextLevelPreset, type TextLevelOverrides } from './document'
 
-/** 頁首欄位角色：位置與階層由版型決定，內容與顯示與否可客製 */
-export type HeaderFieldKey =
+/** 頁首欄位角色；custom 為使用者自行新增 */
+export type HeaderRole =
   | 'schoolName'
   | 'examTitle'
   | 'subject'
   | 'classInfo'
+  | 'seatNo'
+  | 'studentName'
   | 'examDate'
   | 'duration'
   | 'totalScore'
   | 'teacher'
-  | 'studentName'
+  | 'custom'
 
-/** title：整頁置中大標；subtitle：副標；infoLeft／infoRight：資訊列左右側 */
-export type HeaderPlacement = 'title' | 'subtitle' | 'infoLeft' | 'infoRight'
+export type HeaderAlign = 'left' | 'center' | 'right'
 
-export type HeaderField = {
+/**
+ * 頁首上的單一欄位。水平位置以內容區寬度比例儲存（換紙張、橫直向時自動縮放），
+ * 垂直位置以 px 儲存（相對於頁首區頂端）。
+ */
+export type HeaderItem = {
+  id: string
+  role: HeaderRole
   label: string
   value: string
-  visible: boolean
-}
-
-type HeaderFieldDef = {
-  defaultLabel: string
-  defaultValue: string
-  defaultVisible: boolean
-  placement: HeaderPlacement
-  /** 是否在畫面顯示「標籤：」前綴 */
   showLabel: boolean
-  placeholder: string
+  visible: boolean
+  xr: number
+  wr: number
+  y: number
+  fontSize: number
+  bold: boolean
+  align: HeaderAlign
+  fill: string
 }
 
-export const HEADER_FIELD_DEFS: Record<HeaderFieldKey, HeaderFieldDef> = {
-  schoolName: {
-    defaultLabel: '學校名稱',
-    defaultValue: '○○市立○○國民中學',
-    defaultVisible: true,
-    placement: 'title',
-    showLabel: false,
-    placeholder: '例：臺北市立○○國中',
-  },
-  examTitle: {
-    defaultLabel: '試卷名稱',
-    defaultValue: '115 學年度第一學期 第一次段考',
-    defaultVisible: true,
-    placement: 'subtitle',
-    showLabel: false,
-    placeholder: '例：第一次段考',
-  },
-  subject: {
-    defaultLabel: '科目',
-    defaultValue: '數學',
-    defaultVisible: true,
-    placement: 'infoLeft',
-    showLabel: true,
-    placeholder: '例：國文',
-  },
-  classInfo: {
-    defaultLabel: '班級',
-    defaultValue: '',
-    defaultVisible: false,
-    placement: 'infoLeft',
-    showLabel: true,
-    placeholder: '留白給學生填寫',
-  },
-  examDate: {
-    defaultLabel: '日期',
-    defaultValue: '',
-    defaultVisible: false,
-    placement: 'infoLeft',
-    showLabel: true,
-    placeholder: '例：2026/10/30',
-  },
-  duration: {
-    defaultLabel: '作答時間',
-    defaultValue: '',
-    defaultVisible: false,
-    placement: 'infoLeft',
-    showLabel: true,
-    placeholder: '例：45 分鐘',
-  },
-  totalScore: {
-    defaultLabel: '滿分',
-    defaultValue: '',
-    defaultVisible: false,
-    placement: 'infoLeft',
-    showLabel: true,
-    placeholder: '例：100 分',
-  },
-  studentName: {
-    defaultLabel: '姓名',
-    defaultValue: '',
-    defaultVisible: false,
-    placement: 'infoRight',
-    showLabel: true,
-    placeholder: '留白給學生填寫',
-  },
-  teacher: {
-    defaultLabel: '出題老師',
-    defaultValue: '○○○ 老師',
-    defaultVisible: true,
-    placement: 'infoRight',
-    showLabel: true,
-    placeholder: '例：王小明',
-  },
+export type HeaderLayout = {
+  /** 頁首區高度（px） */
+  height: number
+  /** 頁首下方分隔線 */
+  rule: boolean
+  /** 每頁都印頁首；否則只印第一頁 */
+  repeat: boolean
+  items: HeaderItem[]
 }
 
-export const HEADER_FIELD_ORDER: HeaderFieldKey[] = [
-  'schoolName',
-  'examTitle',
-  'subject',
-  'classInfo',
-  'examDate',
-  'duration',
-  'totalScore',
-  'studentName',
-  'teacher',
-]
+/** auto：直向左右分欄、橫向上下分欄 */
+export type ColumnSplit = 'auto' | 'vertical' | 'horizontal'
 
 export type ColumnLayout = {
   count: 1 | 2
-  /** 欄距（px） */
+  split: ColumnSplit
   gap: number
-  /** 左欄佔內容寬的比例（0.3–0.7），僅雙欄有效 */
-  leftRatio: number
+  /** 第一欄佔比例（0.3–0.7） */
+  ratio: number
   divider: boolean
-  showTitles: boolean
-  titles: [string, string]
+}
+
+export type SpacingRange = { nominal: number; min: number }
+
+export type SpacingSettings = {
+  lineHeight: SpacingRange
+  questionGap: SpacingRange
+  sectionGap: SpacingRange
+  /** 內容快溢出時自動在 nominal 與 min 之間壓縮 */
+  allowSqueeze: boolean
 }
 
 export type PageMargin = { top: number; right: number; bottom: number; left: number }
 
 export type PaperLayout = {
   margin: PageMargin
-  header: Record<HeaderFieldKey, HeaderField>
-  /** 頁首下方分隔線 */
-  headerRule: boolean
+  header: HeaderLayout
   columns: ColumnLayout
+  spacing: SpacingSettings
+}
+
+export const HEADER_ROLE_LABEL: Record<HeaderRole, string> = {
+  schoolName: '學校名稱',
+  examTitle: '試卷名稱',
+  subject: '科目',
+  classInfo: '班級',
+  seatNo: '座號',
+  studentName: '姓名',
+  examDate: '日期',
+  duration: '作答時間',
+  totalScore: '滿分',
+  teacher: '出題老師',
+  custom: '自訂欄位',
+}
+
+type Seed = Omit<HeaderItem, 'id' | 'label' | 'fill'> & { label?: string }
+
+const DEFAULT_ITEMS: Seed[] = [
+  { role: 'schoolName', value: '○○市立○○國民中學', showLabel: false, visible: true, xr: 0, wr: 1, y: 0, fontSize: 24, bold: true, align: 'center' },
+  { role: 'examTitle', value: '115 學年度第一學期 第一次段考', showLabel: false, visible: true, xr: 0, wr: 1, y: 34, fontSize: 17, bold: false, align: 'center' },
+  { role: 'subject', value: '數學', showLabel: true, visible: true, xr: 0, wr: 0.16, y: 66, fontSize: 14, bold: false, align: 'left' },
+  { role: 'classInfo', value: '', showLabel: true, visible: false, xr: 0.16, wr: 0.18, y: 66, fontSize: 14, bold: false, align: 'left' },
+  { role: 'seatNo', value: '', showLabel: true, visible: false, xr: 0.34, wr: 0.15, y: 66, fontSize: 14, bold: false, align: 'left' },
+  { role: 'studentName', value: '', showLabel: true, visible: false, xr: 0.49, wr: 0.25, y: 66, fontSize: 14, bold: false, align: 'left' },
+  { role: 'teacher', value: '○○○ 老師', showLabel: true, visible: true, xr: 0.74, wr: 0.26, y: 66, fontSize: 14, bold: false, align: 'right' },
+  { role: 'examDate', value: '', showLabel: true, visible: false, xr: 0, wr: 0.3, y: 88, fontSize: 13, bold: false, align: 'left' },
+  { role: 'duration', value: '', showLabel: true, visible: false, xr: 0.35, wr: 0.3, y: 88, fontSize: 13, bold: false, align: 'center' },
+  { role: 'totalScore', value: '', showLabel: true, visible: false, xr: 0.7, wr: 0.3, y: 88, fontSize: 13, bold: false, align: 'right' },
+]
+
+const HEADER_TEXT_COLOR = '#0f172a'
+
+export function createHeaderItem(seed: Seed): HeaderItem {
+  return {
+    id: crypto.randomUUID(),
+    label: seed.label ?? HEADER_ROLE_LABEL[seed.role],
+    fill: HEADER_TEXT_COLOR,
+    ...seed,
+  }
+}
+
+export function createCustomHeaderItem(y: number): HeaderItem {
+  return createHeaderItem({
+    role: 'custom',
+    label: '得分',
+    value: '',
+    showLabel: true,
+    visible: true,
+    xr: 0.7,
+    wr: 0.3,
+    y,
+    fontSize: 14,
+    bold: false,
+    align: 'right',
+  })
+}
+
+export function createDefaultHeader(): HeaderLayout {
+  return { height: 92, rule: true, repeat: false, items: DEFAULT_ITEMS.map(createHeaderItem) }
 }
 
 export function createDefaultLayout(): PaperLayout {
-  const header = {} as Record<HeaderFieldKey, HeaderField>
-  for (const key of HEADER_FIELD_ORDER) {
-    const d = HEADER_FIELD_DEFS[key]
-    header[key] = { label: d.defaultLabel, value: d.defaultValue, visible: d.defaultVisible }
-  }
   return {
-    margin: { top: 48, right: 48, bottom: 48, left: 48 },
-    header,
-    headerRule: true,
-    columns: {
-      count: 2,
-      gap: 24,
-      leftRatio: 0.5,
-      divider: true,
-      showTitles: false,
-      titles: ['一、選擇題', '二、填充題'],
+    margin: { top: 40, right: 44, bottom: 44, left: 44 },
+    header: createDefaultHeader(),
+    columns: { count: 2, split: 'auto', gap: 24, ratio: 0.5, divider: true },
+    spacing: {
+      lineHeight: { nominal: 1.6, min: 1.3 },
+      questionGap: { nominal: 12, min: 4 },
+      sectionGap: { nominal: 20, min: 8 },
+      allowSqueeze: true,
     },
   }
+}
+
+/** 留白欄位的底線長度；給 boxWidth 時自動填滿欄寬（全形字寬約等於字級） */
+export function headerItemText(item: HeaderItem, boxWidth?: number): string {
+  const value = item.value.trim()
+  if (!item.showLabel) return value
+  if (value) return `${item.label}：${value}`
+  const blanks =
+    boxWidth === undefined ? 6 : Math.max(2, Math.floor(boxWidth / item.fontSize - (item.label.length + 1) - 0.3))
+  return `${item.label}：${'＿'.repeat(blanks)}`
+}
+
+export function headerItemHeight(item: HeaderItem): number {
+  return Math.ceil(item.fontSize * 1.4)
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
+const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback)
 
-/** 載入舊檔或不完整資料時補齊版型欄位 */
+function normalizeRange(r: Partial<SpacingRange> | undefined, base: SpacingRange, lo: number, hi: number): SpacingRange {
+  const nominal = clamp(num(r?.nominal, base.nominal), lo, hi)
+  return { nominal, min: clamp(num(r?.min, base.min), lo, nominal) }
+}
+
+type LegacyHeader = Record<string, { label?: string; value?: string; visible?: boolean }>
+
+/** 載入檔案時補齊欄位；舊版（固定頁首）會轉成可自由排版的欄位 */
 export function normalizeLayout(raw: unknown): PaperLayout {
   const base = createDefaultLayout()
   if (!raw || typeof raw !== 'object') return base
-  const r = raw as Partial<PaperLayout>
-  const header = { ...base.header }
-  for (const key of HEADER_FIELD_ORDER) {
-    const f = r.header?.[key]
-    if (f) header[key] = { ...header[key], ...f }
+  const r = raw as Partial<PaperLayout> & { headerRule?: boolean; columns?: Partial<ColumnLayout> & { leftRatio?: number } }
+
+  let header = base.header
+  const rh = r.header as Partial<HeaderLayout> | LegacyHeader | undefined
+  if (rh && Array.isArray((rh as HeaderLayout).items)) {
+    const h = rh as Partial<HeaderLayout>
+    header = {
+      height: clamp(num(h.height, base.header.height), 0, 400),
+      rule: h.rule ?? true,
+      repeat: h.repeat ?? false,
+      items: (h.items ?? []).map((it) => ({ ...createHeaderItem({ ...DEFAULT_ITEMS[0], role: 'custom' }), ...it })),
+    }
+  } else if (rh) {
+    const legacy = rh as LegacyHeader
+    header = {
+      ...base.header,
+      rule: r.headerRule ?? true,
+      items: base.header.items.map((it) => {
+        const old = legacy[it.role]
+        return old ? { ...it, label: old.label ?? it.label, value: old.value ?? it.value, visible: old.visible ?? it.visible } : it
+      }),
+    }
   }
-  const c = { ...base.columns, ...(r.columns ?? {}) }
+
+  const c: Partial<ColumnLayout> & { leftRatio?: number } = r.columns ?? {}
+  const s = (r.spacing ?? {}) as Partial<SpacingSettings>
   return {
     margin: { ...base.margin, ...(r.margin ?? {}) },
     header,
-    headerRule: r.headerRule ?? base.headerRule,
     columns: {
-      ...c,
       count: c.count === 1 ? 1 : 2,
-      leftRatio: clamp(Number(c.leftRatio) || 0.5, 0.3, 0.7),
-      gap: clamp(Number(c.gap) || 0, 0, 120),
-      titles: [c.titles?.[0] ?? '', c.titles?.[1] ?? ''],
+      split: c.split === 'vertical' || c.split === 'horizontal' ? c.split : 'auto',
+      gap: clamp(num(c.gap, base.columns.gap), 0, 120),
+      ratio: clamp(num(c.ratio ?? c.leftRatio, 0.5), 0.3, 0.7),
+      divider: c.divider ?? true,
+    },
+    spacing: {
+      lineHeight: normalizeRange(s.lineHeight, base.spacing.lineHeight, 1, 3),
+      questionGap: normalizeRange(s.questionGap, base.spacing.questionGap, 0, 80),
+      sectionGap: normalizeRange(s.sectionGap, base.spacing.sectionGap, 0, 120),
+      allowSqueeze: s.allowSqueeze ?? true,
     },
   }
 }
 
-export function headerFieldDisplay(key: HeaderFieldKey, f: HeaderField): string {
-  const def = HEADER_FIELD_DEFS[key]
-  const value = f.value.trim() || '＿＿＿＿＿＿'
-  return def.showLabel ? `${f.label}：${value}` : value
+export function resolveSplit(columns: ColumnLayout, pageW: number, pageH: number): 'vertical' | 'horizontal' {
+  if (columns.split !== 'auto') return columns.split
+  return pageW > pageH ? 'horizontal' : 'vertical'
 }
 
-export type LayoutTextRun = {
-  key: string
-  text: string
-  x: number
-  y: number
-  width: number
-  fontSize: number
-  fill: string
-  bold: boolean
-  align: 'left' | 'center' | 'right'
-}
+export type LayoutRule = { key: string; x1: number; y1: number; x2: number; y2: number }
 
-export type LayoutGeometry = {
+export type PageGeometry = {
   content: Box
-  texts: LayoutTextRun[]
-  rules: { x1: number; y1: number; x2: number; y2: number; key: string }[]
-  /** 各欄可放題目的區域（已扣除欄標題） */
-  columns: Box[]
-  headerBottom: number
+  /** 本頁有頁首時的頁首區 */
+  header: Box | null
+  /** 依閱讀順序排列的欄位 */
+  frames: Box[]
+  rules: LayoutRule[]
 }
 
-const LINE = 1.4
-
-/** 由版型與文字階層算出頁首、欄位的實際座標（畫布繪製與吸附、放置共用） */
-export function computeLayoutGeometry(
+/** 計算某一頁的內容區、頁首區與欄位（排版、繪製、吸附共用） */
+export function computePageGeometry(
   layout: PaperLayout,
   pageW: number,
   pageH: number,
-  overrides: TextLevelOverrides,
-): LayoutGeometry {
+  pageIndex: number,
+): PageGeometry {
   const { margin, header, columns } = layout
-  const titleStyle = mergeTextLevelPreset('paper_title', overrides)
-  const sectionStyle = mergeTextLevelPreset('section_heading', overrides)
-  const infoStyle = mergeTextLevelPreset('instruction', overrides)
-
   const content: Box = {
     x: margin.left,
     y: margin.top,
     w: Math.max(80, pageW - margin.left - margin.right),
     h: Math.max(80, pageH - margin.top - margin.bottom),
   }
-  const texts: LayoutTextRun[] = []
-  const rules: LayoutGeometry['rules'] = []
-  let y = content.y
-
-  const visibleBy = (p: HeaderPlacement) =>
-    HEADER_FIELD_ORDER.filter((k) => HEADER_FIELD_DEFS[k].placement === p && header[k].visible)
-
-  for (const [placement, style, bold] of [
-    ['title', titleStyle, true],
-    ['subtitle', sectionStyle, false],
-  ] as const) {
-    for (const key of visibleBy(placement)) {
-      texts.push({
-        key: `h-${key}`,
-        text: headerFieldDisplay(key, header[key]),
-        x: content.x,
-        y,
-        width: content.w,
-        fontSize: style.fontSize,
-        fill: style.fill,
-        bold,
-        align: 'center',
-      })
-      y += style.fontSize * LINE
+  const rules: LayoutRule[] = []
+  const hasHeader = header.height > 0 && (pageIndex === 0 || header.repeat)
+  let bodyTop = content.y
+  let headerBox: Box | null = null
+  if (hasHeader) {
+    headerBox = { x: content.x, y: content.y, w: content.w, h: header.height }
+    bodyTop = content.y + header.height + 6
+    if (header.rule) {
+      rules.push({ key: 'header-rule', x1: content.x, y1: bodyTop, x2: content.x + content.w, y2: bodyTop })
     }
+    bodyTop += 12
   }
+  const bottom = content.y + content.h
+  const body: Box = { x: content.x, y: bodyTop, w: content.w, h: Math.max(40, bottom - bodyTop) }
 
-  const infoLeft = visibleBy('infoLeft')
-  const infoRight = visibleBy('infoRight')
-  if (infoLeft.length || infoRight.length) {
-    y += 6
-    const join = (keys: HeaderFieldKey[]) => keys.map((k) => headerFieldDisplay(k, header[k])).join('　　')
-    for (const [keys, align] of [
-      [infoLeft, 'left'],
-      [infoRight, 'right'],
-    ] as const) {
-      if (!keys.length) continue
-      texts.push({
-        key: `info-${align}`,
-        text: join(keys),
-        x: content.x,
-        y,
-        width: content.w,
-        fontSize: infoStyle.fontSize,
-        fill: infoStyle.fill,
-        bold: false,
-        align,
-      })
-    }
-    y += infoStyle.fontSize * LINE
-  }
-
-  if (y > content.y) {
-    y += 8
-    if (layout.headerRule) {
-      rules.push({ key: 'header-rule', x1: content.x, y1: y, x2: content.x + content.w, y2: y })
-    }
-    y += 12
-  }
-  const headerBottom = y
-  const bodyBottom = content.y + content.h
-
-  const colBoxes: Box[] = []
+  const frames: Box[] = []
   if (columns.count === 2) {
-    const leftW = (content.w - columns.gap) * columns.leftRatio
-    const rightW = content.w - columns.gap - leftW
-    colBoxes.push({ x: content.x, y, w: leftW, h: bodyBottom - y })
-    colBoxes.push({ x: content.x + leftW + columns.gap, y, w: rightW, h: bodyBottom - y })
-    if (columns.divider) {
-      const dx = content.x + leftW + columns.gap / 2
-      rules.push({ key: 'col-divider', x1: dx, y1: y, x2: dx, y2: bodyBottom })
+    const dir = resolveSplit(columns, pageW, pageH)
+    if (dir === 'vertical') {
+      const w0 = (body.w - columns.gap) * columns.ratio
+      frames.push({ x: body.x, y: body.y, w: w0, h: body.h })
+      frames.push({ x: body.x + w0 + columns.gap, y: body.y, w: body.w - columns.gap - w0, h: body.h })
+      if (columns.divider) {
+        const dx = body.x + w0 + columns.gap / 2
+        rules.push({ key: 'col-divider', x1: dx, y1: body.y, x2: dx, y2: bottom })
+      }
+    } else {
+      const h0 = (body.h - columns.gap) * columns.ratio
+      frames.push({ x: body.x, y: body.y, w: body.w, h: h0 })
+      frames.push({ x: body.x, y: body.y + h0 + columns.gap, w: body.w, h: body.h - columns.gap - h0 })
+      if (columns.divider) {
+        const dy = body.y + h0 + columns.gap / 2
+        rules.push({ key: 'col-divider', x1: body.x, y1: dy, x2: body.x + body.w, y2: dy })
+      }
     }
   } else {
-    colBoxes.push({ x: content.x, y, w: content.w, h: bodyBottom - y })
+    frames.push(body)
   }
 
-  const titleH = columns.showTitles ? sectionStyle.fontSize * LINE + 8 : 0
-  const bodies = colBoxes.map((b, i) => {
-    if (columns.showTitles) {
-      texts.push({
-        key: `col-title-${i}`,
-        text: columns.titles[i] || '',
-        x: b.x,
-        y: b.y,
-        width: b.w,
-        fontSize: sectionStyle.fontSize,
-        fill: sectionStyle.fill,
-        bold: true,
-        align: 'left',
-      })
-    }
-    return { x: b.x, y: b.y + titleH, w: b.w, h: Math.max(0, b.h - titleH) }
-  })
-
-  return { content, texts, rules, columns: bodies, headerBottom }
+  return { content, header: headerBox, frames, rules }
 }

@@ -18,13 +18,16 @@ import {
   type UserTextTier,
 } from '../types/document'
 import {
-  computeLayoutGeometry,
+  computePageGeometry,
+  createCustomHeaderItem,
+  createDefaultHeader,
   createDefaultLayout,
   normalizeLayout,
   type ColumnLayout,
-  type HeaderField,
-  type HeaderFieldKey,
-  type PaperLayout,
+  type HeaderItem,
+  type HeaderLayout,
+  type PageMargin,
+  type SpacingSettings,
 } from '../types/layout'
 import { createEmptyExam, createSampleExam, normalizeExam } from '../types/exam'
 import { EXAM_ACTION_TYPES, examReducer, type ExamAction } from './examReducer'
@@ -42,6 +45,7 @@ export const initialEditorState = (): EditorState => ({
   layout: createDefaultLayout(),
   exam: createSampleExam(),
   selectedBlock: null,
+  activePage: 0,
 })
 
 function nextZ(objects: CanvasObject[]): number {
@@ -63,7 +67,8 @@ export type EditorAction =
   | { type: 'SELECT'; id: string | null }
   | { type: 'START_TEXT_PLACEMENT' }
   | { type: 'CANCEL_TEXT_PLACEMENT' }
-  | { type: 'PLACE_TEXT_AT'; x: number; y: number }
+  | { type: 'PLACE_TEXT_AT'; x: number; y: number; page: number }
+  | { type: 'SET_ACTIVE_PAGE'; page: number }
   | { type: 'SET_DEFAULT_NEW_TEXT_TIER'; tierId: string }
   | { type: 'ADD_LINE' }
   | { type: 'ADD_RECT' }
@@ -117,10 +122,14 @@ export type EditorAction =
         exam?: unknown
       }
     }
-  | { type: 'SET_HEADER_FIELD'; key: HeaderFieldKey; patch: Partial<HeaderField> }
+  | { type: 'UPDATE_HEADER_ITEM'; id: string; patch: Partial<Omit<HeaderItem, 'id' | 'role'>> }
+  | { type: 'ADD_HEADER_ITEM' }
+  | { type: 'REMOVE_HEADER_ITEM'; id: string }
+  | { type: 'SET_HEADER'; patch: Partial<Omit<HeaderLayout, 'items'>> }
+  | { type: 'RESET_HEADER_LAYOUT' }
   | { type: 'SET_COLUMNS'; patch: Partial<ColumnLayout> }
-  | { type: 'SET_COLUMN_TITLE'; index: 0 | 1; title: string }
-  | { type: 'SET_LAYOUT'; patch: Partial<Pick<PaperLayout, 'margin' | 'headerRule'>> }
+  | { type: 'SET_MARGIN'; patch: Partial<PageMargin> }
+  | { type: 'SET_SPACING'; patch: Partial<SpacingSettings> }
   | { type: 'UPDATE_TEXT_LEVEL_OVERRIDES'; patch: TextLevelOverrides }
   | { type: 'COMMIT_TEXT_TIER_CATALOG'; overridesPatch: TextLevelOverrides; userTiers: UserTextTier[] }
   | { type: 'RESET' }
@@ -132,6 +141,10 @@ function findIndex(objects: CanvasObject[], id: string): number {
 
 function sortByZ(objects: CanvasObject[]): CanvasObject[] {
   return [...objects].sort((a, b) => a.zIndex - b.zIndex)
+}
+
+function withHeader(state: EditorState, fn: (h: HeaderLayout) => HeaderLayout): EditorState {
+  return { ...state, layout: { ...state.layout, header: fn(state.layout.header) } }
 }
 
 function isExamAction(a: EditorAction): a is ExamAction {
@@ -176,15 +189,10 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       if (!state.textPlacementMode) return state
       const tierId = pickValidDefaultNewTextTier(state.defaultNewTextTierId, state.userTextTiers)
       const z = nextZ(state.objects)
-      const geo = computeLayoutGeometry(
-        state.layout,
-        state.pageWidth,
-        state.pageHeight,
-        state.textLevelOverrides,
-      )
+      const geo = computePageGeometry(state.layout, state.pageWidth, state.pageHeight, action.page)
       const col =
-        geo.columns.find((c) => action.x >= c.x && action.x <= c.x + c.w) ??
-        geo.columns.reduce((best, c) =>
+        geo.frames.find((c) => action.x >= c.x && action.x <= c.x + c.w && action.y >= c.y && action.y <= c.y + c.h) ??
+        geo.frames.reduce((best, c) =>
           Math.abs(c.x + c.w / 2 - action.x) < Math.abs(best.x + best.w / 2 - action.x) ? c : best,
         )
       const px = Math.max(col.x, Math.min(action.x, col.x + col.w - 120))
@@ -195,6 +203,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         id: newId(),
         type: 'text',
         zIndex: z,
+        page: action.page,
         x: px,
         y: py,
         width,
@@ -234,6 +243,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         id: newId(),
         type: 'line',
         zIndex: z,
+        page: state.activePage,
         x1: 100,
         y1: 400,
         x2: 420,
@@ -253,6 +263,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         id: newId(),
         type: 'rect',
         zIndex: z,
+        page: state.activePage,
         x: 120,
         y: 200,
         width: 200,
@@ -278,6 +289,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         id: newId(),
         type: 'image',
         zIndex: z,
+        page: state.activePage,
         x: 80,
         y: 100,
         width: w,
@@ -297,7 +309,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           state,
           block.kind === 'section'
             ? { type: 'REMOVE_SECTION', id: block.id }
-            : { type: 'REMOVE_QUESTION', id: block.id },
+            : block.kind === 'question'
+              ? { type: 'REMOVE_QUESTION', id: block.id }
+              : { type: 'REMOVE_HEADER_ITEM', id: block.id },
         )
       }
       if (!state.selectedId) return state
@@ -463,38 +477,61 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         layout: normalizeLayout(action.doc.layout),
         exam: normalizeExam(action.doc.exam),
         selectedBlock: null,
+        activePage: 0,
       }
     }
-    case 'SET_HEADER_FIELD':
+    case 'SET_ACTIVE_PAGE':
+      return state.activePage === action.page ? state : { ...state, activePage: action.page }
+    case 'UPDATE_HEADER_ITEM':
+      return withHeader(state, (h) => ({
+        ...h,
+        items: h.items.map((it) => (it.id === action.id ? { ...it, ...action.patch } : it)),
+      }))
+    case 'ADD_HEADER_ITEM': {
+      const item = createCustomHeaderItem(Math.max(0, state.layout.header.height - 22))
       return {
-        ...state,
-        layout: {
-          ...state.layout,
-          header: {
-            ...state.layout.header,
-            [action.key]: { ...state.layout.header[action.key], ...action.patch },
-          },
-        },
+        ...withHeader(state, (h) => ({ ...h, items: [...h.items, item] })),
+        selectedBlock: { kind: 'header', id: item.id },
+        selectedId: null,
       }
+    }
+    case 'REMOVE_HEADER_ITEM': {
+      const item = state.layout.header.items.find((it) => it.id === action.id)
+      if (!item) return state
+      const next = withHeader(state, (h) =>
+        item.role === 'custom'
+          ? { ...h, items: h.items.filter((it) => it.id !== action.id) }
+          : { ...h, items: h.items.map((it) => (it.id === action.id ? { ...it, visible: false } : it)) },
+      )
+      return { ...next, selectedBlock: state.selectedBlock?.id === action.id ? null : state.selectedBlock }
+    }
+    case 'SET_HEADER':
+      return withHeader(state, (h) => ({ ...h, ...action.patch }))
+    case 'RESET_HEADER_LAYOUT': {
+      const defaults = createDefaultHeader()
+      const old = state.layout.header
+      const items = defaults.items.map((d) => {
+        const prev = old.items.find((it) => it.role === d.role)
+        return prev ? { ...d, id: prev.id, label: prev.label, value: prev.value, visible: prev.visible } : d
+      })
+      const customs = old.items.filter((it) => it.role === 'custom')
+      return withHeader(state, () => ({ ...defaults, items: [...items, ...customs] }))
+    }
     case 'SET_COLUMNS':
       return {
         ...state,
-        layout: normalizeLayout({
-          ...state.layout,
-          columns: { ...state.layout.columns, ...action.patch },
-        }),
+        layout: normalizeLayout({ ...state.layout, columns: { ...state.layout.columns, ...action.patch } }),
       }
-    case 'SET_COLUMN_TITLE': {
-      const [t0, t1] = state.layout.columns.titles
-      const titles: [string, string] = [t0, t1]
-      titles[action.index] = action.title
+    case 'SET_MARGIN':
       return {
         ...state,
-        layout: { ...state.layout, columns: { ...state.layout.columns, titles } },
+        layout: normalizeLayout({ ...state.layout, margin: { ...state.layout.margin, ...action.patch } }),
       }
-    }
-    case 'SET_LAYOUT':
-      return { ...state, layout: normalizeLayout({ ...state.layout, ...action.patch }) }
+    case 'SET_SPACING':
+      return {
+        ...state,
+        layout: normalizeLayout({ ...state.layout, spacing: { ...state.layout.spacing, ...action.patch } }),
+      }
     case 'UPDATE_TEXT_LEVEL_OVERRIDES': {
       const merged: TextLevelOverrides = { ...state.textLevelOverrides }
       for (const key of TEXT_PRESET_LEVEL_KEYS) {

@@ -29,7 +29,8 @@ export function OutlinePanel() {
   const [drop, setDrop] = useState<Drop>(null)
   const nums = questionNumbers(exam)
   const totals = examTotals(exam)
-  const overflowIds = new Set(flow.overflow.map((r) => r.id))
+  const overflowIds = new Set(flow.warnings.flatMap((w) => (w.type === 'oversize' ? [w.ref.id] : [])))
+  const pageOf = new Map(flow.blocks.map((b) => [b.ref.id, b.page]))
 
   const select = (ref: BlockRef) => dispatch({ type: 'SELECT_BLOCK', ref })
   const isSel = (id: string) => selectedBlock?.id === id
@@ -139,6 +140,7 @@ export function OutlinePanel() {
                   ⋮⋮
                 </span>
                 <span className="outline-row__title">{sectionHeading(s, si)}</span>
+                {pageOf.has(s.id) ? <span className="outline-row__page">P{pageOf.get(s.id)! + 1}</span> : null}
                 <span className="outline-row__score">{sectionScore(s)} 分</span>
               </div>
 
@@ -176,12 +178,17 @@ export function OutlinePanel() {
                         }}
                         onClick={() => select({ kind: 'question', id: q.id })}
                         onKeyDown={onKey({ kind: 'question', id: q.id }, s.id)}
-                        title={overflowIds.has(q.id) ? '此題超出頁面，目前不會顯示在紙上' : undefined}
+                        title={overflowIds.has(q.id) ? '此題比一整欄還高，會超出頁面' : undefined}
                       >
                         <span className="outline-row__num">{nums.get(q.id)}.</span>
                         <span className="outline-row__stem">
                           {q.stem.trim() || <em>（未輸入題目）</em>}
                         </span>
+                        {q.figures.length ? (
+                          <span className="outline-row__fig" title={`${q.figures.length} 張附圖`}>
+                            圖
+                          </span>
+                        ) : null}
                         <span className="outline-row__meta">
                           {QUESTION_TYPE_LABEL[q.type].replace('題', '')}・{q.score}
                         </span>

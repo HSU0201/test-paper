@@ -3,7 +3,9 @@ import {
   createQuestion,
   createSection,
   isChoiceType,
+  type Asset,
   type BlockRef,
+  type Figure,
   type ExamContent,
   type Question,
   type QuestionNumbering,
@@ -25,8 +27,14 @@ export type ExamAction =
   | { type: 'UPDATE_CHOICE'; questionId: string; choiceId: string; text: string }
   | { type: 'REMOVE_CHOICE'; questionId: string; choiceId: string }
   | { type: 'SET_NUMBERING'; numbering: QuestionNumbering }
+  | { type: 'ADD_FIGURE'; questionId: string; asset: Asset }
+  | { type: 'UPDATE_FIGURE'; questionId: string; figureId: string; patch: Partial<Omit<Figure, 'id' | 'assetId'>> }
+  | { type: 'REMOVE_FIGURE'; questionId: string; figureId: string }
 
 export const EXAM_ACTION_TYPES = new Set<string>([
+  'ADD_FIGURE',
+  'UPDATE_FIGURE',
+  'REMOVE_FIGURE',
   'SELECT_BLOCK',
   'ADD_SECTION',
   'UPDATE_SECTION',
@@ -197,5 +205,39 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
       }
     case 'SET_NUMBERING':
       return { ...state, exam: { ...exam, numbering: action.numbering } }
+
+    case 'ADD_FIGURE': {
+      const assetId = crypto.randomUUID()
+      const figure: Figure = { id: crypto.randomUUID(), assetId, placement: 'below', widthRatio: 0.6 }
+      const withAsset = { ...exam, assets: { ...exam.assets, [assetId]: action.asset } }
+      return {
+        ...state,
+        exam: mapQuestion(withAsset, action.questionId, (q) => ({ ...q, figures: [...q.figures, figure] })),
+      }
+    }
+    case 'UPDATE_FIGURE':
+      return {
+        ...state,
+        exam: mapQuestion(exam, action.questionId, (q) => ({
+          ...q,
+          figures: q.figures.map((f) => (f.id === action.figureId ? { ...f, ...action.patch } : f)),
+        })),
+      }
+    case 'REMOVE_FIGURE': {
+      const hit = findQuestion(exam, action.questionId)
+      const fig = hit?.question.figures.find((f) => f.id === action.figureId)
+      if (!fig) return state
+      let next = mapQuestion(exam, action.questionId, (q) => ({
+        ...q,
+        figures: q.figures.filter((f) => f.id !== action.figureId),
+      }))
+      const stillUsed = next.sections.some((s) => s.questions.some((q) => q.figures.some((f) => f.assetId === fig.assetId)))
+      if (!stillUsed) {
+        const assets = { ...next.assets }
+        delete assets[fig.assetId]
+        next = { ...next, assets }
+      }
+      return { ...state, exam: next }
+    }
   }
 }

@@ -2,11 +2,11 @@ import type Konva from 'konva'
 import { useRef, type RefObject } from 'react'
 import { useEditor } from '../editor/EditorContext'
 import { documentBaseName, downloadJson, readDocumentFile, serializeDocument } from '../editor/documentIO'
-import { exportStageToPdf } from '../export/pdfFromStage'
+import { exportStagesToPdf } from '../export/pdfFromStage'
 import { Icon } from './ui'
 
-export function TopBar({ stageRef }: { stageRef: RefObject<Konva.Stage | null> }) {
-  const { state, dispatch, undo, redo, canUndo, canRedo } = useEditor()
+export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null)[]> }) {
+  const { state, dispatch, undo, redo, canUndo, canRedo, pageCount } = useEditor()
   const openRef = useRef<HTMLInputElement>(null)
   const baseName = documentBaseName(state)
 
@@ -72,8 +72,8 @@ export function TopBar({ stageRef }: { stageRef: RefObject<Konva.Stage | null> }
           type="button"
           className="btn btn--primary"
           onClick={() => {
-            const stage = stageRef.current
-            if (stage) exportStageToPdf(stage, `${baseName}.pdf`)
+            const stages = (stagesRef.current ?? []).slice(0, pageCount).filter((s): s is Konva.Stage => !!s)
+            exportStagesToPdf(stages, `${baseName}.pdf`)
           }}
         >
           <Icon name="pdf" />

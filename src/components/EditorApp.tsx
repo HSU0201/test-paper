@@ -1,6 +1,7 @@
 import type Konva from 'konva'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { getTextTierLabel, pxToMm } from '../types/document'
+import { getTextTierLabel } from '../types/document'
+import { StatusBar } from './StatusBar'
 import { EditorProvider, useEditor } from '../editor/EditorContext'
 import { Inspector } from './Inspector'
 import { PaperStage } from './PaperStage'
@@ -9,7 +10,6 @@ import { TopBar } from './TopBar'
 import { InsertPanel } from './panels/InsertPanel'
 import { LayoutPanel } from './panels/LayoutPanel'
 import { OutlinePanel } from './panels/OutlinePanel'
-import { examTotals } from '../types/exam'
 import { PagePanel } from './panels/PagePanel'
 import { Icon, type IconName } from './ui'
 import './editor.css'
@@ -26,8 +26,9 @@ const SIDE_TABS: { id: SideTab; label: string; icon: IconName }[] = [
 const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.9, 1, 1.25, 1.5, 2]
 
 function EditorShell() {
-  const { state, dispatch, undo, redo, flow } = useEditor()
-  const stageRef = useRef<Konva.Stage>(null)
+  const { state, dispatch, undo, redo, pageCount, saveStatus } = useEditor()
+  const stagesRef = useRef<(Konva.Stage | null)[]>([])
+  const pageElsRef = useRef<(HTMLDivElement | null)[]>([])
   const canvasAreaRef = useRef<HTMLDivElement>(null)
   const [fitScale, setFitScale] = useState(1)
   const [zoom, setZoom] = useState<number | 'fit'>('fit')
@@ -92,12 +93,14 @@ function EditorShell() {
     if (next) setZoom(next)
   }
 
-  const selected = state.selectedId ? state.objects.find((o) => o.id === state.selectedId) : null
-  const totals = examTotals(state.exam)
+  const editingPage = editingId ? (state.objects.find((o) => o.id === editingId)?.page ?? 0) : -1
+  const locatePage = useCallback((page: number) => {
+    pageElsRef.current[page]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
 
   return (
     <div className="editor-root">
-      <TopBar stageRef={stageRef} />
+      <TopBar stagesRef={stagesRef} />
       <div className="editor-body">
         <nav className="side-rail" aria-label="編輯面板">
           {SIDE_TABS.map((t) => (
@@ -139,14 +142,35 @@ function EditorShell() {
             </div>
           ) : null}
           <div className="canvas-scroll">
-            <div className="canvas-inner">
-              <PaperStage
-                ref={stageRef}
-                scale={scale}
-                showGuides={showGuides}
-                onTextDoubleClick={handleTextDoubleClick}
-              />
-              <TextEditOverlay editingId={editingId} scale={scale} onClose={() => setEditingId(null)} />
+            {saveStatus.state === 'loading' ? <p className="canvas-loading">讀取暫存中…</p> : null}
+            <div className="canvas-pages" hidden={saveStatus.state === 'loading'}>
+              {Array.from({ length: pageCount }, (_, i) => (
+                <div
+                  key={i}
+                  className={`canvas-page${state.activePage === i ? ' is-active' : ''}`}
+                  ref={(el) => {
+                    pageElsRef.current[i] = el
+                  }}
+                >
+                  <div className="canvas-page__label">
+                    第 {i + 1} 頁 <span>/ 共 {pageCount} 頁</span>
+                  </div>
+                  <div className="canvas-inner">
+                    <PaperStage
+                      ref={(s) => {
+                        stagesRef.current[i] = s
+                      }}
+                      pageIndex={i}
+                      scale={scale}
+                      showGuides={showGuides}
+                      onTextDoubleClick={handleTextDoubleClick}
+                    />
+                    {editingPage === i ? (
+                      <TextEditOverlay editingId={editingId} scale={scale} onClose={() => setEditingId(null)} />
+                    ) : null}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
           <div className="canvas-controls" role="toolbar" aria-label="檢視">
@@ -180,19 +204,7 @@ function EditorShell() {
 
         <Inspector />
       </div>
-      <footer className="statusbar">
-        <span>
-          {state.pageWidth}×{state.pageHeight}px・約 {pxToMm(state.pageWidth)}×{pxToMm(state.pageHeight)}mm
-        </span>
-        <span>
-          {totals.sections} 大題・{totals.questions} 題・總分 {totals.score}
-        </span>
-        <span>{state.objects.length} 個自由物件</span>
-        {selected || state.selectedBlock ? <span className="statusbar__sel">已選取</span> : null}
-        {flow.overflow.length ? (
-          <span className="statusbar__warn">⚠ 有 {flow.overflow.length} 個區塊超出頁面</span>
-        ) : null}
-      </footer>
+      <StatusBar onLocate={locatePage} />
     </div>
   )
 }

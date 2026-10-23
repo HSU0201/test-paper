@@ -1,6 +1,9 @@
 import { useEditor } from '../editor/EditorContext'
+import { describeWarnings } from '../editor/warningText'
 import type { CanvasObject } from '../types/document'
+import { HEADER_ROLE_LABEL, resolveSplit } from '../types/layout'
 import { BlockInspector } from './BlockInspector'
+import { HeaderItemInspector } from './HeaderItemInspector'
 import { PropertiesPanel } from './PropertiesPanel'
 import { Icon } from './ui'
 
@@ -21,11 +24,44 @@ const SHORTCUTS: [string, string][] = [
 ]
 
 export function Inspector() {
-  const { state, dispatch, layoutGeometry, flow } = useEditor()
+  const { state, dispatch, pageGeometry, flow, pageCount } = useEditor()
   const obj = state.selectedId ? state.objects.find((o) => o.id === state.selectedId) : null
   const block = state.selectedBlock
+  const frames = pageGeometry(0).frames.length
+
+  if (block?.kind === 'header') {
+    const item = state.layout.header.items.find((it) => it.id === block.id)
+    if (item) {
+      return (
+        <aside className="inspector" aria-label="屬性">
+          <div className="inspector__head">
+            <span className="inspector__badge">頁首・{item.label || HEADER_ROLE_LABEL[item.role]}</span>
+            <div className="inspector__tools">
+              <button
+                type="button"
+                className="icon-btn icon-btn--danger"
+                title={item.role === 'custom' ? '刪除此欄位' : '隱藏此欄位'}
+                onClick={() => dispatch({ type: 'DELETE_SELECTED' })}
+              >
+                <Icon name="trash" />
+              </button>
+            </div>
+          </div>
+          <HeaderItemInspector item={item} />
+        </aside>
+      )
+    }
+  }
 
   if (block) {
+    const notes = describeWarnings(
+      flow.warnings.filter((w) =>
+        w.type === 'oversize' ? w.ref.id === block.id : w.type === 'headMoved' ? w.sectionId === block.id : false,
+      ),
+      state.exam,
+      frames,
+    )
+    const page = flow.blocks.find((b) => b.ref.id === block.id)?.page
     return (
       <aside className="inspector" aria-label="屬性">
         <div className="inspector__head">
@@ -41,9 +77,12 @@ export function Inspector() {
             </button>
           </div>
         </div>
-        {flow.overflow.some((r) => r.id === block.id) ? (
-          <p className="inspector__warn">此區塊超出目前頁面，暫時不會顯示在紙上；多頁排版將在下一階段加入。</p>
-        ) : null}
+        {page !== undefined ? <p className="inspector__meta">位於第 {page + 1} 頁</p> : null}
+        {notes.map((n) => (
+          <p key={n.key} className={n.tone === 'warn' ? 'inspector__warn' : 'inspector__note'}>
+            {n.text}
+          </p>
+        ))}
         <BlockInspector />
       </aside>
     )
@@ -59,12 +98,22 @@ export function Inspector() {
         <div className="inspector__empty">
           <h2 className="inspector__title">試卷總覽</h2>
           <p className="inspector__hint">
-            點選紙張上的題目或左側「大綱」即可在此編輯；頁首與分欄請到「版型」。
+            點選紙張上的題目或左側「大綱」即可在此編輯；點頁首文字可拖曳排版，欄位與分欄請到「版型」。
           </p>
           <dl className="inspector__stats">
             <div>
+              <dt>頁數</dt>
+              <dd>{pageCount}</dd>
+            </div>
+            <div>
               <dt>分欄</dt>
-              <dd>{layoutGeometry.columns.length === 2 ? '左右雙欄' : '單欄'}</dd>
+              <dd>
+                {frames === 2
+                  ? resolveSplit(state.layout.columns, state.pageWidth, state.pageHeight) === 'vertical'
+                    ? '左右雙欄'
+                    : '上下雙欄'
+                  : '單欄'}
+              </dd>
             </div>
             {(Object.keys(TYPE_LABEL) as CanvasObject['type'][]).map((t) => (
               <div key={t}>

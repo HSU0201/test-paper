@@ -11,6 +11,7 @@ const TRANSIENT = new Set<EditorAction['type']>([
   'START_TEXT_PLACEMENT',
   'CANCEL_TEXT_PLACEMENT',
   'SET_DEFAULT_NEW_TEXT_TIER',
+  'SET_ACTIVE_PAGE',
 ])
 
 export type HistoryState = {
@@ -25,6 +26,8 @@ export type HistoryAction =
   | { kind: 'do'; action: EditorAction; at: number }
   | { kind: 'undo' }
   | { kind: 'redo' }
+  /** 載入暫存稿：取代目前內容並清空復原紀錄 */
+  | { kind: 'hydrate'; action: EditorAction }
 
 export function initialHistory(): HistoryState {
   return { past: [], present: initialEditorState(), future: [], lastKey: null, lastAt: 0 }
@@ -42,6 +45,9 @@ function settle(s: EditorState): EditorState {
 }
 
 export function historyReducer(h: HistoryState, a: HistoryAction): HistoryState {
+  if (a.kind === 'hydrate') {
+    return { past: [], present: editorReducer(h.present, a.action), future: [], lastKey: null, lastAt: 0 }
+  }
   if (a.kind === 'undo') {
     const prev = h.past[h.past.length - 1]
     if (!prev) return h

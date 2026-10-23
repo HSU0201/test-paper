@@ -1,71 +1,122 @@
 import { useEditor } from '../../editor/EditorContext'
-import { HEADER_FIELD_DEFS, HEADER_FIELD_ORDER, type HeaderFieldKey } from '../../types/layout'
+import { HEADER_ROLE_LABEL, resolveSplit, type HeaderItem, type SpacingSettings } from '../../types/layout'
 import { NumberField, PanelSection, Segmented, Switch } from '../ui'
 
-const PLACEMENT_HINT: Record<string, string> = {
-  title: '大標・置中',
-  subtitle: '副標・置中',
-  infoLeft: '資訊列・左',
-  infoRight: '資訊列・右',
+function HeaderItemRow({ item, selected }: { item: HeaderItem; selected: boolean }) {
+  const { dispatch } = useEditor()
+  const set = (patch: Partial<HeaderItem>) => dispatch({ type: 'UPDATE_HEADER_ITEM', id: item.id, patch })
+  const name = item.role === 'custom' ? item.label || '自訂欄位' : HEADER_ROLE_LABEL[item.role]
+  return (
+    <div
+      className={`header-field${item.visible ? '' : ' is-off'}${selected ? ' is-selected' : ''}`}
+      onClick={() => item.visible && dispatch({ type: 'SELECT_BLOCK', ref: { kind: 'header', id: item.id } })}
+    >
+      <div className="header-field__top">
+        <span className="header-field__label">{name}</span>
+        {item.role === 'custom' ? <span className="header-field__tag">自訂</span> : null}
+        <span onClick={(e) => e.stopPropagation()}>
+          <Switch checked={item.visible} label={`顯示${name}`} onChange={(v) => set({ visible: v })} />
+        </span>
+      </div>
+      {item.visible ? (
+        <input
+          className="ui-input"
+          value={item.value}
+          placeholder={item.showLabel ? '留白則印出底線供學生填寫' : `輸入${name}`}
+          onClick={(e) => e.stopPropagation()}
+          onFocus={() => dispatch({ type: 'SELECT_BLOCK', ref: { kind: 'header', id: item.id } })}
+          onChange={(e) => set({ value: e.target.value })}
+        />
+      ) : null}
+    </div>
+  )
 }
 
-function HeaderFieldRow({ fieldKey }: { fieldKey: HeaderFieldKey }) {
+function RangeRow({
+  label,
+  k,
+  step,
+  min,
+  max,
+  suffix,
+}: {
+  label: string
+  k: Exclude<keyof SpacingSettings, 'allowSqueeze'>
+  step: number
+  min: number
+  max: number
+  suffix?: string
+}) {
   const { state, dispatch } = useEditor()
-  const def = HEADER_FIELD_DEFS[fieldKey]
-  const f = state.layout.header[fieldKey]
-  const set = (patch: Partial<typeof f>) => dispatch({ type: 'SET_HEADER_FIELD', key: fieldKey, patch })
+  const r = state.layout.spacing[k]
+  const allow = state.layout.spacing.allowSqueeze
   return (
-    <div className={`header-field${f.visible ? '' : ' is-off'}`}>
-      <div className="header-field__top">
-        {def.showLabel ? (
-          <input
-            className="header-field__label-input"
-            value={f.label}
-            aria-label={`${def.defaultLabel}的標籤文字`}
-            onChange={(e) => set({ label: e.target.value })}
-          />
-        ) : (
-          <span className="header-field__label">{f.label}</span>
-        )}
-        <span className="header-field__tag">{PLACEMENT_HINT[def.placement]}</span>
-        <Switch checked={f.visible} label={`顯示${def.defaultLabel}`} onChange={(v) => set({ visible: v })} />
-      </div>
-      <input
-        className="ui-input"
-        value={f.value}
-        placeholder={def.placeholder}
-        disabled={!f.visible}
-        onChange={(e) => set({ value: e.target.value })}
+    <div className="range-row">
+      <span className="range-row__label">{label}</span>
+      <NumberField
+        label="標準"
+        value={r.nominal}
+        step={step}
+        min={min}
+        max={max}
+        suffix={suffix}
+        onChange={(v) => dispatch({ type: 'SET_SPACING', patch: { [k]: { nominal: v, min: Math.min(r.min, v) } } })}
       />
+      {allow ? (
+        <NumberField
+          label="最小"
+          value={r.min}
+          step={step}
+          min={min}
+          max={r.nominal}
+          suffix={suffix}
+          onChange={(v) => dispatch({ type: 'SET_SPACING', patch: { [k]: { nominal: r.nominal, min: v } } })}
+        />
+      ) : null}
     </div>
   )
 }
 
 export function LayoutPanel() {
-  const { state, dispatch } = useEditor()
-  const { columns, margin, headerRule } = state.layout
-  const primary = HEADER_FIELD_ORDER.filter((k) => ['schoolName', 'examTitle', 'teacher'].includes(k))
-  const extra = HEADER_FIELD_ORDER.filter((k) => !primary.includes(k))
+  const { state, dispatch, flow } = useEditor()
+  const { columns, margin, header, spacing } = state.layout
+  const selectedHeader = state.selectedBlock?.kind === 'header' ? state.selectedBlock.id : null
+  const effective = resolveSplit(columns, state.pageWidth, state.pageHeight)
 
   return (
     <div className="side-panel__scroll">
-      <PanelSection title="頁首" description="學校名稱與出題老師為固定位置，只需填寫內容。">
-        {primary.map((k) => (
-          <HeaderFieldRow key={k} fieldKey={k} />
+      <PanelSection
+        title="頁首"
+        description="在紙張上可直接拖曳頁首文字調整位置、拉兩側把手改寬度；點選後右側可改字級與對齊。"
+        actions={
+          <button type="button" className="text-btn" onClick={() => dispatch({ type: 'RESET_HEADER_LAYOUT' })}>
+            還原版型
+          </button>
+        }
+      >
+        {header.items.map((it) => (
+          <HeaderItemRow key={it.id} item={it} selected={selectedHeader === it.id} />
         ))}
-      </PanelSection>
-
-      <PanelSection title="資訊列欄位" description="打開需要的欄位；內容留白時會顯示底線供學生填寫。">
-        {extra.map((k) => (
-          <HeaderFieldRow key={k} fieldKey={k} />
-        ))}
-        <div className="ui-row">
-          <span className="ui-row__label">頁首分隔線</span>
-          <Switch
-            checked={headerRule}
-            label="頁首分隔線"
-            onChange={(v) => dispatch({ type: 'SET_LAYOUT', patch: { headerRule: v } })}
+        <button type="button" className="btn btn--ghost btn--block" onClick={() => dispatch({ type: 'ADD_HEADER_ITEM' })}>
+          ＋ 新增自訂欄位
+        </button>
+        <div className="ui-grid-2">
+          <NumberField
+            label="頁首高度"
+            suffix="px"
+            min={20}
+            max={260}
+            value={header.height}
+            onChange={(v) => dispatch({ type: 'SET_HEADER', patch: { height: v } })}
           />
+          <div className="ui-row ui-row--stack">
+            <span className="ui-row__label">下方分隔線</span>
+            <Switch checked={header.rule} label="頁首分隔線" onChange={(v) => dispatch({ type: 'SET_HEADER', patch: { rule: v } })} />
+          </div>
+        </div>
+        <div className="ui-row">
+          <span className="ui-row__label">每一頁都印頁首</span>
+          <Switch checked={header.repeat} label="每一頁都印頁首" onChange={(v) => dispatch({ type: 'SET_HEADER', patch: { repeat: v } })} />
         </div>
       </PanelSection>
 
@@ -75,25 +126,39 @@ export function LayoutPanel() {
           value={columns.count}
           options={[
             { value: 1, label: '單欄' },
-            { value: 2, label: '左右雙欄' },
+            { value: 2, label: '雙欄' },
           ]}
           onChange={(v) => dispatch({ type: 'SET_COLUMNS', patch: { count: v } })}
         />
         {columns.count === 2 ? (
           <>
+            <Segmented
+              label="分欄方向"
+              value={columns.split}
+              options={[
+                { value: 'auto', label: '自動' },
+                { value: 'vertical', label: '左右' },
+                { value: 'horizontal', label: '上下' },
+              ]}
+              onChange={(v) => dispatch({ type: 'SET_COLUMNS', patch: { split: v } })}
+            />
+            {columns.split === 'auto' ? (
+              <p className="panel-hint">直式紙張左右分欄、橫式紙張上下分欄（目前：{effective === 'vertical' ? '左右' : '上下'}）</p>
+            ) : null}
             <label className="ui-field">
               <span className="ui-field__label">
-                左右比例 <strong>{Math.round(columns.leftRatio * 100)} : {100 - Math.round(columns.leftRatio * 100)}</strong>
+                {effective === 'vertical' ? '左右' : '上下'}比例{' '}
+                <strong>
+                  {Math.round(columns.ratio * 100)} : {100 - Math.round(columns.ratio * 100)}
+                </strong>
               </span>
               <input
                 type="range"
                 min={30}
                 max={70}
                 step={5}
-                value={Math.round(columns.leftRatio * 100)}
-                onChange={(e) =>
-                  dispatch({ type: 'SET_COLUMNS', patch: { leftRatio: Number(e.target.value) / 100 } })
-                }
+                value={Math.round(columns.ratio * 100)}
+                onChange={(e) => dispatch({ type: 'SET_COLUMNS', patch: { ratio: Number(e.target.value) / 100 } })}
               />
             </label>
             <div className="ui-grid-2">
@@ -107,35 +172,31 @@ export function LayoutPanel() {
               />
               <div className="ui-row ui-row--stack">
                 <span className="ui-row__label">中間分隔線</span>
-                <Switch
-                  checked={columns.divider}
-                  label="中間分隔線"
-                  onChange={(v) => dispatch({ type: 'SET_COLUMNS', patch: { divider: v } })}
-                />
+                <Switch checked={columns.divider} label="中間分隔線" onChange={(v) => dispatch({ type: 'SET_COLUMNS', patch: { divider: v } })} />
               </div>
             </div>
           </>
         ) : null}
+      </PanelSection>
+
+      <PanelSection
+        title="行距與間距"
+        description="內容快排不下時，會先在「標準」與「最小」之間自動壓縮，能少一頁或避免標題落單才會壓。"
+      >
         <div className="ui-row">
-          <span className="ui-row__label">顯示欄標題</span>
+          <span className="ui-row__label">允許自動壓縮</span>
           <Switch
-            checked={columns.showTitles}
-            label="顯示欄標題"
-            onChange={(v) => dispatch({ type: 'SET_COLUMNS', patch: { showTitles: v } })}
+            checked={spacing.allowSqueeze}
+            label="允許自動壓縮"
+            onChange={(v) => dispatch({ type: 'SET_SPACING', patch: { allowSqueeze: v } })}
           />
         </div>
-        {columns.showTitles
-          ? ([0, 1] as const).slice(0, columns.count).map((i) => (
-              <label key={i} className="ui-field">
-                <span className="ui-field__label">{columns.count === 1 ? '欄標題' : i === 0 ? '左欄標題' : '右欄標題'}</span>
-                <input
-                  className="ui-input"
-                  value={columns.titles[i]}
-                  onChange={(e) => dispatch({ type: 'SET_COLUMN_TITLE', index: i, title: e.target.value })}
-                />
-              </label>
-            ))
-          : null}
+        <RangeRow label="行高" k="lineHeight" step={0.05} min={1} max={3} suffix="倍" />
+        <RangeRow label="題距" k="questionGap" step={1} min={0} max={80} suffix="px" />
+        <RangeRow label="大題間距" k="sectionGap" step={1} min={0} max={120} suffix="px" />
+        {flow.squeeze > 0 ? (
+          <p className="panel-hint is-info">目前已壓縮 {Math.round(flow.squeeze * 100)}%（行高 {flow.lineHeight}）</p>
+        ) : null}
       </PanelSection>
 
       <PanelSection title="頁邊距">
@@ -155,7 +216,7 @@ export function LayoutPanel() {
               min={0}
               max={200}
               value={margin[k]}
-              onChange={(v) => dispatch({ type: 'SET_LAYOUT', patch: { margin: { ...margin, [k]: v } } })}
+              onChange={(v) => dispatch({ type: 'SET_MARGIN', patch: { [k]: v } })}
             />
           ))}
         </div>

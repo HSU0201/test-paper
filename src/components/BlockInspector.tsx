@@ -1,7 +1,11 @@
+import { useRef, useState } from 'react'
+import { readImageFile } from '../editor/documentIO'
 import { useEditor } from '../editor/EditorContext'
 import { findQuestion } from '../editor/examReducer'
 import {
   choiceLabel,
+  type Figure,
+  type FigurePlacement,
   isChoiceType,
   QUESTION_TYPE_LABEL,
   questionNumbers,
@@ -96,6 +100,119 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
   )
 }
 
+const PLACEMENT_OPTIONS: { value: FigurePlacement; label: string }[] = [
+  { value: 'below', label: '題目下方' },
+  { value: 'right', label: '題目右側' },
+  { value: 'afterChoices', label: '選項下方' },
+]
+
+function FiguresEditor({ questionId }: { questionId: string }) {
+  const { state, dispatch } = useEditor()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [error, setError] = useState<string | null>(null)
+  const hit = findQuestion(state.exam, questionId)
+  if (!hit) return null
+  const q = hit.question
+  const options = isChoiceType(q.type) ? PLACEMENT_OPTIONS : PLACEMENT_OPTIONS.filter((o) => o.value !== 'afterChoices')
+
+  const onFiles = async (files: FileList | null) => {
+    setError(null)
+    for (const file of Array.from(files ?? [])) {
+      try {
+        const asset = await readImageFile(file)
+        dispatch({ type: 'ADD_FIGURE', questionId, asset })
+      } catch {
+        setError(`無法讀取「${file.name}」，請確認是圖片檔`)
+      }
+    }
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  return (
+    <PanelSection
+      title="題目附圖"
+      description="圖片會跟著題目一起排版、換頁；大圖會自動縮小到 1400px 以內。"
+      actions={
+        <button type="button" className="text-btn" onClick={() => fileRef.current?.click()}>
+          ＋ 插入圖片
+        </button>
+      }
+    >
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => void onFiles(e.target.files)}
+      />
+      {error ? <p className="inspector__warn">{error}</p> : null}
+      {!q.figures.length ? (
+        <button
+          type="button"
+          className="figure-drop"
+          onClick={() => fileRef.current?.click()}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault()
+            void onFiles(e.dataTransfer.files)
+          }}
+        >
+          點擊或拖曳圖片到這裡
+        </button>
+      ) : null}
+      {q.figures.map((f, i) => {
+        const asset = state.exam.assets[f.assetId]
+        const setFig = (patch: Partial<Figure>) =>
+          dispatch({ type: 'UPDATE_FIGURE', questionId, figureId: f.id, patch })
+        return (
+          <div key={f.id} className="figure-card">
+            <div className="figure-card__top">
+              {asset ? <img className="figure-card__thumb" src={asset.src} alt={`附圖 ${i + 1}`} /> : null}
+              <span className="figure-card__name">
+                附圖 {i + 1}
+                {asset ? (
+                  <small>
+                    {asset.width}×{asset.height}
+                  </small>
+                ) : null}
+              </span>
+              <button
+                type="button"
+                className="icon-btn icon-btn--danger"
+                title="移除圖片"
+                onClick={() => dispatch({ type: 'REMOVE_FIGURE', questionId, figureId: f.id })}
+              >
+                <Icon name="trash" />
+              </button>
+            </div>
+            <Segmented
+              label="圖片位置"
+              value={options.some((o) => o.value === f.placement) ? f.placement : 'below'}
+              options={options}
+              onChange={(v) => setFig({ placement: v })}
+            />
+            <label className="ui-field">
+              <span className="ui-field__label">
+                寬度 <strong>{Math.round(f.widthRatio * 100)}%</strong>
+                <span className="ui-field__hint">（佔{f.placement === 'right' ? '題目寬' : '欄寬'}）</span>
+              </span>
+              <input
+                type="range"
+                min={15}
+                max={f.placement === 'right' ? 50 : 100}
+                step={5}
+                value={Math.round(f.widthRatio * 100)}
+                onChange={(e) => setFig({ widthRatio: Number(e.target.value) / 100 })}
+              />
+            </label>
+          </div>
+        )
+      })}
+    </PanelSection>
+  )
+}
+
 function QuestionEditor({ questionId }: { questionId: string }) {
   const { state, dispatch } = useEditor()
   const hit = findQuestion(state.exam, questionId)
@@ -184,6 +301,8 @@ function QuestionEditor({ questionId }: { questionId: string }) {
           </div>
         </PanelSection>
       ) : null}
+
+      <FiguresEditor questionId={q.id} />
 
       {q.type === 'short_answer' ? (
         <PanelSection title="作答區">

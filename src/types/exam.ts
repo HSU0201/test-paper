@@ -11,6 +11,20 @@ export type ChoiceLayout = 'auto' | 1 | 2 | 4
 
 export type Choice = { id: string; text: string }
 
+/** below：題目下方；right：題目右側（文字繞排）；afterChoices：選項之後 */
+export type FigurePlacement = 'below' | 'right' | 'afterChoices'
+
+/** 題目內的圖片，跟著題目一起排版、移動 */
+export type Figure = {
+  id: string
+  assetId: string
+  placement: FigurePlacement
+  /** 佔題目內容寬度的比例 */
+  widthRatio: number
+}
+
+export type Asset = { src: string; width: number; height: number }
+
 /** 小題（題目層） */
 export type Question = {
   id: string
@@ -22,6 +36,7 @@ export type Question = {
   answer: string
   /** 問答題留給學生作答的行數 */
   answerLines: number
+  figures: Figure[]
 }
 
 /** firstChild：標題至少與第一題同欄；whole：整個大題不跨欄 */
@@ -44,9 +59,12 @@ export type QuestionNumbering = 'continuous' | 'perSection'
 export type ExamContent = {
   numbering: QuestionNumbering
   sections: Section[]
+  /** 圖片資料（data URL），由 Figure.assetId 參照 */
+  assets: Record<string, Asset>
 }
 
-export type BlockRef = { kind: 'section' | 'question'; id: string }
+/** header：頁首欄位 */
+export type BlockRef = { kind: 'section' | 'question' | 'header'; id: string }
 
 const newId = () => crypto.randomUUID()
 
@@ -114,6 +132,7 @@ export function createQuestion(type: QuestionType, score: number): Question {
     choiceLayout: 'auto',
     answer: '',
     answerLines: type === 'short_answer' ? 3 : 0,
+    figures: [],
   }
 }
 
@@ -173,11 +192,11 @@ export function createSampleExam(): ExamContent {
   essay.questions = [
     { ...q('short_answer', 10, '小明買了 3 枝筆和 2 本筆記本共花了 110 元，已知一枝筆 20 元，請問一本筆記本多少元？'), answerLines: 4 },
   ]
-  return { numbering: 'continuous', sections: [choice, fill, essay] }
+  return { numbering: 'continuous', sections: [choice, fill, essay], assets: {} }
 }
 
 export function createEmptyExam(): ExamContent {
-  return { numbering: 'continuous', sections: [] }
+  return { numbering: 'continuous', sections: [], assets: {} }
 }
 
 const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]
@@ -187,8 +206,10 @@ export function normalizeExam(raw: unknown): ExamContent {
   if (!raw || typeof raw !== 'object') return createEmptyExam()
   const r = raw as Partial<ExamContent>
   const sections = Array.isArray(r.sections) ? r.sections : []
+  const assets = r.assets && typeof r.assets === 'object' ? r.assets : {}
   return {
     numbering: r.numbering === 'perSection' ? 'perSection' : 'continuous',
+    assets,
     sections: sections.map((s) => {
       const base = createSection()
       const defaultType = QUESTION_TYPES.includes(s.defaultType) ? s.defaultType : base.defaultType
@@ -204,6 +225,7 @@ export function normalizeExam(raw: unknown): ExamContent {
             ...item,
             type,
             choices: Array.isArray(item.choices) ? item.choices : [],
+            figures: (Array.isArray(item.figures) ? item.figures : []).filter((f) => f && assets[f.assetId]),
           }
         }),
       }

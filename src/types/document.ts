@@ -119,6 +119,8 @@ export type FontStyle = 'normal' | 'bold' | 'italic' | 'bold italic'
 export type BaseObject = {
   id: string
   zIndex: number
+  /** 所在頁（0 起算）；舊檔沒有此欄位時視為第一頁 */
+  page?: number
 }
 
 export type TextObject = BaseObject & {
@@ -299,8 +301,10 @@ export type EditorState = {
   layout: PaperLayout
   /** 大題／小題內容，依陣列順序排版 */
   exam: ExamContent
-  /** 選取中的大題或小題（與 selectedId 互斥） */
+  /** 選取中的大題、小題或頁首欄位（與 selectedId 互斥） */
   selectedBlock: BlockRef | null
+  /** 最近點選的頁面，新增線條／方框／圖片時放在這一頁 */
+  activePage: number
 }
 
 export function isText(o: CanvasObject): o is TextObject {

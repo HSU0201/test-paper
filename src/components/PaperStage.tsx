@@ -2,8 +2,8 @@ import type Konva from 'konva'
 import {
   forwardRef,
   useCallback,
-  useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type MutableRefObject,
@@ -17,34 +17,20 @@ import {
   Transformer,
 } from 'react-konva'
 import { KonvaTextBlock } from './KonvaTextBlock'
-import { EDITOR_ONLY_NAME, PaperLayoutLayer } from './PaperLayoutLayer'
+import { EDITOR_ONLY_NAME, HEADER_REF_PREFIX, HeaderItemsLayer, PageDecorLayer } from './PaperLayoutLayer'
 import { ExamFlowLayer } from './ExamFlowLayer'
+import { useHtmlImage } from './useHtmlImage'
 import { useEditor } from '../editor/EditorContext'
 import type { EditorAction } from '../editor/reducer'
 import { getBoundingBox, lineSegmentBox, type Box } from '../editor/bounds'
 import { snapBoxPosition, type SnapGuides } from '../editor/snap'
-import type { CanvasObject, EditorState, ImageObject, LineObject } from '../types/document'
+import type { CanvasObject, ImageObject, LineObject } from '../types/document'
 
 type PaperStageProps = {
+  pageIndex: number
   scale: number
   showGuides: boolean
   onTextDoubleClick: (id: string) => void
-}
-
-function useHtmlImage(src: string): HTMLImageElement | null {
-  const [img, setImg] = useState<HTMLImageElement | null>(null)
-  useEffect(() => {
-    const im = new Image()
-    im.crossOrigin = 'anonymous'
-    im.onload = () => setImg(im)
-    im.onerror = () => setImg(null)
-    im.src = src
-    return () => {
-      im.onload = null
-      im.onerror = null
-    }
-  }, [src])
-  return img
 }
 
 function CanvasImageShape({
@@ -104,14 +90,31 @@ function snapTargets(objects: CanvasObject[], excludeId: string, layoutBoxes: Bo
 }
 
 export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
-  function PaperStage({ scale, showGuides, onTextDoubleClick }, ref) {
-    const { state, dispatch, sortedObjects, layoutGeometry, flow } = useEditor()
+  function PaperStage({ pageIndex, scale, showGuides, onTextDoubleClick }, ref) {
+    const { state, dispatch, sortedObjects, pageGeometry, flow } = useEditor()
+    const geometry = pageGeometry(pageIndex)
+    const pageObjects = useMemo(
+      () => sortedObjects.filter((o) => (o.page ?? 0) === pageIndex),
+      [sortedObjects, pageIndex],
+    )
+    const pageBlocks = useMemo(() => flow.blocks.filter((b) => b.page === pageIndex), [flow.blocks, pageIndex])
+    const flagged = useMemo(() => {
+      const s = new Set<string>()
+      for (const w of flow.warnings) {
+        if (w.type === 'headMoved') s.add(w.sectionId)
+        if (w.type === 'oversize') s.add(w.ref.id)
+      }
+      return s
+    }, [flow.warnings])
+
     const stateRef = useRef(state)
+    const objectsRef = useRef<CanvasObject[]>(pageObjects)
     const layoutBoxesRef = useRef<Box[]>([])
     useLayoutEffect(() => {
       stateRef.current = state
-      layoutBoxesRef.current = [layoutGeometry.content, ...layoutGeometry.columns]
-    }, [state, layoutGeometry])
+      objectsRef.current = pageObjects
+      layoutBoxesRef.current = [geometry.content, ...geometry.frames]
+    }, [state, pageObjects, geometry])
 
     const transformerRef = useRef<Konva.Transformer>(null)
     const shapeRefs = useRef<Record<string, Konva.Node>>({})
@@ -130,7 +133,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
           onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => {
             const node = e.target
             const b = boxFromNode(node)
-            const others = snapTargets(stateRef.current.objects, id, layoutBoxesRef.current)
+            const others = snapTargets(objectsRef.current, id, layoutBoxesRef.current)
             const r = snapBoxPosition(b, others, pageW, pageH)
             node.absolutePosition({ x: r.x, y: r.y })
             setGuides(r.guides)
@@ -138,7 +141,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
           onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => {
             const node = e.target
             const b = boxFromNode(node)
-            const others = snapTargets(stateRef.current.objects, id, layoutBoxesRef.current)
+            const others = snapTargets(objectsRef.current, id, layoutBoxesRef.current)
             const r = snapBoxPosition(b, others, pageW, pageH)
             clearGuides()
             dispatch({ type: 'MOVE_OBJECT', id, x: r.x, y: r.y })
@@ -158,13 +161,22 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
     useLayoutEffect(() => {
       const tr = transformerRef.current
       if (!tr) return
+      const header = state.selectedBlock?.kind === 'header' ? state.selectedBlock.id : null
+      if (header) {
+        const hn = shapeRefs.current[`${HEADER_REF_PREFIX}${header}`]
+        tr.nodes(hn ? [hn] : [])
+        tr.enabledAnchors(['middle-left', 'middle-right'])
+        tr.rotateEnabled(false)
+        tr.getLayer()?.batchDraw()
+        return
+      }
       const sid = state.selectedId
       if (!sid) {
         tr.nodes([])
         tr.getLayer()?.batchDraw()
         return
       }
-      const obj = state.objects.find((o) => o.id === sid)
+      const obj = pageObjects.find((o) => o.id === sid)
       if (!obj || obj.type === 'line') {
         tr.nodes([])
         tr.getLayer()?.batchDraw()
@@ -193,23 +205,24 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
       }
       tr.rotateEnabled(false)
       tr.getLayer()?.batchDraw()
-    }, [state.selectedId, state.objects, sortedObjects])
+    }, [state.selectedId, state.selectedBlock, pageObjects, state.layout.header])
 
     const handleStageMouseDown = useCallback(
       (e: Konva.KonvaEventObject<MouseEvent>) => {
+        dispatch({ type: 'SET_ACTIVE_PAGE', page: pageIndex })
         if (e.target.name() === 'page-bg') {
           const mode = stateRef.current.textPlacementMode
           if (mode) {
             const stage = e.target.getStage()
             const p = stage?.getRelativePointerPosition()
-            if (p) dispatch({ type: 'PLACE_TEXT_AT', x: p.x, y: p.y })
+            if (p) dispatch({ type: 'PLACE_TEXT_AT', x: p.x, y: p.y, page: pageIndex })
             return
           }
           dispatch({ type: 'SELECT', id: null })
           dispatch({ type: 'SELECT_BLOCK', ref: null })
         }
       },
-      [dispatch],
+      [dispatch, pageIndex],
     )
 
     const handleRectImageTransformEnd = useCallback(
@@ -268,14 +281,30 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                 shadowOffset={{ x: 0, y: 8 }}
                 listening
               />
-              <PaperLayoutLayer geometry={layoutGeometry} showGuides={showGuides} />
+              <PageDecorLayer geometry={geometry} showGuides={showGuides} />
+              {geometry.header ? (
+                <HeaderItemsLayer
+                  header={state.layout.header}
+                  box={geometry.header}
+                  pageW={pageW}
+                  pageH={pageH}
+                  selectedId={state.selectedBlock?.kind === 'header' ? state.selectedBlock.id : null}
+                  interactive={!state.textPlacementMode}
+                  dispatch={dispatch}
+                  registerRef={registerRef}
+                  setGuides={setGuides}
+                  clearGuides={clearGuides}
+                />
+              ) : null}
               <ExamFlowLayer
-                flow={flow}
+                blocks={pageBlocks}
+                assets={state.exam.assets}
                 selected={state.selectedBlock}
+                flagged={flagged}
                 interactive={!state.textPlacementMode}
                 dispatch={dispatch}
               />
-              {sortedObjects.map((obj) => {
+              {pageObjects.map((obj) => {
                 if (obj.type === 'text') {
                   const isSelected = state.selectedId === obj.id
                   const { onDragMove, onDragEnd } = makeDragHandlers(obj.id, (node) => {
@@ -364,7 +393,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                       pageH={pageH}
                       registerRef={registerRef}
                       dispatch={dispatch}
-                      stateRef={stateRef}
+                      objectsRef={objectsRef}
                       setGuides={setGuides}
                       clearGuides={clearGuides}
                     />
@@ -413,7 +442,7 @@ function LineShape({
   pageH,
   registerRef,
   dispatch,
-  stateRef,
+  objectsRef,
   setGuides,
   clearGuides,
 }: {
@@ -423,7 +452,7 @@ function LineShape({
   pageH: number
   registerRef: (id: string) => (n: Konva.Node | null) => void
   dispatch: (a: EditorAction) => void
-  stateRef: MutableRefObject<EditorState>
+  objectsRef: MutableRefObject<CanvasObject[]>
   setGuides: (g: SnapGuides) => void
   clearGuides: () => void
 }) {
@@ -450,7 +479,7 @@ function LineShape({
         const wx2 = p[2] + dx
         const wy2 = p[3] + dy
         const b = lineSegmentBox(wx1, wy1, wx2, wy2)
-        const others = boxesExcluding(stateRef.current.objects, obj.id, (o) => getBoundingBox(o))
+        const others = boxesExcluding(objectsRef.current, obj.id, (o) => getBoundingBox(o))
         const r = snapBoxPosition(b, others, pageW, pageH)
         const sdx = r.x - b.x
         const sdy = r.y - b.y
@@ -468,7 +497,7 @@ function LineShape({
         const wx2 = p[2] + dx
         const wy2 = p[3] + dy
         const b = lineSegmentBox(wx1, wy1, wx2, wy2)
-        const others = boxesExcluding(stateRef.current.objects, obj.id, (o) => getBoundingBox(o))
+        const others = boxesExcluding(objectsRef.current, obj.id, (o) => getBoundingBox(o))
         const r = snapBoxPosition(b, others, pageW, pageH)
         const sdx = r.x - b.x
         const sdy = r.y - b.y
