@@ -38,7 +38,7 @@ export function splitRubyReading(reading: string): { letters: string[]; tone: st
 export function rubyAdvance(fontSize: number, face: RubyFace, reading: string): RubyMetrics {
   const split = splitRubyReading(reading)
   const letters = split.letters.length ? split.letters : ['·']
-  const letter = fontSize * 0.34
+  const letter = fontSize * 0.48
   const pitch = letter * 1.05
   const stack = letters.length * pitch
   const base = face === 'reading' ? 0 : fontSize

@@ -173,6 +173,7 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
           if (!composing.current) emit()
         }}
         onKeyDown={(e) => {
+          e.stopPropagation()
           if (!multiline && e.key === 'Enter') e.preventDefault()
         }}
         onBlur={() => {
