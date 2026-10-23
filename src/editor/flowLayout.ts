@@ -1,26 +1,33 @@
 import type { Box } from './bounds'
 import {
   choiceLabel,
-  FIGURE_MARK,
+  hasFigureMark,
   isChoiceType,
   planStemFigures,
   questionNumbers,
+  asideLeftEdge,
+  questionAsideWidth,
+  questionRowLines,
   questionScoreMark,
+  sectionRowSize,
   sectionHeading,
   sectionScoreNote,
   toChineseNumeral,
   type Asset,
   type BlockRef,
+  FOOTER_CONTINUE_ID,
+  FOOTER_END_ID,
+  footerOf,
   type ExamContent,
   type Figure,
   type FontOverride,
-  type Notice,
   type NumberStyle,
   type Question,
   type Section,
 } from '../types/exam'
 import { toVerticalGlyph, type SpacingSettings } from '../types/layout'
 import { paintText, plainText, richChars } from './richText'
+import { clusterUnits, needsManualWrap, textAtoms } from './zhuyin'
 
 export type TextStyle = { fontSize: number; fill: string; bold?: boolean }
 
@@ -124,8 +131,6 @@ const SQUEEZE_LEVELS = [0, 0.25, 0.5, 0.75, 1]
 const MAX_PAGES = 60
 const EMPTY_STEM = '（請輸入題目）'
 const FRAME_PAD = 10
-/** 直式表格左側題幹佔內容寬的比例，剩下給右側欄 */
-const ASIDE_SPLIT = 0.62
 const BOX_STROKE = '#111111'
 
 function resolveStyle(base: TextStyle, over?: FontOverride): TextStyle {
@@ -180,7 +185,7 @@ function buildNotice(text: string, w: number, c: Ctx): Built {
   const painted = paintText(raw || '（請輸入提示）')
   const padX = 12
   const inner = Math.max(40, w - padX * 2)
-  const textH = c.m(painted.text, inner, body, c.mt.lineHeight).height
+  const textH = runHeight(painted.text, inner, body, c.mt.lineHeight, c.m)
   const height = Math.max(textH + 28, Math.round(body.fontSize * c.mt.lineHeight * 2.4))
   return {
     height,
@@ -211,12 +216,12 @@ function buildSectionHead(s: Section, index: number, w: number, c: Ctx): Built {
   const runs: FlowRun[] = []
   const title = paintText(`${toChineseNumeral(index + 1)}、${s.title}${sectionScoreNote(s)}`)
   runs.push({ key: 'title', x: 0, y: 0, width: w, text: title.text, colors: title.colors, style: heading, lineHeight: mt.lineHeight })
-  let h = m(title.text, w, heading, mt.lineHeight).height
+  let h = runHeight(title.text, w, heading, mt.lineHeight, m)
   if (plainText(s.instruction).trim()) {
     h += 2
     const inst = paintText(s.instruction)
     runs.push({ key: 'inst', x: 0, y: h, width: w, text: inst.text, colors: inst.colors, style: instruction, lineHeight: mt.lineHeight })
-    h += m(inst.text, w, instruction, mt.lineHeight).height
+    h += runHeight(inst.text, w, instruction, mt.lineHeight, m)
   }
   return { height: h + 4, runs, rules: [], images: [] }
 }
@@ -238,29 +243,36 @@ function figureX(indent: number, innerW: number, w: number, align: number) {
   return indent + Math.max(0, innerW - w) * align
 }
 
-/** 依字元寬度切開，換行結果用來決定圖片可以接在第幾行後面 */
+/** 依字元寬度切開，換行結果用來決定圖片可以接在第幾行後面。有注音時以音節為單位。 */
 function wrapLines(text: string, width: number, style: TextStyle, lineHeight: number, m: MeasureFn): string[] {
   if (!text) return []
   const widthOf = (sample: string) => (sample ? m(sample, 10000, style, lineHeight).naturalWidth : 0)
   const lines: string[] = []
   let buf = ''
-  for (const ch of text) {
-    if (ch === '\n') {
+  for (const atom of textAtoms(text)) {
+    if (atom === '\n') {
       lines.push(buf)
       buf = ''
       continue
     }
-    if (buf && widthOf(buf + ch) > width + 0.5) {
+    if (buf && widthOf(buf + atom) > width + 0.5) {
       lines.push(buf)
-      buf = ch
-    } else buf += ch
+      buf = atom
+    } else buf += atom
   }
   if (buf || lines.length === 0) lines.push(buf)
   return lines
 }
 
+/** 沒有注音、也沒有作答空格時，沿用 Konva 量高，避免既有試卷行高變動。 */
+function runHeight(text: string, width: number, style: TextStyle, lineHeight: number, m: MeasureFn): number {
+  if (!needsManualWrap(text)) return m(text, width, style, lineHeight).height
+  const lines = wrapLines(text, width, style, lineHeight, m)
+  return Math.max(1, lines.length) * style.fontSize * lineHeight
+}
+
 function stripMarks(stem: string) {
-  return stem.replaceAll(FIGURE_MARK, '')
+  return stem.replace(/[\[［]\s*圖\s*[\]］]/g, '')
 }
 
 function buildQuestion(
@@ -301,7 +313,7 @@ function buildQuestion(
 
   const pushStem = (text: string, key: string, y: number, placeholder = false, colors?: string[], singleLine = false) => {
     const painted = placeholder ? { text, colors: undefined as string[] | undefined } : paintText(text)
-    const height = m(painted.text, stemW, body, mt.lineHeight).height
+    const height = runHeight(painted.text, stemW, body, mt.lineHeight, m)
     runs.push({
       key,
       x: indent,
@@ -366,7 +378,7 @@ function buildQuestion(
     }
   }
 
-  const anchored = middle.some((f) => typeof f.afterLine === 'number')
+  const anchored = !hasFigureMark(q.stem) && middle.some((f) => typeof f.afterLine === 'number')
   if (!q.stem.trim()) {
     const before = anchored ? middle.filter((f) => (f.afterLine ?? 1) <= 0) : []
     const rest = anchored ? middle.filter((f) => (f.afterLine ?? 1) > 0) : middle
@@ -424,7 +436,7 @@ function buildQuestion(
           style: body,
           lineHeight: mt.lineHeight,
         })
-        let cellH = m(labels[i].text, textW, body, mt.lineHeight).height
+        let cellH = runHeight(labels[i].text, textW, body, mt.lineHeight, m)
         if (ch.image && hasImage(ch)) {
           const inline = !plainText(ch.text).trim()
           const labelW = m(`${choiceLabel(i)} `, 10000, body, mt.lineHeight).naturalWidth
@@ -465,7 +477,7 @@ function buildQuestion(
 type Item =
   | { kind: 'section'; section: Section; index: number }
   | { kind: 'question'; question: Question; section: Section; num: number; firstOfSection: boolean; scoreMark: string }
-  | { kind: 'notice'; notice: Notice }
+  | { kind: 'notice'; id: string; text: string }
 
 function formatNum(n: number, style: NumberStyle): string {
   return style === 'paren' ? `(${n})` : `${n}.`
@@ -507,11 +519,18 @@ function questionIndents(items: Item[], c: Ctx): Map<string, number> {
 
 function itemRef(it: Item): BlockRef {
   if (it.kind === 'section') return { kind: 'section', id: it.section.id }
-  if (it.kind === 'notice') return { kind: 'notice', id: it.notice.id }
+  if (it.kind === 'notice') return { kind: 'notice', id: it.id }
   return { kind: 'question', id: it.question.id }
 }
 
-type Chrome = { pad: number; aside: string; minH: number; ruled: boolean }
+/** 並排時，一般排列的題與題之間留空隙；直式表格貼齊，靠分隔線切開 */
+const PAIR_GAP = 16
+
+function pairGutter(it: Item): number {
+  return it.kind === 'question' && it.section.layout === 'rows' ? 0 : PAIR_GAP
+}
+
+type Chrome = { pad: number; aside: string; asideWidth: number; minH: number; ruled: boolean }
 
 function questionChrome(section: Section, q: Question, c: Ctx): Chrome {
   const body = resolveStyle(c.st.body, q.bodyStyle)
@@ -519,10 +538,11 @@ function questionChrome(section: Section, q: Question, c: Ctx): Chrome {
   const rows = section.layout === 'rows'
   const boxed = section.frame === 'body' || section.frame === 'all' || rows
   const pad = boxed ? FRAME_PAD : 0
-  const lines = q.answerLines > 0 ? q.answerLines : section.rowLines
+  const lines = questionRowLines(section, q)
   return {
     pad,
     aside: rows ? (q.aside ?? '').trim() : '',
+    asideWidth: questionAsideWidth(q),
     minH: rows ? Math.round(Math.max(2, lines) * lh + pad * 2) : 0,
     ruled: q.answerRuled !== false && !rows,
   }
@@ -533,14 +553,14 @@ type PaginateResult = Omit<FlowResult, 'squeeze' | 'lineHeight' | 'frames'> & { 
 function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): PaginateResult {
   const indents = questionIndents(items, c)
   const build = (it: Item, w: number): Built => {
-    if (it.kind === 'notice') return buildNotice(it.notice.text, w, c)
+    if (it.kind === 'notice') return buildNotice(it.text, w, c)
     if (it.kind === 'section') {
       const pad = it.section.frame === 'all' ? FRAME_PAD : 0
       return insetBuilt(buildSectionHead(it.section, it.index, Math.max(40, w - pad * 2), c), pad)
     }
     const chrome = questionChrome(it.section, it.question, c)
     const inner = Math.max(40, w - chrome.pad * 2)
-    const left = chrome.aside ? Math.round(inner * ASIDE_SPLIT) : inner
+    const left = chrome.aside ? asideLeftEdge(inner, chrome.asideWidth) : inner
     const stemW = chrome.aside ? Math.max(40, left - 8) : left
     const indent = indents.get(it.question.id) ?? Math.ceil(c.st.body.fontSize * 2)
     let built = insetBuilt(
@@ -566,22 +586,62 @@ function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): Pa
     return built
   }
   const gapBefore = (it: Item) => {
-    if (it.kind === 'section' || it.kind === 'notice') return c.mt.sectionGap
+    if (it.kind === 'notice') return c.mt.questionGap
+    if (it.kind === 'section') return c.mt.sectionGap
     if (it.section.layout === 'rows') return it.firstOfSection ? 8 : 0
     return it.firstOfSection ? 0 : c.mt.questionGap
   }
 
-  /** 大題標題後必須同欄的高度：整個大題（放得進空欄時）或第一題 */
+  /** 從這一題開始，同一列要放的題。只在每一列的第一題呼叫 */
+  const rowAt = (index: number): Item[] => {
+    const it = items[index]
+    if (!it || it.kind !== 'question') return it ? [it] : []
+    const size = sectionRowSize(it.section)
+    const limit = size === 'all' ? Number.POSITIVE_INFINITY : size === 2 ? 2 : it.question.pairNext ? 2 : 1
+    const group: Item[] = [it]
+    for (let j = index + 1; j < items.length && group.length < limit; j++) {
+      const next = items[j]
+      if (next.kind !== 'question' || next.section.id !== it.section.id) break
+      group.push(next)
+    }
+    return group
+  }
+
+  const columnWidths = (w: number, count: number, gutterEach: number) => {
+    if (count <= 1) return { widths: [w], gutter: 0 }
+    const gaps = count - 1
+    const gutter = Math.max(0, Math.min(gutterEach, Math.floor(w / 4 / gaps)))
+    const usable = w - gutter * gaps
+    const base = Math.floor(usable / count)
+    const widths = Array.from({ length: count }, () => base)
+    widths[count - 1] = usable - base * (count - 1)
+    return { widths, gutter }
+  }
+
+  const rowMeasure = (index: number, frame: Box) => {
+    const group = rowAt(index)
+    if (group.length <= 1) return { span: 1, height: build(items[index], frame.w).height }
+    const { widths } = columnWidths(frame.w, group.length, pairGutter(group[0]))
+    const height = Math.max(...group.map((it, k) => build(it, widths[k]).height))
+    return { span: group.length, height }
+  }
+
+  /** 大題標題後必須同欄的高度：整個大題（放得進空欄時）或第一列 */
   const keepHeight = (headIndex: number, frame: Box): number => {
     const head = items[headIndex]
     if (head.kind !== 'section') return 0
-    const followers: Item[] = []
-    for (let j = headIndex + 1; j < items.length && items[j].kind === 'question'; j++) followers.push(items[j])
-    if (!followers.length) return 0
-    const first = build(followers[0], frame.w).height
+    let end = headIndex + 1
+    while (end < items.length && items[end].kind === 'question') end += 1
+    if (end === headIndex + 1) return 0
+    const first = rowMeasure(headIndex + 1, frame).height
     if (head.section.keepTogether !== 'whole') return first
     const headH = build(head, frame.w).height
-    const whole = followers.reduce((sum, f, k) => sum + build(f, frame.w).height + (k ? c.mt.questionGap : 0), 0)
+    let whole = 0
+    for (let k = headIndex + 1; k < end; ) {
+      const row = rowMeasure(k, frame)
+      whole += row.height + (k > headIndex + 1 ? c.mt.questionGap : 0)
+      k += row.span
+    }
     return headH + whole <= frame.h ? whole : first
   }
 
@@ -604,19 +664,42 @@ function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): Pa
     y = frames[fi].y
   }
 
+  const pushAt = (it: Item, built: Built, x: number, w: number, h: number) => {
+    blocks.push({
+      ref: itemRef(it),
+      page,
+      frame: fi,
+      box: { x, y, w, h },
+      runs: built.runs.map((r) => ({ ...r, x: r.x + x, y: r.y + y })),
+      rules: built.rules.map((r) => ({ ...r, x1: r.x1 + x, x2: r.x2 + x, y1: r.y1 + y, y2: r.y2 + y })),
+      images: built.images.map((im) => ({ ...im, x: im.x + x, y: im.y + y })),
+    })
+  }
+
   for (let i = 0; i < items.length; i++) {
     const it = items[i]
-    const ref = itemRef(it)
+    const group = it.kind === 'question' ? rowAt(i) : [it]
     let frame = frames[fi]
     let atTop = y === frame.y
     let gap = atTop ? 0 : gapBefore(it)
-    let built = build(it, frame.w)
+
+    const measureHere = () => {
+      if (group.length > 1) {
+        const { widths, gutter } = columnWidths(frame.w, group.length, pairGutter(it))
+        const built = group.map((g, k) => build(g, widths[k]))
+        return { built, widths, gutter, height: Math.max(...built.map((b) => b.height)) }
+      }
+      const built = build(it, frame.w)
+      return { built: [built], widths: [frame.w], gutter: 0, height: built.height }
+    }
+
+    let laid = measureHere()
     const bottom = frame.y + frame.h
 
     if (!atTop) {
       const keep = it.kind === 'section' ? keepHeight(i, frame) : 0
-      const fitsAlone = y + gap + built.height <= bottom
-      if (y + gap + built.height + keep > bottom) {
+      const fitsAlone = y + gap + laid.height <= bottom
+      if (y + gap + laid.height + keep > bottom) {
         const from = { page, frame: fi }
         nextFrame()
         if (it.kind === 'section' && fitsAlone) {
@@ -626,22 +709,21 @@ function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): Pa
         frame = frames[fi]
         atTop = true
         gap = 0
-        built = build(it, frame.w)
+        laid = measureHere()
       }
     }
-    if (atTop && built.height > frame.h) warnings.push({ type: 'oversize', ref, page })
+    if (atTop && laid.height > frame.h) {
+      for (const g of group) warnings.push({ type: 'oversize', ref: itemRef(g), page })
+    }
 
     y += gap
-    blocks.push({
-      ref,
-      page,
-      frame: fi,
-      box: { x: frame.x, y, w: frame.w, h: built.height },
-      runs: built.runs.map((r) => ({ ...r, x: r.x + frame.x, y: r.y + y })),
-      rules: built.rules.map((r) => ({ ...r, x1: r.x1 + frame.x, x2: r.x2 + frame.x, y1: r.y1 + y, y2: r.y2 + y })),
-      images: built.images.map((im) => ({ ...im, x: im.x + frame.x, y: im.y + y })),
+    let x = frame.x
+    laid.built.forEach((built, k) => {
+      pushAt(group[k], built, x, laid.widths[k], laid.height)
+      x += laid.widths[k] + (k < group.length - 1 ? laid.gutter : 0)
     })
-    y += built.height
+    i += group.length - 1
+    y += laid.height
   }
 
   return { blocks, pageCount: page + 1, warnings, headMoves }
@@ -844,18 +926,46 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     write(text, style, key, placeholder)
   }
 
+  const pushGlyph = (unit: { ch: string; color?: string }, style: TextStyle, key: string, placeholder: boolean) => {
+    if (open && (!sameStyle(open.style, style) || !!open.placeholder !== placeholder || open.chars.length >= open.cap)) closeOpen()
+    if (!open) startOpen(style, key, placeholder)
+    const col = open
+    if (col) col.chars.push({ g: toVerticalGlyph(unit.ch), color: unit.color })
+  }
+
   const write = (text: string, style: TextStyle, key: string, placeholder = false, stemFrom?: number) => {
     if (typeof stemFrom === 'number') pendingSkip = stemFrom
-    for (const unit of richChars(text)) {
-      if (unit.ch === '\n') {
+    const units = richChars(text)
+    const manual = needsManualWrap(units.map((unit) => unit.ch).join(''))
+    if (!manual) {
+      for (const unit of units) {
+        if (unit.ch === '\n') {
+          closeOpen()
+          resumeY = null
+          continue
+        }
+        pushGlyph(unit, style, key, placeholder)
+      }
+      return
+    }
+    for (const group of clusterUnits(units)) {
+      if (group.length === 1 && group[0].ch === '\n') {
         closeOpen()
         resumeY = null
         continue
       }
-      if (open && (!sameStyle(open.style, style) || !!open.placeholder !== placeholder || open.chars.length >= open.cap)) closeOpen()
-      if (!open) startOpen(style, key, placeholder)
-      const col = open
-      if (col) col.chars.push({ g: toVerticalGlyph(unit.ch), color: unit.color })
+      const glyphs = group.filter((unit) => unit.ch !== '\n')
+      if (
+        glyphs.length &&
+        open &&
+        sameStyle(open.style, style) &&
+        !!open.placeholder === placeholder &&
+        open.chars.length > 0 &&
+        open.chars.length + glyphs.length > open.cap
+      ) {
+        closeOpen()
+      }
+      for (const unit of glyphs) pushGlyph(unit, style, key, placeholder)
     }
   }
 
@@ -994,11 +1104,17 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     flush()
     const it = items[i]
     acc = blank(itemRef(it))
+    if (it.kind === 'notice') {
+      applyGap(mt.questionGap, st.body.fontSize)
+      const raw = it.text.trim()
+      write(raw || '（請輸入提示）', { ...st.body, bold: true }, 'text', !raw)
+      continue
+    }
     const heading = it.kind === 'section' ? resolveStyle(st.heading, it.section.headingStyle) : st.heading
     const instruction = it.kind === 'section' ? resolveStyle(st.instruction, it.section.instructionStyle) : st.instruction
     const body = it.kind === 'question' ? resolveStyle(st.body, it.question.bodyStyle) : st.body
     applyGap(
-      it.kind === 'section' || it.kind === 'notice' ? mt.sectionGap : it.firstOfSection ? 0 : mt.questionGap,
+      it.kind === 'section' ? mt.sectionGap : it.firstOfSection ? 0 : mt.questionGap,
       it.kind === 'question' ? body.fontSize : heading.fontSize,
     )
 
@@ -1016,7 +1132,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
           (sum, q) =>
             sum +
             textWidth(
-              plainText(`${questionLead(q)}${q.question.stem.replaceAll('［圖］', '')}`),
+              plainText(`${questionLead(q)}${stripMarks(q.question.stem)}`),
               resolveStyle(st.body, q.question.bodyStyle).fontSize,
               fh,
             ),
@@ -1044,14 +1160,14 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
       continue
     }
 
-    if (it.kind === 'notice') {
-      const raw = it.notice.text.trim()
-      write(raw || '（請輸入提示）', { ...body, bold: true }, 'notice', !raw)
-      continue
-    }
-
     pendingSkip = 0
     const q = it.question
+    const rowsLayout = it.section.layout === 'rows'
+    if (rowsLayout && !atStart()) {
+      const minW = questionRowLines(it.section, q) * colPitchOf(body.fontSize)
+      if (remain() + 0.5 < minW) nextFrame()
+    }
+    const rowOrigin = rowsLayout ? { page, si, x } : null
     const right = q.figures.filter((f) => f.placement === 'right')
     const middle = q.figures.filter((f) => f.placement === 'middle')
     const after = q.figures.filter((f) => f.placement === 'afterChoices')
@@ -1059,7 +1175,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     right.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id))
     const stem = q.stem.trim()
     const lead = questionLead(it)
-    const anchored = middle.some((f) => typeof f.afterLine === 'number')
+    const anchored = !hasFigureMark(stem) && middle.some((f) => typeof f.afterLine === 'number')
     if (!stem) {
       write(lead, body, 'num')
       closeOpen()
@@ -1080,17 +1196,27 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
         const next = open
         if (next) next.chars.push({ g: toVerticalGlyph(ch), color })
       }
+      const breakBeforeSyllable = (count: number) => {
+        const column = open
+        if (!column || count <= 1 || column.placeholder || !sameStyle(column.style, body)) return
+        if (column.chars.length > 0 && column.chars.length + count > column.cap) closeOpen()
+      }
       let seen = 0
       placeAt(0)
-      for (const unit of units) {
-        if (unit.ch === '\n') {
+      const groups = needsManualWrap(units.map((unit) => unit.ch).join('')) ? clusterUnits(units) : units.map((unit) => [unit])
+      for (const group of groups) {
+        if (group.length === 1 && group[0].ch === '\n') {
           closeOpen()
           resumeY = null
           continue
         }
-        pushChar(unit.ch, unit.color)
-        seen += 1
-        placeAt(seen)
+        const glyphs = group.filter((unit) => unit.ch !== '\n')
+        breakBeforeSyllable(glyphs.length)
+        for (const unit of glyphs) {
+          pushChar(unit.ch, unit.color)
+          seen += 1
+          placeAt(seen)
+        }
       }
     } else {
       const plan = planStemFigures(stem, middle.length)
@@ -1112,9 +1238,23 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
       })
     }
     after.forEach((f) => emitImage(f.assetId, f.widthRatio, f.id, 'after'))
-    if (q.type === 'short_answer' && q.answerLines > 0) emitAnswers(q.answerLines, body.fontSize, q.answerRuled !== false)
-    const aside = it.section.layout === 'rows' ? (q.aside ?? '').trim() : ''
+    const aside = rowsLayout ? (q.aside ?? '').trim() : ''
     if (aside) write(aside, body, 'aside')
+    if (rowsLayout) {
+      closeOpen()
+      if (rowOrigin && page === rowOrigin.page && si === rowOrigin.si) {
+        const pitch = colPitchOf(body.fontSize)
+        const minW = questionRowLines(it.section, q) * pitch
+        const extra = Math.min(Math.max(0, x - frame().x), Math.max(0, minW - (rowOrigin.x - x)))
+        if (extra > 0.5) {
+          const target = x - extra
+          track(target, rowOrigin.x, frame().y + 8)
+          x = target
+        }
+      }
+    } else if (q.type === 'short_answer' && q.answerLines > 0) {
+      emitAnswers(q.answerLines, body.fontSize, q.answerRuled !== false)
+    }
   }
   closeOpen()
   flush()
@@ -1122,8 +1262,90 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
   return { blocks, pageCount: page + 1, warnings, headMoves }
 }
 
-function noticesOf(exam: ExamContent): Notice[] {
-  return exam.notices ?? []
+const FOOTER_GAP = 8
+
+function shrinkBottom(frames: Box[], reserve: number): Box[] {
+  if (reserve <= 0 || !frames.length) return frames
+  const bottom = Math.max(...frames.map((f) => f.y + f.h))
+  return frames.map((f) =>
+    Math.abs(f.y + f.h - bottom) < 0.5 ? { ...f, h: Math.max(24, f.h - reserve) } : f,
+  )
+}
+
+function isSideBySide(frames: Box[]): boolean {
+  return frames.length >= 2 && frames[1].x > frames[0].x + 1
+}
+
+/** 左右分欄時，續頁提示只佔閱讀順序的最後一欄，不橫跨整頁 */
+function continueFrameIndex(frames: Box[], vertical: boolean): number | null {
+  if (!isSideBySide(frames)) return null
+  return vertical ? 0 : frames.length - 1
+}
+
+function shrinkForNotice(frames: Box[], reserve: number, vertical: boolean): Box[] {
+  if (reserve <= 0 || !frames.length) return frames
+  const idx = continueFrameIndex(frames, vertical)
+  if (idx == null) return shrinkBottom(frames, reserve)
+  return frames.map((f, i) => (i === idx ? { ...f, h: Math.max(24, f.h - reserve) } : f))
+}
+
+function noticeWidth(frames: Box[], vertical: boolean): number {
+  const idx = continueFrameIndex(frames, vertical)
+  if (idx == null) return contentSpan(frames).w
+  return Math.max(40, frames[idx].w)
+}
+
+function contentSpan(frames: Box[]) {
+  const x = Math.min(...frames.map((f) => f.x))
+  const right = Math.max(...frames.map((f) => f.x + f.w))
+  const bottom = Math.max(...frames.map((f) => f.y + f.h))
+  return { x, w: Math.max(40, right - x), bottom }
+}
+
+function placeFooter(
+  id: string,
+  text: string,
+  page: number,
+  getFrames: (page: number) => Box[],
+  c: Ctx,
+  vertical: boolean,
+): PlacedBlock {
+  const frames = getFrames(page)
+  const idx = continueFrameIndex(frames, vertical)
+  let x: number
+  let w: number
+  let bottom: number
+  let frame: number
+  if (idx == null) {
+    const span = contentSpan(frames)
+    x = span.x
+    w = span.w
+    bottom = span.bottom
+    frame = Math.max(0, frames.findIndex((f) => Math.abs(f.y + f.h - bottom) < 0.5))
+  } else {
+    const column = frames[idx]
+    x = column.x
+    w = column.w
+    bottom = column.y + column.h
+    frame = idx
+  }
+  const built = buildNotice(text, w, c)
+  const y = bottom - built.height
+  return {
+    ref: { kind: 'notice', id },
+    page,
+    frame,
+    box: { x, y, w, h: built.height },
+    runs: built.runs.map((r) => ({ ...r, x: r.x + x, y: r.y + y })),
+    rules: built.rules.map((r) => ({
+      ...r,
+      x1: r.x1 + x,
+      x2: r.x2 + x,
+      y1: r.y1 + y,
+      y2: r.y2 + y,
+    })),
+    images: [],
+  }
 }
 
 /** 外框與直式表格的內部分隔線。提示框的框線已經畫在題塊上。 */
@@ -1166,6 +1388,7 @@ function decorate(exam: ExamContent, blocks: PlacedBlock[], vertical: boolean): 
         }
         for (let i = 0; i < questions.length - 1; i++) {
           const yy = questions[i + 1].box.y
+          if (Math.abs(yy - questions[i].box.y) < 1) continue
           rules.push({
             key: `row-${questions[i].ref.id}`,
             x1: x,
@@ -1176,10 +1399,26 @@ function decorate(exam: ExamContent, blocks: PlacedBlock[], vertical: boolean): 
             strokeWidth: 1.25,
           })
         }
+        for (let i = 0; i < questions.length - 1; i++) {
+          const a = questions[i]
+          const b = questions[i + 1]
+          if (Math.abs(a.box.y - b.box.y) >= 1) continue
+          const top = Math.min(a.box.y, b.box.y)
+          const bottomEdge = Math.max(a.box.y + a.box.h, b.box.y + b.box.h)
+          rules.push({
+            key: `pair-${a.ref.id}`,
+            x1: b.box.x,
+            y1: top,
+            x2: b.box.x,
+            y2: bottomEdge,
+            stroke: BOX_STROKE,
+            strokeWidth: 1.25,
+          })
+        }
         for (const qb of questions) {
           const q = section.questions.find((item) => item.id === qb.ref.id)
-          if (!(q?.aside ?? '').trim()) continue
-          const left = Math.round((qb.box.w - FRAME_PAD * 2) * ASIDE_SPLIT)
+          if (!q || !(q.aside ?? '').trim()) continue
+          const left = asideLeftEdge(qb.box.w - FRAME_PAD * 2, questionAsideWidth(q))
           const sx = qb.box.x + FRAME_PAD + left
           rules.push({
             key: `aside-${qb.ref.id}`,
@@ -1233,16 +1472,6 @@ export function layoutExam(
 ): FlowResult {
   const nums = questionNumbers(exam)
   const items: Item[] = []
-  const notices = noticesOf(exam)
-  const after = new Map<string, Notice[]>()
-  const atEnd: Notice[] = []
-  for (const n of notices) {
-    if (n.afterSectionId && exam.sections.some((s) => s.id === n.afterSectionId)) {
-      const list = after.get(n.afterSectionId) ?? []
-      list.push(n)
-      after.set(n.afterSectionId, list)
-    } else atEnd.push(n)
-  }
   exam.sections.forEach((section, index) => {
     items.push({ kind: 'section', section, index })
     section.questions.forEach((question, qi) =>
@@ -1255,23 +1484,68 @@ export function layoutExam(
         scoreMark: questionScoreMark(section, question),
       }),
     )
-    for (const n of after.get(section.id) ?? []) items.push({ kind: 'notice', notice: n })
   })
-  for (const n of atEnd) items.push({ kind: 'notice', notice: n })
 
-  const run = (t: number) => {
-    const mt = metricsAt(spacing, t)
-    const ctx = { st, m, mt, assets: exam.assets }
-    return { t, mt, r: vertical ? paginateVertical(items, getFrames, ctx) : paginate(items, getFrames, ctx) }
+  const footer = footerOf(exam)
+  if (footer.endOn) items.push({ kind: 'notice', id: FOOTER_END_ID, text: footer.endText })
+
+  const heightCache = new Map<string, number>()
+  const continueReserve = (page: number, t: number) => {
+    if (!footer.continueOn) return 0
+    const w = noticeWidth(getFrames(page), vertical)
+    const key = `${t}:${Math.round(w * 100)}`
+    const hit = heightCache.get(key)
+    if (hit != null) return hit
+    const ctx: Ctx = { st, m, mt: metricsAt(spacing, t), assets: exam.assets }
+    const value = buildNotice(footer.continueText, w, ctx).height + FOOTER_GAP
+    heightCache.set(key, value)
+    return value
   }
-  const score = (r: PaginateResult) => r.pageCount * 1000 + r.headMoves
+  const reserveFor = (page: number, assumed: number, t: number) => {
+    if (assumed <= 1 || page >= assumed - 1) return 0
+    return continueReserve(page, t)
+  }
 
-  const base = run(0)
+  const run = (t: number, reserveOf: (page: number) => number) => {
+    const mt = metricsAt(spacing, t)
+    const ctx: Ctx = { st, m, mt, assets: exam.assets }
+    const frames = (page: number) => shrinkForNotice(getFrames(page), reserveOf(page), vertical)
+    return {
+      t,
+      mt,
+      ctx,
+      r: vertical ? paginateVertical(items, frames, ctx) : paginate(items, frames, ctx),
+    }
+  }
+
+  const settle = (t: number) => {
+    let assumed = 1
+    let previous = 0
+    for (let i = 0; i < 6; i++) {
+      const laid = run(t, (page) => reserveFor(page, assumed, t))
+      if (laid.r.pageCount === assumed) return laid
+      if (laid.r.pageCount === previous) return run(t, (page) => continueReserve(page, t))
+      previous = assumed
+      assumed = Math.max(1, laid.r.pageCount)
+    }
+    return run(t, (page) => continueReserve(page, t))
+  }
+
+  const score = (r: PaginateResult) => r.pageCount * 1000 + r.headMoves
+  const base = settle(0)
   let best = base
   if (spacing.allowSqueeze && items.length) {
     for (const t of SQUEEZE_LEVELS.slice(1)) {
-      const cand = run(t)
+      const cand = settle(t)
       if (score(cand.r) < score(best.r)) best = cand
+    }
+  }
+
+  const blocks = [...best.r.blocks]
+  const pages = best.r.pageCount
+  if (footer.continueOn && pages > 1) {
+    for (let page = 0; page < pages - 1; page++) {
+      blocks.push(placeFooter(FOOTER_CONTINUE_ID, footer.continueText, page, getFrames, best.ctx, vertical))
     }
   }
 
@@ -1285,9 +1559,9 @@ export function layoutExam(
     })
   }
   return {
-    blocks: best.r.blocks,
-    frames: decorate(exam, best.r.blocks, vertical),
-    pageCount: best.r.pageCount,
+    blocks,
+    frames: decorate(exam, blocks, vertical),
+    pageCount: pages,
     squeeze: best.t,
     lineHeight: best.mt.lineHeight,
     warnings,

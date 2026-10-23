@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useEditor } from '../editor/EditorContext'
 import { EDITOR_SELECTION } from '../editor/theme'
 import { TEXT_BOX_PADDING } from '../types/document'
+import { withBopomofoFont } from '../fonts/paperFont'
 
 type TextEditOverlayProps = {
   editingId: string | null
@@ -56,7 +57,7 @@ export function TextEditOverlay({ editingId, scale, onClose }: TextEditOverlayPr
         width: Math.max(40, textObj.width - TEXT_BOX_PADDING * 2) * scale,
         minHeight: textObj.fontSize * scale * 3,
         fontSize: textObj.fontSize * scale,
-        fontFamily: textObj.fontFamily,
+        fontFamily: withBopomofoFont(textObj.fontFamily),
         color: textObj.fill,
         fontWeight: textObj.fontStyle.includes('bold') ? 'bold' : 'normal',
         fontStyle: textObj.fontStyle.includes('italic') ? 'italic' : 'normal',

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { htmlToMarkup, INK_PALETTE, markupToHtml, plainText } from '../editor/richText'
 
 type ColorFieldProps = {
@@ -10,8 +10,15 @@ type ColorFieldProps = {
   rows?: number
 }
 
+export type ColorFieldHandle = {
+  insert: (token: string) => void
+}
+
 /** 考卷文字欄位。先選取字，再點色盤，只改那些字的顏色；其餘維持黑色。 */
-export function ColorField({ value, onChange, multiline, placeholder, ariaLabel, rows = 4 }: ColorFieldProps) {
+export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function ColorField(
+  { value, onChange, multiline, placeholder, ariaLabel, rows = 4 },
+  handle,
+) {
   const ref = useRef<HTMLDivElement>(null)
   const rangeRef = useRef<Range | null>(null)
   const composing = useRef(false)
@@ -31,6 +38,29 @@ export function ColorField({ value, onChange, multiline, placeholder, ariaLabel,
     const next = htmlToMarkup(el)
     if (next !== value) onChange(next)
   }
+
+  useImperativeHandle(handle, () => ({
+    insert(token: string) {
+      const el = ref.current
+      if (!el || !token) return
+      el.focus()
+      const sel = window.getSelection()
+      const range = rangeRef.current
+      if (sel && range && el.contains(range.startContainer)) {
+        sel.removeAllRanges()
+        sel.addRange(range)
+      } else {
+        const end = document.createRange()
+        end.selectNodeContents(el)
+        end.collapse(false)
+        sel?.removeAllRanges()
+        sel?.addRange(end)
+      }
+      document.execCommand('insertText', false, token)
+      emit()
+      saveSel()
+    },
+  }))
 
   useLayoutEffect(() => {
     const el = ref.current
@@ -85,6 +115,10 @@ export function ColorField({ value, onChange, multiline, placeholder, ariaLabel,
         onKeyDown={(e) => {
           if (!multiline && e.key === 'Enter') e.preventDefault()
         }}
+        onBlur={() => {
+          saveSel()
+          emit()
+        }}
         onPaste={(e) => {
           e.preventDefault()
           document.execCommand('insertText', false, e.clipboardData.getData('text/plain'))
@@ -111,4 +145,4 @@ export function ColorField({ value, onChange, multiline, placeholder, ariaLabel,
       {msg ? <p className="color-field__hint">{msg}</p> : null}
     </div>
   )
-}
+})

@@ -30,7 +30,7 @@ import {
   type PageMargin,
   type SpacingSettings,
 } from '../types/layout'
-import { createEmptyExam, createSampleExam, normalizeExam } from '../types/exam'
+import { createEmptyExam, createSampleExam, FOOTER_CONTINUE_ID, FOOTER_END_ID, normalizeExam } from '../types/exam'
 import { DEFAULT_PAPER_FONT, normalizePaperFont } from '../fonts/paperFont'
 import { EXAM_ACTION_TYPES, examReducer, type ExamAction } from './examReducer'
 
@@ -318,7 +318,15 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
             : block.kind === 'question'
               ? { type: 'REMOVE_QUESTION', id: block.id }
               : block.kind === 'notice'
-                ? { type: 'REMOVE_NOTICE', id: block.id }
+                ? {
+                    type: 'SET_FOOTER',
+                    patch:
+                      block.id === FOOTER_END_ID
+                        ? { endOn: false }
+                        : block.id === FOOTER_CONTINUE_ID
+                          ? { continueOn: false }
+                          : {},
+                  }
                 : { type: 'REMOVE_HEADER_ITEM', id: block.id },
         )
       }

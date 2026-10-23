@@ -4,6 +4,7 @@ import { useEditor } from '../editor/EditorContext'
 import { describeWarnings } from '../editor/warningText'
 import { easeOut } from '../motion/presets'
 import type { CanvasObject } from '../types/document'
+import { FOOTER_END_ID } from '../types/exam'
 import { HEADER_ROLE_LABEL, resolveSplit } from '../types/layout'
 import { BlockInspector } from './BlockInspector'
 import { HeaderItemInspector } from './HeaderItemInspector'
@@ -84,7 +85,11 @@ export function Inspector() {
               type="button"
               className="icon-btn icon-btn--danger"
               title={
-                block.kind === 'section' ? '刪除大題（含所有小題）' : block.kind === 'notice' ? '刪除提示' : '刪除小題'
+                block.kind === 'section'
+                  ? '刪除大題（含所有小題）'
+                  : block.kind === 'notice'
+                    ? '關閉這個頁尾提示'
+                    : '刪除小題'
               }
               onClick={() => dispatch({ type: 'DELETE_SELECTED' })}
             >
@@ -92,7 +97,13 @@ export function Inspector() {
             </button>
           </div>
         </div>
-        {page !== undefined ? <p className="inspector__meta">位於第 {page + 1} 頁</p> : null}
+        {block.kind === 'notice' ? (
+          <p className="inspector__meta">
+            {block.id === FOOTER_END_ID ? '接在最後一題下面' : '有下一頁時印在頁面下方；左右兩欄只佔右欄'}
+          </p>
+        ) : page !== undefined ? (
+          <p className="inspector__meta">位於第 {page + 1} 頁</p>
+        ) : null}
         {notes.map((n) => (
           <p key={n.key} className={n.tone === 'warn' ? 'inspector__warn' : 'inspector__note'}>
             {n.text}

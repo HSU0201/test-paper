@@ -12,7 +12,7 @@ import {
 import type { EditorAction } from './reducer'
 import { historyReducer, initialHistory } from './history'
 import { layoutExam, type FlowResult } from './flowLayout'
-import { measureWithFont } from './konvaMeasure'
+import { clearMeasureCache, measureWithFont } from './konvaMeasure'
 import { documentSignature, serializeDocument, toLoadAction } from './documentIO'
 import {
   listSnapshots,
@@ -25,6 +25,7 @@ import {
 } from './persist'
 import { mergeTextLevelPreset, type EditorState } from '../types/document'
 import { computePageGeometry, type PageGeometry } from '../types/layout'
+import { BOPOMOFO_FAMILY, withBopomofoFont } from '../fonts/paperFont'
 
 export type SaveStatus = { state: 'loading' | 'idle' | 'saving' | 'saved' | 'error'; at?: number }
 
@@ -44,6 +45,8 @@ type EditorContextValue = {
   snapshots: number[]
   backupNow: () => Promise<number | null>
   reloadSnapshots: () => Promise<void>
+  /** 注音字型已可量字。字型載入後會重排一次 */
+  fontsReady: boolean
 }
 
 const EditorContext = createContext<EditorContextValue | null>(null)
@@ -83,7 +86,23 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     return (page: number): PageGeometry => (page === 0 ? first : rest)
   }, [state.layout, state.pageWidth, state.pageHeight])
 
-  const measure = useMemo(() => measureWithFont(state.paperFontFamily), [state.paperFontFamily])
+  const measure = useMemo(() => measureWithFont(withBopomofoFont(state.paperFontFamily)), [state.paperFontFamily])
+  const [fontsReady, setFontsReady] = useState(() => document.fonts.check(`16px "${BOPOMOFO_FAMILY}"`))
+  useEffect(() => {
+    let cancel = false
+    document.fonts.load(`16px "${BOPOMOFO_FAMILY}"`).then(
+      () => {
+        clearMeasureCache()
+        if (!cancel) setFontsReady(true)
+      },
+      () => {
+        if (!cancel) setFontsReady(true)
+      },
+    )
+    return () => {
+      cancel = true
+    }
+  }, [])
 
   const flow = useMemo(() => {
     const o = state.textLevelOverrides
@@ -102,7 +121,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       measure,
       state.pageWidth > state.pageHeight,
     )
-  }, [state.exam, state.textLevelOverrides, state.layout.spacing, state.pageWidth, state.pageHeight, pageGeometry, measure])
+  }, [state.exam, state.textLevelOverrides, state.layout.spacing, state.pageWidth, state.pageHeight, pageGeometry, measure, fontsReady])
 
   const pageCount = useMemo(() => {
     const objMax = state.objects.reduce((m, o) => Math.max(m, (o.page ?? 0) + 1), 0)
@@ -297,6 +316,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       snapshots,
       backupNow,
       reloadSnapshots,
+      fontsReady,
     }),
     [
       state,
@@ -313,6 +333,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       snapshots,
       backupNow,
       reloadSnapshots,
+      fontsReady,
     ],
   )
 

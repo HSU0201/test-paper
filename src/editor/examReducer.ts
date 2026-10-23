@@ -1,14 +1,19 @@
 import {
   createChoice,
   createQuestion,
+  createSampleExam,
   createSection,
+  hasFigureMark,
   isChoiceType,
+  stripFigureMarks,
   type Asset,
   type BlockRef,
   type Choice,
   type Figure,
   type ExamContent,
-  type Notice,
+  type ExamFooter,
+  FOOTER_CONTINUE_ID,
+  FOOTER_END_ID,
   type Question,
   type QuestionNumbering,
   type Section,
@@ -17,6 +22,7 @@ import {
 export type ExamAction =
   | { type: 'SELECT_BLOCK'; ref: BlockRef | null }
   | { type: 'ADD_SECTION'; afterId?: string }
+  | { type: 'LOAD_EXAMPLE' }
   | { type: 'UPDATE_SECTION'; id: string; patch: Partial<Omit<Section, 'id' | 'questions'>> }
   | { type: 'REMOVE_SECTION'; id: string }
   | { type: 'MOVE_SECTION'; id: string; toIndex: number }
@@ -31,9 +37,7 @@ export type ExamAction =
   | { type: 'SET_CHOICE_IMAGE'; questionId: string; choiceId: string; asset: Asset | null }
   | { type: 'SET_CHOICE_IMAGE_RATIO'; questionId: string; choiceId: string; widthRatio: number }
   | { type: 'SET_NUMBERING'; numbering: QuestionNumbering }
-  | { type: 'ADD_NOTICE'; text: string; afterSectionId: string | null }
-  | { type: 'UPDATE_NOTICE'; id: string; patch: Partial<Pick<Notice, 'text' | 'afterSectionId'>> }
-  | { type: 'REMOVE_NOTICE'; id: string }
+  | { type: 'SET_FOOTER'; patch: Partial<ExamFooter> }
   | { type: 'ADD_FIGURE'; questionId: string; asset: Asset }
   | { type: 'UPDATE_FIGURE'; questionId: string; figureId: string; patch: Partial<Omit<Figure, 'id' | 'assetId'>> }
   | { type: 'REMOVE_FIGURE'; questionId: string; figureId: string }
@@ -44,6 +48,7 @@ export const EXAM_ACTION_TYPES = new Set<string>([
   'REMOVE_FIGURE',
   'SELECT_BLOCK',
   'ADD_SECTION',
+  'LOAD_EXAMPLE',
   'UPDATE_SECTION',
   'REMOVE_SECTION',
   'MOVE_SECTION',
@@ -58,9 +63,7 @@ export const EXAM_ACTION_TYPES = new Set<string>([
   'SET_CHOICE_IMAGE',
   'SET_CHOICE_IMAGE_RATIO',
   'SET_NUMBERING',
-  'ADD_NOTICE',
-  'UPDATE_NOTICE',
-  'REMOVE_NOTICE',
+  'SET_FOOTER',
 ])
 
 type ExamSlice = { exam: ExamContent; selectedBlock: BlockRef | null }
@@ -119,6 +122,11 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
     case 'SELECT_BLOCK':
       return { ...state, selectedBlock: action.ref }
 
+    case 'LOAD_EXAMPLE': {
+      const sample = createSampleExam()
+      const first = sample.sections[0]
+      return { exam: sample, selectedBlock: first ? { kind: 'section', id: first.id } : null }
+    }
     case 'ADD_SECTION': {
       const s = createSection()
       const at = action.afterId ? exam.sections.findIndex((x) => x.id === action.afterId) + 1 : exam.sections.length
@@ -127,7 +135,21 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
       return { exam: { ...exam, sections }, selectedBlock: { kind: 'section', id: s.id } }
     }
     case 'UPDATE_SECTION':
-      return { ...state, exam: mapSection(exam, action.id, (s) => ({ ...s, ...action.patch })) }
+      return {
+        ...state,
+        exam: mapSection(exam, action.id, (s) => {
+          const next = { ...s, ...action.patch }
+          if (action.patch.rowSize === undefined) return next
+          const size = next.rowSize === 2 || next.rowSize === 'all' ? next.rowSize : 1
+          return {
+            ...next,
+            questions: next.questions.map((q, i) => ({
+              ...q,
+              pairNext: size === 2 && i % 2 === 0 && i + 1 < next.questions.length,
+            })),
+          }
+        }),
+      }
     case 'REMOVE_SECTION': {
       const sections = exam.sections.filter((s) => s.id !== action.id)
       const removed = exam.sections.find((s) => s.id === action.id)
@@ -135,11 +157,8 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
       const selGone =
         sel &&
         (sel.id === action.id || (sel.kind === 'question' && removed?.questions.some((q) => q.id === sel.id)))
-      const notices = (exam.notices ?? []).map((n) =>
-        n.afterSectionId === action.id ? { ...n, afterSectionId: null } : n,
-      )
       return {
-        exam: pruneAssets({ ...exam, sections, notices }, removed?.questions.flatMap(questionAssetIds) ?? []),
+        exam: pruneAssets({ ...exam, sections }, removed?.questions.flatMap(questionAssetIds) ?? []),
         selectedBlock: selGone ? null : sel,
       }
     }
@@ -163,18 +182,29 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
         selectedBlock: { kind: 'question', id: nq.id },
       }
     }
-    case 'UPDATE_QUESTION':
-      return {
-        ...state,
-        exam: mapQuestion(exam, action.id, (q) => {
-          const next = { ...q, ...action.patch }
-          if (action.patch.type && isChoiceType(action.patch.type) && next.choices.length === 0) {
-            next.choices = [createChoice(), createChoice(), createChoice(), createChoice()]
-          }
-          if (action.patch.type === 'short_answer' && next.answerLines === 0) next.answerLines = 3
-          return next
-        }),
+    case 'UPDATE_QUESTION': {
+      let nextExam = mapQuestion(exam, action.id, (q) => {
+        const next = { ...q, ...action.patch }
+        if (action.patch.type && isChoiceType(action.patch.type) && next.choices.length === 0) {
+          next.choices = [createChoice(), createChoice(), createChoice(), createChoice()]
+        }
+        if (action.patch.type === 'short_answer' && next.answerLines === 0) next.answerLines = 3
+        if (typeof action.patch.stem === 'string' && hasFigureMark(action.patch.stem)) {
+          next.figures = next.figures.map((f) => {
+            if (typeof f.afterLine !== 'number') return f
+            const { afterLine: _ignored, ...rest } = f
+            return rest
+          })
+        }
+        return next
+      })
+      if (action.patch.pairNext === true) {
+        const hit = findQuestion(nextExam, action.id)
+        const nxt = hit ? hit.section.questions[hit.index + 1] : undefined
+        if (nxt?.pairNext) nextExam = mapQuestion(nextExam, nxt.id, (q) => ({ ...q, pairNext: false }))
       }
+      return { ...state, exam: nextExam }
+    }
     case 'REMOVE_QUESTION': {
       const hit = findQuestion(exam, action.id)
       if (!hit) return state
@@ -272,33 +302,15 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
       }
     case 'SET_NUMBERING':
       return { ...state, exam: { ...exam, numbering: action.numbering } }
-    case 'ADD_NOTICE': {
-      const notice: Notice = {
-        id: crypto.randomUUID(),
-        text: action.text,
-        afterSectionId:
-          action.afterSectionId && exam.sections.some((s) => s.id === action.afterSectionId)
-            ? action.afterSectionId
-            : null,
-      }
-      return {
-        exam: { ...exam, notices: [...(exam.notices ?? []), notice] },
-        selectedBlock: { kind: 'notice', id: notice.id },
-      }
+    case 'SET_FOOTER': {
+      const footer = { ...exam.footer, ...action.patch }
+      let selectedBlock = state.selectedBlock
+      if (action.patch.continueOn === true) selectedBlock = { kind: 'notice', id: FOOTER_CONTINUE_ID }
+      if (action.patch.endOn === true) selectedBlock = { kind: 'notice', id: FOOTER_END_ID }
+      if (action.patch.continueOn === false && selectedBlock?.id === FOOTER_CONTINUE_ID) selectedBlock = null
+      if (action.patch.endOn === false && selectedBlock?.id === FOOTER_END_ID) selectedBlock = null
+      return { exam: { ...exam, footer }, selectedBlock }
     }
-    case 'UPDATE_NOTICE':
-      return {
-        ...state,
-        exam: {
-          ...exam,
-          notices: (exam.notices ?? []).map((n) => (n.id === action.id ? { ...n, ...action.patch } : n)),
-        },
-      }
-    case 'REMOVE_NOTICE':
-      return {
-        exam: { ...exam, notices: (exam.notices ?? []).filter((n) => n.id !== action.id) },
-        selectedBlock: state.selectedBlock?.id === action.id ? null : state.selectedBlock,
-      }
 
     case 'ADD_FIGURE': {
       const assetId = crypto.randomUUID()
@@ -311,15 +323,19 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
     }
     case 'UPDATE_FIGURE': {
       let changed = false
-      const examNext = mapQuestion(exam, action.questionId, (q) => ({
+      const examNext = mapQuestion(exam, action.questionId, (q) => {
+        const stem = typeof action.patch.afterLine === 'number' ? stripFigureMarks(q.stem) : q.stem
+        if (stem !== q.stem) changed = true
+        return {
         ...q,
+        stem,
         figures: q.figures.map((f) => {
           if (f.id !== action.figureId) return f
           const next: Figure = { ...f, ...action.patch }
           if (next.placement !== 'middle') delete next.afterLine
           else {
             if (f.placement !== 'middle' && next.align == null) next.align = 0
-            if (typeof next.afterLine !== 'number') next.afterLine = 1
+            if (typeof next.afterLine !== 'number' && !hasFigureMark(stem)) next.afterLine = 1
           }
           if (
             next.placement === f.placement &&
@@ -332,7 +348,8 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
           changed = true
           return next
         }),
-      }))
+        }
+      })
       if (!changed) return state
       return { ...state, exam: examNext }
     }

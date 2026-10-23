@@ -1,4 +1,6 @@
 /** 考卷內文的局部上色。標記只存在資料裡，畫面與排版都用拆開後的字。 */
+import { textAtoms } from './zhuyin'
+
 const OPEN = /^\{\{#([0-9a-fA-F]{6})\}\}/
 const CLOSE = '{{/}}'
 
@@ -55,42 +57,46 @@ export function paintText(input: string): { text: string; colors?: string[] } {
   return { text, colors }
 }
 
-/** 橫排換行：同一行、同一色的字合成一段，x 是該段在行內的起點 */
+/** 橫排換行：同一行、同一色的字合成一段，x 是該段在行內的起點。有注音時以音節為單位。 */
 export function layoutRichLines(
   text: string,
   colors: string[] | undefined,
   width: number,
   measure: (sample: string) => number,
 ): RichPiece[] {
-  const chars = [...text]
   const pieces: RichPiece[] = []
   let line = 0
   let lineText = ''
   let buf = ''
   let bufColor = ''
+  let index = 0
   const flush = () => {
     if (!buf) return
     pieces.push({ text: buf, color: bufColor, x: measure(lineText), line })
     lineText += buf
     buf = ''
   }
-  chars.forEach((ch, i) => {
-    if (ch === '\n') {
+  for (const atom of textAtoms(text)) {
+    if (atom === '\n') {
       flush()
       line += 1
       lineText = ''
-      return
+      index += 1
+      continue
     }
-    const color = colors?.[i] || ''
-    if (lineText + buf && measure(lineText + buf + ch) > width + 0.5) {
+    if (lineText + buf && measure(lineText + buf + atom) > width + 0.5) {
       flush()
       line += 1
       lineText = ''
     }
-    if (buf && color !== bufColor) flush()
-    bufColor = color
-    buf += ch
-  })
+    for (const ch of atom) {
+      const color = colors?.[index] || ''
+      index += 1
+      if (buf && color !== bufColor) flush()
+      bufColor = color
+      buf += ch
+    }
+  }
   flush()
   return pieces
 }
@@ -131,27 +137,44 @@ function readColor(el: HTMLElement): string | null {
   return hex.toLowerCase() === '000000' ? null : `#${hex.toLowerCase()}`
 }
 
-/** 把色盤編輯器的 HTML 存回標記。黑色不寫進標記。 */
+/**
+ * 把色盤編輯器的 HTML 存回標記。黑色不寫進標記。
+ * 瀏覽器用 `<div><br></div>` 表示空行；區塊本身已經換行，裡面的 br 不再多算一行。
+ */
 export function htmlToMarkup(root: HTMLElement): string {
-  const parts: string[] = []
+  const lines: string[] = ['']
+  let seenBlock = false
+  const pushText = (t: string, color: string | null) => {
+    if (!t) return
+    lines[lines.length - 1] += color ? `{{#${color.slice(1)}}}${t}{{/}}` : t
+  }
   const walk = (node: Node, color: string | null) => {
     if (node.nodeType === Node.TEXT_NODE) {
-      const t = (node.textContent ?? '').replace(/\u00a0/g, ' ')
-      if (!t) return
-      parts.push(color ? `{{#${color.slice(1)}}}${t}{{/}}` : t)
+      pushText((node.textContent ?? '').replace(/\u00a0/g, ' '), color)
       return
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return
     const el = node as HTMLElement
     if (el.tagName === 'BR') {
-      parts.push('\n')
+      lines.push('')
       return
     }
     const next = readColor(el) ?? color
     const block = el.tagName === 'DIV' || el.tagName === 'P'
-    if (block && parts.length > 0 && !parts[parts.length - 1].endsWith('\n')) parts.push('\n')
+    if (!block) {
+      el.childNodes.forEach((child) => walk(child, next))
+      return
+    }
+    const atStart = !seenBlock && lines.length === 1 && lines[0] === ''
+    if (!atStart) lines.push('')
+    seenBlock = true
+    const onlyBr =
+      el.childNodes.length === 1 &&
+      el.childNodes[0].nodeType === Node.ELEMENT_NODE &&
+      (el.childNodes[0] as HTMLElement).tagName === 'BR'
+    if (onlyBr) return
     el.childNodes.forEach((child) => walk(child, next))
   }
   root.childNodes.forEach((child) => walk(child, null))
-  return parts.join('')
+  return lines.join('\n')
 }

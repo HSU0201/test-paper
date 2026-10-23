@@ -2,6 +2,11 @@ import { plainText } from '../editor/richText'
 
 export type QuestionType = 'single_choice' | 'multi_choice' | 'fill_blank' | 'short_answer'
 
+/** 這一題是否用注音出題。未設則跟隨大題。 */
+export function questionUsesZhuyin(section: { zhuyin?: boolean }, question: { zhuyin?: boolean }): boolean {
+  return typeof question.zhuyin === 'boolean' ? question.zhuyin : section.zhuyin === true
+}
+
 export const QUESTION_TYPE_LABEL: Record<QuestionType, string> = {
   single_choice: '單選題',
   multi_choice: '多選題',
@@ -19,8 +24,28 @@ export type Choice = { id: string; text: string; image?: ChoiceImage }
 /** below：題幹之後；middle：題幹文字中間；right：題目右側；afterChoices：選項之後 */
 export type FigurePlacement = 'below' | 'middle' | 'right' | 'afterChoices'
 
-/** 題目文字裡的插圖位置。排版時會拿掉，不會印出來。 */
+/** 題目文字裡的插圖位置。排版時會拿掉，不會印出來。半形 [圖] 也認。 */
 export const FIGURE_MARK = '［圖］'
+
+const FIGURE_MARK_PATTERN = /[\[［]\s*圖\s*[\]］]/
+
+export function hasFigureMark(stem: string): boolean {
+  return FIGURE_MARK_PATTERN.test(stem)
+}
+
+/** 拿掉插圖標記。整行只有標記時，那一行也刪掉，避免拖曳後多出空白行 */
+export function stripFigureMarks(stem: string): string {
+  const clear = (line: string) => line.replace(new RegExp(FIGURE_MARK_PATTERN.source, 'g'), '')
+  return stem
+    .split('\n')
+    .filter((line) => !(FIGURE_MARK_PATTERN.test(line) && clear(line).trim() === ''))
+    .map(clear)
+    .join('\n')
+}
+
+export function splitFigureMarks(stem: string): string[] {
+  return stem.split(new RegExp(FIGURE_MARK_PATTERN.source, 'g'))
+}
 
 /** 題目內的圖片，跟著題目一起排版、移動 */
 export type Figure = {
@@ -50,7 +75,7 @@ export type SectionLayout = 'flow' | 'rows'
 /** dot：1. ；paren：(1) */
 export type NumberStyle = 'dot' | 'paren'
 
-/** 卷面上的提示框，例如「下一頁還有題目！」 */
+/** 舊版提示框。載入時會轉成頁尾開關，不再依大題拖位置 */
 export type Notice = {
   id: string
   text: string
@@ -60,6 +85,29 @@ export type Notice = {
 
 export const NOTICE_CONTINUE = '下一頁還有題目！'
 export const NOTICE_END = '作答結束，請仔細檢查！'
+export const FOOTER_CONTINUE_ID = 'continue'
+export const FOOTER_END_ID = 'end'
+
+/** 卷末提示。有下一頁時印 continue；end 接在最後一題下面 */
+export type ExamFooter = {
+  continueOn: boolean
+  endOn: boolean
+  continueText: string
+  endText: string
+}
+
+export function createDefaultFooter(): ExamFooter {
+  return {
+    continueOn: false,
+    endOn: false,
+    continueText: NOTICE_CONTINUE,
+    endText: NOTICE_END,
+  }
+}
+
+export function footerOf(exam: ExamContent): ExamFooter {
+  return exam.footer ?? createDefaultFooter()
+}
 
 export type Asset = { src: string; width: number; height: number }
 
@@ -78,12 +126,28 @@ export type Question = {
   choices: Choice[]
   choiceLayout: ChoiceLayout
   answer: string
-  /** 問答題留給學生作答的行數。直式表格時，這是這一列的高度 */
+  /** 問答題留給學生作答的行數 */
   answerLines: number
   /** 問答留白是否畫底線。false 只留空白 */
   answerRuled: boolean
+  /**
+   * 直式表格這一列要幾行。沒填，或是 0，就跟著大題「每列至少」。
+   * 填了別的數字，只有這一題不同。
+   */
+  rowLines?: number
   /** 直式表格右側欄，例如「驗算：」。空字串表示這一列不拆開 */
   aside: string
+  /**
+   * 右側欄佔這一列內容寬的百分比。沒填或 0 就用預設。
+   * 只有右側欄有文字時，這一列才會照這個寬度拆開。
+   */
+  asideWidth?: number
+  /**
+   * 與下一題並排，各佔半列。設在左邊那一題。
+   * 直式表格中間有分隔線；一般排列中間留空隙。
+   * 右邊那一題若也打開，排版時會略過，避免三題擠在同一列。
+   */
+  pairNext?: boolean
   figures: Figure[]
   /**
    * 每格計分時的格數。未設則依題幹裡的（ ）與底線計算，
@@ -92,6 +156,8 @@ export type Question = {
   blanks?: number
   /** 題號、題幹、選項；未設則用全卷「小題題文」 */
   bodyStyle?: FontOverride
+  /** 未設則跟隨大題。有注音時音節與作答空格不會在換行時被拆開 */
+  zhuyin?: boolean
 }
 
 /** firstChild：標題至少與第一題同欄；whole：整個大題不跨欄 */
@@ -119,10 +185,19 @@ export type Section = {
   frame: SectionFrame
   /** 題目直向排列，或收成直式表格 */
   layout: SectionLayout
-  /** 直式表格每一列至少幾行。小題若填了作答行數，用該題的行數 */
+  /** 直式表格每一列至少幾行。小題沒有另設列高時，每一題都用這個行數 */
   rowLines: number
   /** 小題題號寫成 1. 或 (1) */
   numberStyle: NumberStyle
+  /**
+   * 這一大題的小題怎麼並排。
+   * 1：一題一列（各題仍可用「與下一題同一列」）。
+   * 2：兩題一列，1 跟 2、3 跟 4，最後剩一題就獨佔。
+   * all：全部小題排在同一列。
+   */
+  rowSize: 1 | 2 | 'all'
+  /** 這一題用注音出題。新的小題跟著這個設定，各題仍可單獨改 */
+  zhuyin: boolean
 }
 
 export type QuestionNumbering = 'continuous' | 'perSection'
@@ -132,8 +207,8 @@ export type ExamContent = {
   sections: Section[]
   /** 圖片資料（data URL），由 Figure.assetId 參照 */
   assets: Record<string, Asset>
-  /** 提示框。位置由 afterSectionId 決定，不跟大題混在同一個陣列 */
-  notices: Notice[]
+  /** 續頁提示與作答結束。位置由排版決定，這裡只開關與文字 */
+  footer: ExamFooter
 }
 
 /** header：頁首欄位；notice：提示框 */
@@ -158,7 +233,7 @@ export function choiceLabel(index: number): string {
 
 /** 題幹裡一個（ ）或一段底線算一格 */
 export function countAnswerBlanks(stem: string): number {
-  const text = plainText(stem).replaceAll(FIGURE_MARK, '')
+  const text = plainText(stem).replace(new RegExp(FIGURE_MARK_PATTERN.source, 'g'), '')
   return text.match(/（[\s　]*）|\([\s]*\)|＿{2,}|_{2,}/g)?.length ?? 0
 }
 
@@ -242,6 +317,34 @@ export function questionScoreMark(section: Section, q: Question): string {
   return `（${storedScore(q)} 分）`
 }
 
+export function sectionRowSize(section: Section): 1 | 2 | 'all' {
+  return section.rowSize === 2 || section.rowSize === 'all' ? section.rowSize : 1
+}
+
+/** 這一題若與其他題同一列，回傳那一列從哪一題開始、共幾題 */
+export function questionRowGroup(section: Section, index: number): { start: number; count: number } | null {
+  const qs = section.questions
+  if (index < 0 || index >= qs.length) return null
+  const size = sectionRowSize(section)
+  if (size === 'all') return qs.length > 1 ? { start: 0, count: qs.length } : null
+  if (size === 2) {
+    const start = index - (index % 2)
+    const count = Math.min(2, qs.length - start)
+    return count > 1 ? { start, count } : null
+  }
+  let i = 0
+  while (i < qs.length) {
+    if (qs[i].pairNext && i + 1 < qs.length) {
+      if (index === i || index === i + 1) return { start: i, count: 2 }
+      i += 2
+    } else {
+      if (index === i) return null
+      i += 1
+    }
+  }
+  return null
+}
+
 function tidySegment(text: string, index: number, count: number): string {
   let t = text
   if (index > 0) t = t.replace(/^\n/, '')
@@ -256,8 +359,8 @@ function tidySegment(text: string, index: number, count: number): string {
  */
 export function planStemFigures(stem: string, middleCount: number): { parts: string[]; slots: number[] } {
   const count = Math.max(0, middleCount)
-  if (stem.includes(FIGURE_MARK)) {
-    const raw = stem.split(FIGURE_MARK)
+  if (hasFigureMark(stem)) {
+    const raw = splitFigureMarks(stem)
     const parts = raw.map((p, i) => tidySegment(p, i, raw.length))
     const slots: number[] = parts.map((_, i) => (i < parts.length - 1 ? 1 : 0))
     const gaps = parts.length - 1
@@ -280,7 +383,7 @@ export function planStemFigures(stem: string, middleCount: number): { parts: str
 /** 讓題幹至少有 count 個［圖］。多的不刪，方便使用者自己搬位置。 */
 export function ensureFigureMarks(stem: string, count: number): string {
   let next = stem
-  let have = next.split(FIGURE_MARK).length - 1
+  let have = splitFigureMarks(next).length - 1
   while (have < count) {
     if (!next.trim()) next = FIGURE_MARK
     else {
@@ -328,6 +431,8 @@ export function createSection(title = '新大題', defaultType: QuestionType = '
     layout: 'flow',
     rowLines: 4,
     numberStyle: 'dot',
+    rowSize: 1,
+    zhuyin: false,
   }
 }
 
@@ -335,47 +440,199 @@ export function isChoiceType(t: QuestionType): boolean {
   return t === 'single_choice' || t === 'multi_choice'
 }
 
-function q(type: QuestionType, score: number, stem: string, choices: string[] = [], answer = ''): Question {
+function q(
+  type: QuestionType,
+  score: number,
+  stem: string,
+  choices: Array<string | { text: string; image?: ChoiceImage }> = [],
+  answer = '',
+): Question {
   return {
     ...createQuestion(type, score),
     stem,
-    choices: choices.map((text) => ({ id: newId(), text })),
+    choices: choices.map((item) => {
+      const text = typeof item === 'string' ? item : item.text
+      const image = typeof item === 'string' ? undefined : item.image
+      return { id: newId(), text, ...(image ? { image } : {}) }
+    }),
     answer,
   }
 }
 
+function sampleSvg(width: number, height: number, inner: string, framed = true): Asset {
+  const frame = framed
+    ? `<rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="8" fill="#fffaf0" stroke="#3a2e10" stroke-width="2"/>`
+    : ''
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${frame}${inner}</svg>`
+  return { src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, width, height }
+}
+
+function figure(assetId: string, placement: FigurePlacement, widthRatio: number, align?: number): Figure {
+  return {
+    id: newId(),
+    assetId,
+    placement,
+    widthRatio,
+    ...(align != null ? { align } : {}),
+  }
+}
+
+/**
+ * 空白試卷用的排版目錄：四種題型，加上選項欄數、外框、底線、
+ * 直式表格、配分寫法，以及圖片可以放的位置。
+ */
 export function createSampleExam(): ExamContent {
-  const choice = createSection('選擇題', 'single_choice')
-  choice.defaultScore = 4
-  choice.instruction = '請選出最適當的答案。'
-  choice.questions = [
-    q('single_choice', 4, '下列哪一個數是質數？', ['21', '27', '29', '33'], 'C'),
-    q('single_choice', 4, '若 2x + 3 = 11，則 x 的值為何？', ['3', '4', '5', '7'], 'B'),
-    q(
-      'single_choice',
-      4,
-      '某班有 30 位學生，其中男生占全班的五分之二，請問女生有幾位？',
-      ['12 位', '15 位', '18 位', '20 位'],
-      'C',
+  const assets: Record<string, Asset> = {}
+  const add = (asset: Asset) => {
+    const id = newId()
+    assets[id] = asset
+    return id
+  }
+  const triangle = add(
+    sampleSvg(160, 110, `<polygon points="80,22 28,92 132,92" fill="#f0c431" stroke="#3a2e10" stroke-width="2"/>`),
+  )
+  const plot = add(
+    sampleSvg(180, 96, `<rect x="28" y="22" width="124" height="54" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/>`),
+  )
+  const badge = add(sampleSvg(96, 96, `<circle cx="48" cy="48" r="28" fill="#fee2e2" stroke="#d92d20" stroke-width="3"/>`))
+  const bars = add(
+    sampleSvg(
+      180,
+      84,
+      `<rect x="28" y="40" width="28" height="28" fill="#f0c431"/><rect x="68" y="24" width="28" height="44" fill="#1d4ed8"/><rect x="108" y="32" width="28" height="36" fill="#1f7a45"/>`,
     ),
+  )
+  const iconRed = add(sampleSvg(64, 64, `<circle cx="32" cy="32" r="22" fill="#d92d20"/>`, false))
+  const iconBlue = add(sampleSvg(64, 64, `<rect x="12" y="12" width="40" height="40" rx="4" fill="#1d4ed8"/>`, false))
+  const iconGreen = add(sampleSvg(64, 64, `<polygon points="32,8 56,54 8,54" fill="#1f7a45"/>`, false))
+  const pic = (assetId: string, widthRatio: number): ChoiceImage => ({ assetId, widthRatio })
+
+  const single = createSection('單選題', 'single_choice')
+  single.defaultScore = 4
+  single.instruction = '選項可排成四欄、兩欄或一欄，也可以在選項放圖。'
+  single.questions = [
+    {
+      ...q('single_choice', 4, '下列哪一個數是{{#d92d20}}質數{{/}}？', ['21', '27', '29', '33'], 'C'),
+      choiceLayout: 4,
+    },
+    {
+      ...q(
+        'single_choice',
+        4,
+        '若一個長方形的長是 12 公分、寬是 5 公分，它的周長是多少？',
+        ['17 公分', '24 公分', '34 公分', '60 公分'],
+        'C',
+      ),
+      choiceLayout: 2,
+    },
+    {
+      ...q(
+        'single_choice',
+        4,
+        '下列哪一個敘述是正確的？',
+        [
+          '所有的質數都是奇數。',
+          '兩個奇數相加，和一定是偶數。',
+          '一個數只要能被 2 整除，就一定是 4 的倍數。',
+          '0 是最小的正整數。',
+        ],
+        'B',
+      ),
+      choiceLayout: 1,
+      bodyStyle: { bold: true },
+    },
+    {
+      ...q('single_choice', 4, '哪一個選項是圓形？', [
+        { text: '', image: pic(iconRed, 0.85) },
+        { text: '', image: pic(iconBlue, 0.85) },
+        { text: '三角形', image: pic(iconGreen, 0.7) },
+        '只有文字、沒有圖',
+      ], 'A'),
+      choiceLayout: 2,
+    },
   ]
+
+  const multi = createSection('多選題', 'multi_choice')
+  multi.defaultScore = 4
+  multi.frame = 'body'
+  multi.instruction = '外框只圍住題目，標題留在框外。圖放在選項後面。'
+  multi.questions = [
+    {
+      ...q('multi_choice', 4, '下列哪些是偶數？', ['2', '5', '8', '11'], 'A、C'),
+      choiceLayout: 4,
+    },
+    {
+      ...q('multi_choice', 4, '看完選項後，圖在選項的下面。哪些長條比較高？', ['左', '中', '右'], 'B'),
+      figures: [figure(bars, 'afterChoices', 0.55)],
+      choiceLayout: 4,
+    },
+  ]
+
   const fill = createSection('填充題', 'fill_blank')
-  fill.defaultScore = 5
+  fill.defaultScore = 2
+  fill.scoreMode = 'blank'
+  fill.blankScore = 2
+  fill.instruction = '（　　）和底線各算一格，每格分數相同，各題格數可以不同。'
   fill.questions = [
-    q('fill_blank', 5, '一個正方形的周長是 36 公分，它的面積是＿＿＿＿平方公分。', [], '81'),
-    q('fill_blank', 5, '3/4 化成小數是＿＿＿＿。', [], '0.75'),
+    q('fill_blank', 2, '3 的平方是（　　）。', [], '9'),
+    q('fill_blank', 2, '長 8 公分、寬 3 公分的長方形，周長是＿＿＿＿公分，面積是＿＿＿＿平方公分。', [], '22；24'),
+    {
+      ...q('fill_blank', 2, '觀察圖形。\n［圖］\n這個三角形的底是＿＿＿＿公分。', [], '8'),
+      figures: [figure(triangle, 'middle', 0.46, 0)],
+    },
   ]
-  const essay = createSection('計算題', 'short_answer')
-  essay.defaultScore = 10
-  essay.instruction = '請寫出計算過程。'
+
+  const essay = createSection('問答題', 'short_answer')
+  essay.defaultScore = 8
+  essay.frame = 'all'
+  essay.headingStyle = { fontSize: 20 }
+  essay.instruction = '標題和題目框在一起。作答區可以畫底線，也可以只留白。各題分數不同時，會寫在題號後面。'
   essay.questions = [
-    { ...q('short_answer', 10, '小明買了 3 枝筆和 2 本筆記本共花了 110 元，已知一枝筆 20 元，請問一本筆記本多少元？'), answerLines: 4 },
+    {
+      ...q('short_answer', 6, '小明買了 3 枝筆和 2 本筆記本共花了 110 元，一枝筆 20 元。一本筆記本多少元？'),
+      answerLines: 3,
+    },
+    {
+      ...q('short_answer', 6, '用自己的話說說，什麼是質數？'),
+      answerLines: 3,
+      answerRuled: false,
+    },
+    {
+      ...q('short_answer', 10, '圖在題目右側。請說明這個圓形記號可能代表什麼，並寫出一個例子。'),
+      answerLines: 3,
+      figures: [figure(badge, 'right', 0.55)],
+    },
+    {
+      ...q('short_answer', 8, '圖在題目下方。請依照圖中的長方形，寫出周長怎麼算。'),
+      answerLines: 3,
+      figures: [figure(plot, 'below', 0.62)],
+    },
   ]
-  return { numbering: 'continuous', sections: [choice, fill, essay], assets: {}, notices: [] }
+
+  const table = createSection('直式計算', 'short_answer')
+  table.defaultScore = 5
+  table.layout = 'rows'
+  table.rowLines = 3
+  table.numberStyle = 'paren'
+  table.keepTogether = 'whole'
+  table.instruction = '每一題一列。(1) 右側留驗算，(2) 與 (3) 並排，(4) 這一列比較高。'
+  table.questions = [
+    { ...q('short_answer', 5, '36 × 4 ='), aside: '驗算：' },
+    { ...q('short_answer', 5, '70 − 28 ='), pairNext: true },
+    q('short_answer', 5, '15 + 9 ='),
+    { ...q('short_answer', 5, '128 ÷ 4 ='), rowLines: 6 },
+  ]
+
+  return {
+    numbering: 'perSection',
+    sections: [single, multi, fill, essay, table],
+    assets,
+    footer: { ...createDefaultFooter(), continueOn: true, endOn: true },
+  }
 }
 
 export function createEmptyExam(): ExamContent {
-  return { numbering: 'continuous', sections: [], assets: {}, notices: [] }
+  return { numbering: 'continuous', sections: [], assets: {}, footer: createDefaultFooter() }
 }
 
 const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]
@@ -391,19 +648,66 @@ function clampRowLines(n: unknown): number {
   return Math.min(12, Math.max(2, v))
 }
 
-function normalizeNotices(raw: unknown): Notice[] {
-  if (!Array.isArray(raw)) return []
-  const out: Notice[] = []
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') continue
-    const n = item as Partial<Notice>
-    out.push({
-      id: typeof n.id === 'string' && n.id ? n.id : crypto.randomUUID(),
-      text: typeof n.text === 'string' ? n.text : '',
-      afterSectionId: typeof n.afterSectionId === 'string' && n.afterSectionId ? n.afterSectionId : null,
-    })
+function clampQuestionRowLines(n: unknown): number | undefined {
+  if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return undefined
+  return Math.min(20, Math.max(2, Math.round(n)))
+}
+
+/** 直式表格這一列要幾行。小題有另設就用小題的，否則每一題都用大題的「每列至少」。 */
+export function questionRowLines(section: Section, q: Question): number {
+  const custom = clampQuestionRowLines(q.rowLines)
+  return custom ?? clampRowLines(section.rowLines)
+}
+
+/** 右側欄預設佔這一列內容寬的百分比 */
+export const ASIDE_WIDTH_DEFAULT = 38
+export const ASIDE_WIDTH_MIN = 15
+export const ASIDE_WIDTH_MAX = 75
+
+export function clampAsideWidth(n: unknown): number | undefined {
+  if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return undefined
+  return Math.min(ASIDE_WIDTH_MAX, Math.max(ASIDE_WIDTH_MIN, Math.round(n)))
+}
+
+/** 這一列右側欄佔內容寬的百分比。沒另設就用預設。 */
+export function questionAsideWidth(q: Question): number {
+  return clampAsideWidth(q.asideWidth) ?? ASIDE_WIDTH_DEFAULT
+}
+
+/** 右側欄左緣距內容左緣的距離。rightPercent 是右側欄佔內容寬的百分比。兩側都留得下文字。 */
+export function asideLeftEdge(inner: number, rightPercent: number): number {
+  const wanted = Math.round((inner * (100 - rightPercent)) / 100)
+  const minSide = 36
+  if (inner <= minSide * 2) return Math.max(8, Math.round(inner / 2))
+  return Math.min(inner - minSide, Math.max(minSide, wanted))
+}
+
+function normalizeFooter(raw: unknown, legacyNotices: unknown): ExamFooter {
+  const base = createDefaultFooter()
+  if (raw && typeof raw === 'object') {
+    const f = raw as Partial<ExamFooter>
+    return {
+      continueOn: f.continueOn === true,
+      endOn: f.endOn === true,
+      continueText: typeof f.continueText === 'string' && f.continueText.trim() ? f.continueText : base.continueText,
+      endText: typeof f.endText === 'string' && f.endText.trim() ? f.endText : base.endText,
+    }
   }
-  return out
+  const footer = { ...base }
+  if (!Array.isArray(legacyNotices)) return footer
+  for (const item of legacyNotices) {
+    if (!item || typeof item !== 'object') continue
+    const text = typeof (item as Notice).text === 'string' ? (item as Notice).text : ''
+    if (!text.trim()) continue
+    if (text.includes('作答結束')) {
+      footer.endOn = true
+      footer.endText = text
+    } else {
+      footer.continueOn = true
+      footer.continueText = text
+    }
+  }
+  return footer
 }
 
 function normalizeFigure(f: Figure | undefined, assets: Record<string, Asset>): Figure | null {
@@ -448,7 +752,7 @@ export function normalizeExam(raw: unknown): ExamContent {
   return {
     numbering: r.numbering === 'perSection' ? 'perSection' : 'continuous',
     assets,
-    notices: normalizeNotices(r.notices),
+    footer: normalizeFooter(r.footer, (r as { notices?: unknown }).notices),
     sections: sections.map((s) => {
       const base = createSection()
       const defaultType = QUESTION_TYPES.includes(s.defaultType) ? s.defaultType : base.defaultType
@@ -462,7 +766,9 @@ export function normalizeExam(raw: unknown): ExamContent {
         frame: s.frame === 'body' || s.frame === 'all' ? s.frame : 'none',
         layout: s.layout === 'rows' ? 'rows' : 'flow',
         rowLines: clampRowLines(s.rowLines),
+        rowSize: s.rowSize === 2 || s.rowSize === 'all' ? s.rowSize : 1,
         numberStyle: s.numberStyle === 'paren' ? 'paren' : 'dot',
+        zhuyin: s.zhuyin === true,
         headingStyle: normalizeFontOverride(s.headingStyle),
         instructionStyle: normalizeFontOverride(s.instructionStyle),
         questions: (Array.isArray(s.questions) ? s.questions : []).map((item) => {
@@ -471,13 +777,17 @@ export function normalizeExam(raw: unknown): ExamContent {
             typeof item.blanks === 'number' && Number.isFinite(item.blanks)
               ? Math.min(30, Math.max(0, Math.round(item.blanks)))
               : undefined
-          return {
+          const rowLines = clampQuestionRowLines(item.rowLines)
+          const asideWidth = clampAsideWidth(item.asideWidth)
+          const question: Question = {
             ...createQuestion(type, 0),
             ...item,
             type,
             blanks,
             answerRuled: item.answerRuled === false ? false : true,
             aside: typeof item.aside === 'string' ? item.aside : '',
+            pairNext: item.pairNext === true,
+            zhuyin: item.zhuyin === true ? true : item.zhuyin === false ? false : undefined,
             bodyStyle: normalizeFontOverride(item.bodyStyle),
             choices: (Array.isArray(item.choices) ? item.choices : []).map((c) =>
               c.image && !assets[c.image.assetId] ? { id: c.id, text: c.text } : c,
@@ -486,6 +796,11 @@ export function normalizeExam(raw: unknown): ExamContent {
               .map((f) => normalizeFigure(f, assets))
               .filter((f): f is Figure => !!f),
           }
+          if (rowLines == null) delete question.rowLines
+          else question.rowLines = rowLines
+          if (asideWidth == null) delete question.asideWidth
+          else question.asideWidth = asideWidth
+          return question
         }),
       }
     }),

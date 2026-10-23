@@ -21,6 +21,7 @@ import { EDITOR_ONLY_NAME, HEADER_REF_PREFIX, HeaderItemsLayer, PageDecorLayer }
 import { ExamFlowLayer } from './ExamFlowLayer'
 import { useHtmlImage } from './useHtmlImage'
 import { useEditor } from '../editor/EditorContext'
+import { withBopomofoFont } from '../fonts/paperFont'
 import { EDITOR_GUIDE, EDITOR_SELECTION } from '../editor/theme'
 import type { EditorAction } from '../editor/reducer'
 import { getBoundingBox, lineSegmentBox, type Box } from '../editor/bounds'
@@ -93,7 +94,7 @@ function snapTargets(objects: CanvasObject[], excludeId: string, layoutBoxes: Bo
 
 export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
   function PaperStage({ pageIndex, scale, showGuides, onTextDoubleClick }, ref) {
-    const { state, dispatch, sortedObjects, pageGeometry, flow } = useEditor()
+    const { state, dispatch, sortedObjects, pageGeometry, flow, fontsReady } = useEditor()
     const geometry = pageGeometry(pageIndex)
     const pageObjects = useMemo(
       () => sortedObjects.filter((o) => (o.page ?? 0) === pageIndex),
@@ -274,7 +275,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
             height={pageH}
             onMouseDown={handleStageMouseDown}
           >
-            <Layer>
+            <Layer key={fontsReady ? 'fonts-ready' : 'fonts-pending'}>
               <Rect
                 name="page-bg"
                 x={0}
@@ -301,7 +302,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                   registerRef={registerRef}
                   setGuides={setGuides}
                   clearGuides={clearGuides}
-                  fontFamily={state.paperFontFamily}
+                  fontFamily={withBopomofoFont(state.paperFontFamily)}
                 />
               ) : null}
               <ExamFlowLayer
@@ -312,7 +313,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                 flagged={flagged}
                 interactive={!state.textPlacementMode}
                 dispatch={dispatch}
-                fontFamily={state.paperFontFamily}
+                fontFamily={withBopomofoFont(state.paperFontFamily)}
               />
               {pageObjects.map((obj) => {
                 if (obj.type === 'text') {

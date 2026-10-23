@@ -34,6 +34,10 @@ export function measureText(
   return result
 }
 
+export function clearMeasureCache(): void {
+  cache.clear()
+}
+
 export function measureWithFont(fontFamily: string): MeasureFn {
   return (text, width, style, lineHeight) => measureText(fontFamily, text, width, style, lineHeight)
 }

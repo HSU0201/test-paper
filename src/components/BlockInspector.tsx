@@ -4,23 +4,34 @@ import { useEditor } from '../editor/EditorContext'
 import { findQuestion } from '../editor/examReducer'
 import {
   choiceLabel,
+  FIGURE_MARK,
+  hasFigureMark,
   type Figure,
   type FigurePlacement,
   isChoiceType,
   QUESTION_TYPE_LABEL,
+  questionRowGroup,
+  sectionRowSize,
   questionBlankCount,
+  ASIDE_WIDTH_DEFAULT,
+  ASIDE_WIDTH_MAX,
+  ASIDE_WIDTH_MIN,
+  questionAsideWidth,
+  questionRowLines,
   questionNumbers,
   questionPoints,
+  questionUsesZhuyin,
   sectionBlankUnit,
   sectionHeading,
   sectionScore,
   uniformQuestionScore,
+  FOOTER_CONTINUE_ID,
+  FOOTER_END_ID,
   NOTICE_CONTINUE,
   NOTICE_END,
   type Choice,
   type ChoiceLayout,
   type FontOverride,
-  type Notice,
   type NumberStyle,
   type QuestionType,
   type ScoreMode,
@@ -29,7 +40,7 @@ import {
   type SectionLayout,
 } from '../types/exam'
 import { Icon, NumberField, PanelSection, Segmented, Switch } from './ui'
-import { ColorField } from './ColorField'
+import { ColorField, type ColorFieldHandle } from './ColorField'
 import { plainText } from '../editor/richText'
 import { mergeTextLevelPreset, type BuiltinTextLevelKey, type TextLevelPreset } from '../types/document'
 
@@ -154,7 +165,7 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
             multiline
             rows={2}
             value={section.instruction}
-            placeholder="例：每題 4 分，答錯不倒扣。"
+            placeholder={section.zhuyin ? '例：請看注音，選出正確的答案。' : '例：每題 4 分，答錯不倒扣。'}
             onChange={(instruction) => set({ instruction })}
           />
         </div>
@@ -234,7 +245,7 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
 
       <PanelSection
         title="卷面格式"
-        description="外框把這一題圍起來。直式表格是每一題一列，右側可以再拆一欄寫驗算。"
+        description="外框把這一題圍起來。直式表格是每一題一列，右側可以再拆一欄寫驗算。小題並排一次套到這一大題底下的每一題。"
       >
         <div className="ui-field">
           <span className="ui-field__label">外框</span>
@@ -261,15 +272,38 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
             onChange={(layout) => set({ layout })}
           />
         </div>
-        {(section.layout ?? 'flow') === 'rows' ? (
-          <NumberField
-            label="每列至少"
-            suffix="行"
-            min={2}
-            max={12}
-            value={section.rowLines ?? 4}
-            onChange={(v) => set({ rowLines: Math.min(12, Math.max(2, Math.round(v))) })}
+        <div className="ui-field">
+          <span className="ui-field__label">小題並排</span>
+          <Segmented<'1' | '2' | 'all'>
+            label="小題並排"
+            value={section.rowSize === 2 ? '2' : section.rowSize === 'all' ? 'all' : '1'}
+            options={[
+              { value: '1', label: '一題一列' },
+              { value: '2', label: '兩題一列' },
+              { value: 'all', label: '全部同一列' },
+            ]}
+            onChange={(v) => set({ rowSize: v === '2' ? 2 : v === 'all' ? 'all' : 1 })}
           />
+        </div>
+        <p className="exam-style__follow">
+          {section.rowSize === 'all'
+            ? '這一大題的小題全部左右排在同一列。各題自己的「與下一題同一列」會關掉。'
+            : section.rowSize === 2
+              ? '1 跟 2、3 跟 4 並排，各題的並排也改成這樣。最後若剩一題，那題獨佔一列。'
+              : '一題一列，各題自己的「與下一題同一列」會關掉。之後要某兩題並排，到左邊那一題再打開。'}
+        </p>
+        {(section.layout ?? 'flow') === 'rows' ? (
+          <>
+            <NumberField
+              label="每列至少"
+              suffix="行"
+              min={2}
+              max={12}
+              value={section.rowLines ?? 4}
+              onChange={(v) => set({ rowLines: Math.min(12, Math.max(2, Math.round(v))) })}
+            />
+            <p className="exam-style__follow">沒有另外設定的小題，每一列都留這麼多行。某一題要不同，改那一題的「這一列高度」。</p>
+          </>
         ) : null}
         <div className="ui-field">
           <span className="ui-field__label">題號</span>
@@ -282,6 +316,15 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
             ]}
             onChange={(numberStyle) => set({ numberStyle })}
           />
+        </div>
+        <div className="exam-style">
+          <div className="exam-style__head">
+            <span className="exam-style__label">用注音出題</span>
+            <Switch checked={section.zhuyin === true} label="用注音出題" onChange={(zhuyin) => set({ zhuyin })} />
+          </div>
+          <p className="exam-style__follow">
+            適合低年級。選擇、填充、問答都可以。題幹裡一旦有注音，音節就不會被拆開，例如ㄓㄨㄥˋ會整組換行；（　　）和連續底線也留在同一行。注音符號用內建注音字型，國字仍用全卷字型。沒有另外設定的小題會跟著這裡。
+          </p>
         </div>
       </PanelSection>
 
@@ -341,7 +384,7 @@ function FiguresEditor({ questionId }: { questionId: string }) {
   return (
     <PanelSection
       title="題目附圖"
-      description="圖片跟著題目排版。在卷面上拖曳圖片，決定它接在題幹的哪裡；左右仍用拉霸。"
+      description="圖片跟著題目排版。題目裡若有［圖］，圖片就接在那個位置；沒有的話，在卷面上拖曳圖片。左右仍用拉霸。"
       actions={
         <button type="button" className="text-btn" onClick={() => fileRef.current?.click()}>
           ＋ 插入圖片
@@ -549,9 +592,10 @@ function ChoiceRow({
 
 function QuestionEditor({ questionId }: { questionId: string }) {
   const { state, dispatch } = useEditor()
+  const stemRef = useRef<ColorFieldHandle>(null)
   const hit = findQuestion(state.exam, questionId)
   if (!hit) return null
-  const { question: q, section } = hit
+  const { question: q, section, index } = hit
   const num = questionNumbers(state.exam).get(q.id)
   const set = (patch: Partial<typeof q>) => dispatch({ type: 'UPDATE_QUESTION', id: q.id, patch })
 
@@ -586,6 +630,57 @@ function QuestionEditor({ questionId }: { questionId: string }) {
             <NumberField label="配分" suffix="分" min={0} max={100} value={q.score} onChange={(v) => set({ score: v })} />
           )}
         </div>
+        <div className="exam-style">
+          <div className="exam-style__head">
+            <span className="exam-style__label">這一題用注音</span>
+            <Switch
+              checked={questionUsesZhuyin(section, q)}
+              label="這一題用注音"
+              onChange={(zhuyin) => set({ zhuyin })}
+            />
+          </div>
+          <p className="exam-style__follow">
+            音節和作答空格換行時不會被拆開。注音符號用內建注音字型。
+            {typeof q.zhuyin === 'boolean' ? (
+              <>
+                {' '}
+                這一題已單獨設定。
+                <button type="button" className="text-btn" onClick={() => set({ zhuyin: undefined })}>
+                  改回跟隨大題
+                </button>
+              </>
+            ) : (
+              <> 目前跟隨大題（{section.zhuyin ? '用注音' : '不用注音'}）。</>
+            )}
+          </p>
+        </div>
+        {sectionRowSize(section) !== 1 ? (
+          <p className="exam-style__follow">
+            這一題跟著大題：{section.rowSize === 'all' ? '全部小題同一列' : '兩題一列'}。要改的話，請到大題的「小題並排」。
+          </p>
+        ) : questionRowGroup(section, index)?.start !== index && questionRowGroup(section, index) ? (
+          <p className="exam-style__follow">
+            這一題在上一題的右半邊。要改回各佔一列，請到上一題關掉「與下一題同一列」。
+          </p>
+        ) : (
+          <>
+            <div className="ui-row">
+              <span className="ui-row__label">與下一題同一列</span>
+              <Switch
+                checked={q.pairNext === true}
+                label="與下一題同一列"
+                onChange={(v) => set({ pairNext: v })}
+              />
+            </div>
+            <p className="exam-style__follow">
+              {section.questions[index + 1]
+                ? (section.layout ?? 'flow') === 'rows'
+                  ? '打開後，這一題在左、下一題在右，中間有分隔線。'
+                  : '打開後，這一題在左、下一題在右，各佔一半。'
+                : '這是最後一題，沒有下一題可以並排，打開後仍會佔滿整列。'}
+            </p>
+          </>
+        )}
         {section.scoreMode === 'blank' ? (
           <div className="exam-style__follow">
             每格 {sectionBlankUnit(section)} 分，這一題 {questionPoints(section, q)} 分。
@@ -601,15 +696,38 @@ function QuestionEditor({ questionId }: { questionId: string }) {
           </div>
         ) : null}
         <div className="ui-field">
-          <span className="ui-field__label">題目</span>
+          <span className="ui-field__label ui-field__label--split">
+            <span>題目</span>
+            <button
+              type="button"
+              className="text-btn"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => stemRef.current?.insert(FIGURE_MARK)}
+            >
+              插入圖片位置
+            </button>
+          </span>
           <ColorField
+            ref={stemRef}
             ariaLabel="題目"
             multiline
             rows={4}
             value={q.stem}
-            placeholder={q.type === 'fill_blank' ? '例：3 + 4 = ＿＿＿＿' : '輸入題目內容'}
+            placeholder={
+              questionUsesZhuyin(section, q)
+                ? '例：ㄒㄧㄠˇ ㄇㄧㄥˊ ㄧㄡˇ ㄐㄧ ㄍㄜ˙ ㄆㄧㄥˊ ㄍㄨㄛˇ？'
+                : q.type === 'fill_blank'
+                  ? '例：3 + 4 = ＿＿＿＿'
+                  : '輸入題目內容'
+            }
             onChange={(stem) => set({ stem })}
           />
+          <p className="exam-style__follow">
+            {hasFigureMark(q.stem)
+              ? '題目裡的［圖］不會印在卷上，只代表圖片要插在這裡。可以剪到別的句子後面，半形的 [圖] 也有效。'
+              : '圖片要出現在句子中間時，把游標點在那個位置，再按「插入圖片位置」。出現的［圖］不會印出來。'}
+            不想用這個標記，就直接在卷面上拖曳圖片。
+          </p>
         </div>
       </PanelSection>
 
@@ -655,14 +773,21 @@ function QuestionEditor({ questionId }: { questionId: string }) {
       <FiguresEditor questionId={q.id} />
 
       {(section.layout ?? 'flow') === 'rows' ? (
-        <PanelSection title="直式格子" description="這一列的高度。右側欄留空就跟其他列一樣寬；要驗算就填「驗算：」。">
+        <PanelSection
+          title="直式格子"
+          description="預設跟大題的「每列至少」一樣高。這裡改成別的數字，只有這一題不同；改回跟大題相同，就會再跟著一起變。右側欄留空，這一列就不拆開。"
+        >
           <NumberField
             label="這一列高度"
             suffix="行"
             min={2}
             max={20}
-            value={q.answerLines > 0 ? q.answerLines : (section.rowLines ?? 4)}
-            onChange={(v) => set({ answerLines: Math.max(2, Math.round(v)) })}
+            value={questionRowLines(section, q)}
+            onChange={(v) => {
+              const n = Math.min(20, Math.max(2, Math.round(v)))
+              const shared = section.rowLines ?? 4
+              set({ rowLines: n === shared ? 0 : n })
+            }}
           />
           <div className="ui-field">
             <span className="ui-field__label">右側欄</span>
@@ -673,6 +798,20 @@ function QuestionEditor({ questionId }: { questionId: string }) {
               onChange={(e) => set({ aside: e.target.value })}
             />
           </div>
+          <NumberField
+            label="右側欄寬度"
+            suffix="%"
+            min={ASIDE_WIDTH_MIN}
+            max={ASIDE_WIDTH_MAX}
+            value={questionAsideWidth(q)}
+            onChange={(v) => {
+              const n = Math.min(ASIDE_WIDTH_MAX, Math.max(ASIDE_WIDTH_MIN, Math.round(v)))
+              set({ asideWidth: n === ASIDE_WIDTH_DEFAULT ? 0 : n })
+            }}
+          />
+          <p className="exam-style__follow">
+            只改這一列，其他列不受影響。改回 {ASIDE_WIDTH_DEFAULT}% 就用預設寬度。右側欄沒有文字時，寬度不會出現。
+          </p>
         </PanelSection>
       ) : null}
 
@@ -724,41 +863,34 @@ function QuestionEditor({ questionId }: { questionId: string }) {
 
 function NoticeEditor({ id }: { id: string }) {
   const { state, dispatch } = useEditor()
-  const notice = (state.exam.notices ?? []).find((n) => n.id === id)
-  if (!notice) return null
-  const set = (patch: Partial<Pick<Notice, 'text' | 'afterSectionId'>>) =>
-    dispatch({ type: 'UPDATE_NOTICE', id, patch })
-  const anchor = notice.afterSectionId && state.exam.sections.some((s) => s.id === notice.afterSectionId) ? notice.afterSectionId : ''
+  const footer = state.exam.footer
+  const isEnd = id === FOOTER_END_ID
+  const isContinue = id === FOOTER_CONTINUE_ID
+  if ((!isEnd && !isContinue) || (isEnd && !footer.endOn) || (isContinue && !footer.continueOn)) return null
+  const text = isEnd ? footer.endText : footer.continueText
+  const setText = (value: string) =>
+    dispatch({ type: 'SET_FOOTER', patch: isEnd ? { endText: value } : { continueText: value } })
   return (
     <div className="inspector__body">
-      <PanelSection title="提示框" description="會印成置中、帶框的一行字。常用在頁末或整份試卷的最後。">
+      <PanelSection
+        title={isEnd ? '作答結束' : '下一頁還有題目'}
+        description={
+          isEnd
+            ? '接在最後一題的下面，跟著題目走，不固定在頁尾。'
+            : '有下一頁時印在該頁下方。左右兩欄時只佔右欄，不橫跨整頁。整份只有一頁時不會出現。'
+        }
+      >
         <div className="ui-field">
           <span className="ui-field__label">文字</span>
-          <ColorField ariaLabel="提示文字" value={notice.text} onChange={(text) => set({ text })} />
+          <ColorField ariaLabel="頁尾文字" value={text} onChange={setText} />
         </div>
-        <div className="notice-presets">
-          <button type="button" className="btn btn--ghost" onClick={() => set({ text: NOTICE_CONTINUE })}>
-            {NOTICE_CONTINUE}
-          </button>
-          <button type="button" className="btn btn--ghost" onClick={() => set({ text: NOTICE_END })}>
-            {NOTICE_END}
-          </button>
-        </div>
-        <label className="ui-field">
-          <span className="ui-field__label">位置</span>
-          <select
-            className="ui-input"
-            value={anchor}
-            onChange={(e) => set({ afterSectionId: e.target.value || null })}
-          >
-            {state.exam.sections.map((s, i) => (
-              <option key={s.id} value={s.id}>
-                接在{sectionHeading(s, i)}之後
-              </option>
-            ))}
-            <option value="">卷末</option>
-          </select>
-        </label>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={() => setText(isEnd ? NOTICE_END : NOTICE_CONTINUE)}
+        >
+          還原預設文字
+        </button>
       </PanelSection>
     </div>
   )

@@ -3,6 +3,7 @@ import { useCallback, useLayoutEffect, useRef } from 'react'
 import { Group, Rect, Text } from 'react-konva'
 import type { EditorAction } from '../editor/reducer'
 import { TEXT_BOX_PADDING, type TextObject } from '../types/document'
+import { withBopomofoFont } from '../fonts/paperFont'
 
 function syncBgToText(bg: Konva.Rect, inner: Konva.Text, outerWidth: number) {
   const th = inner.height()
@@ -135,7 +136,7 @@ export function KonvaTextBlock({
         width={innerW}
         text={obj.text}
         fontSize={obj.fontSize}
-        fontFamily={obj.fontFamily}
+        fontFamily={withBopomofoFont(obj.fontFamily)}
         fill={obj.fill}
         fontStyle={obj.fontStyle}
         align={obj.align}

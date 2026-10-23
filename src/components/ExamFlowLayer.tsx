@@ -3,6 +3,7 @@ import type { EditorAction } from '../editor/reducer'
 import type { FlowFrame, FlowImage, FlowRun, PlacedBlock } from '../editor/flowLayout'
 import { FLOW_WRAP, measureText } from '../editor/konvaMeasure'
 import { layoutRichLines } from '../editor/richText'
+import { needsManualWrap } from '../editor/zhuyin'
 import type { Asset, BlockRef } from '../types/exam'
 import { EDITOR_FLAG, EDITOR_SELECTION } from '../editor/theme'
 import { EDITOR_ONLY_NAME } from './PaperLayoutLayer'
@@ -183,17 +184,28 @@ function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
       </Group>
     )
   }
-  if (!r.vertical && r.colors?.some(Boolean)) {
-    const pieces = layoutRichLines(r.text, r.colors, r.width, (sample) =>
-      measureText(fontFamily, sample, 10000, r.style, r.lineHeight).naturalWidth,
-    )
+  const manual = !r.vertical && needsManualWrap(r.text)
+  if (!r.vertical && (r.colors?.some(Boolean) || manual)) {
+    const widthOf = (sample: string) => measureText(fontFamily, sample, 10000, r.style, r.lineHeight).naturalWidth
+    const pieces = layoutRichLines(r.text, r.colors, r.width, widthOf)
+    const lineWidth = new Map<number, number>()
+    if (manual && (r.align === 'center' || r.align === 'right')) {
+      for (const p of pieces) {
+        lineWidth.set(p.line, Math.max(lineWidth.get(p.line) ?? 0, p.x + widthOf(p.text)))
+      }
+    }
+    const shift = (line: number) => {
+      if (!manual || !r.align || r.align === 'left') return 0
+      const used = lineWidth.get(line) ?? 0
+      return r.align === 'center' ? Math.max(0, (r.width - used) / 2) : Math.max(0, r.width - used)
+    }
     return (
       <Group>
         {pieces.map((p, i) => (
           <Text
             key={i}
             name={r.placeholder ? EDITOR_ONLY_NAME : undefined}
-            x={r.x + p.x}
+            x={r.x + p.x + shift(p.line)}
             y={r.y + p.line * step}
             text={p.text}
             fontSize={r.style.fontSize}

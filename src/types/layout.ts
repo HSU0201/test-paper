@@ -168,16 +168,42 @@ const LEGACY_HEADER_LABEL: Partial<Record<HeaderRole, string>> = {
   teacher: '出題老師',
 }
 
-/** 還沒有家長簽名，或仍是第一版橫排座標時，套上目前的頁首位置 */
+/**
+ * 還沒有家長簽名，或整列仍停在舊版預設座標時，才套上目前的頁首位置。
+ * 第二列只要有人改過行或左右位置，就整份保留，避免匯入後把調好的版面蓋掉。
+ */
 function headerNeedsBannerPlacement(header: HeaderLayout): boolean {
   if (!header.items.some((it) => it.role === 'parentSign')) return true
   const teacher = header.items.find((it) => it.role === 'teacher')
+  const classInfo = header.items.find((it) => it.role === 'classInfo')
   const name = header.items.find((it) => it.role === 'studentName')
+  const parent = header.items.find((it) => it.role === 'parentSign')
   const school = header.items.find((it) => it.role === 'schoolName')
   const title = header.items.find((it) => it.role === 'examTitle')
-  const oldInfoRow = teacher?.y === 38 && teacher.xr === 0.02 && teacher.wr === 0.26 && name?.xr === 0.43 && name.wr === 0.24
-  const smallTitle = school?.fontSize === 16 && !school.bold && title?.fontSize === 16 && !title.bold && school.y === 10
-  const overflowTitle = school?.fontSize === 22 && school.bold && title?.fontSize === 22 && title.bold && school.y === 0
+  if (!teacher || !name || !parent) return false
+  const oldInfoRow =
+    teacher.y === 38 &&
+    teacher.xr === 0.02 &&
+    teacher.wr === 0.26 &&
+    name.y === 38 &&
+    name.xr === 0.43 &&
+    name.wr === 0.24 &&
+    parent.y === 38
+  const factorySecondRow =
+    teacher.y === 38 &&
+    teacher.xr === 0.02 &&
+    teacher.wr === 0.24 &&
+    classInfo?.y === 38 &&
+    classInfo.xr === 0.28 &&
+    classInfo.wr === 0.12 &&
+    name.y === 38 &&
+    name.xr === 0.42 &&
+    name.wr === 0.27 &&
+    parent.y === 38
+  const smallTitle =
+    factorySecondRow && school?.fontSize === 16 && !school.bold && title?.fontSize === 16 && !title.bold && school.y === 10
+  const overflowTitle =
+    factorySecondRow && school?.fontSize === 22 && school.bold && title?.fontSize === 22 && title.bold && school.y === 0
   return oldInfoRow || smallTitle || overflowTitle
 }
 

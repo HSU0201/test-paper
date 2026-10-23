@@ -1,0 +1,9 @@
+/* 芫荽注音子集。授權見同目錄 Iansui-OFL.txt（SIL Open Font License 1.1）。 */
+@font-face {
+  font-family: 'PaperBopomofo';
+  src: url('./Iansui-Bopomofo.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+02C7, U+02C9, U+02CA, U+02CB, U+02D9, U+3105-312F;
+}
