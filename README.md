@@ -1,73 +1,79 @@
-# React + TypeScript + Vite
+# 試卷編輯器
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+在瀏覽器裡編排中文試卷：大題與小題依版面自動流排，頁首、分欄與紙張可調整，完成後匯出 PDF 或存成 JSON。
 
-Currently, two official plugins are available:
+題目內容與版面分開存放。改題目、分欄或紙張後，編輯器會重新計算頁數與位置；自由放置的文字、線條、方框與圖片則留在指定頁面上。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 功能
 
-## React Compiler
+- **題目**：單選、多選、填充、問答。選項可一欄、兩欄或四欄排列，題目可附圖（題下、題側繞排、選項之後）。
+- **大綱**：新增大題與小題、拖曳調整順序、全卷連號或各大題重編題號。大題可設定「標題與第一題同欄」或「整題不跨欄」。
+- **版型**：頁首欄位（學校、科目、座號等，可自訂）、單欄或雙欄（左右／上下／依紙張方向自動）、行距與題距、頁邊距。內容快排不下時，可在標準與最小值之間自動壓縮間距。
+- **紙張**：A4、A3、B5、Letter，直向或橫向，也可自訂尺寸。橫向時頁首改放右側、題文直排。
+- **插入**：依文字階層在紙上點選放置文字，或加入線條、方框、圖片。拖曳時會對齊欄位與其他物件。
+- **文字**：題文、大題標題與作答說明可局部上色。內建試卷大標、章節標題、題文、作答說明四種階層，也可自訂階層。
+- **檔案**：頂端列可開啟、儲存 JSON、清空、匯出 PDF。編輯過程會自動暫存到瀏覽器的 IndexedDB；輔助線與選取框不會進入 PDF。
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+第一次開啟會載入一份數學段考範例（選擇、填充、計算）。若瀏覽器裡已有暫存稿，會優先讀取暫存。
 
-## Expanding the ESLint configuration
+## 環境需求
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- [Node.js](https://nodejs.org/) 20 或以上
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## 開發
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+啟動後依終端機顯示的網址開啟（預設 `http://localhost:5173`）。
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```bash
+npm run build    # 型別檢查並產出 dist
+npm run preview  # 預覽建置結果
+npm run lint     # ESLint
+```
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## 操作
+
+左側四個面板：
+
+| 面板 | 用途 |
+| --- | --- |
+| 大綱 | 題目結構、題號、拖曳排序 |
+| 版型 | 頁首、分欄、行距、頁邊距 |
+| 插入 | 文字階層、線條、方框、圖片 |
+| 頁面 | 紙張尺寸與方向 |
+
+點選紙上的題目、頁首欄位或物件後，右側屬性面板會顯示對應設定。底部狀態列顯示頁數、題數、總分與版面提示（壓縮間距、標題被移欄、內容超出欄寬等）。
+
+| 操作 | 效果 |
+| --- | --- |
+| Ctrl+Z | 復原 |
+| Ctrl+Y 或 Ctrl+Shift+Z | 重做 |
+| 雙擊文字 | 編輯內容 |
+| Delete / Backspace | 刪除選取的物件、題目或自訂頁首欄位 |
+| Esc | 取消文字放置，或取消選取 |
+
+大綱裡選中大題或小題時，Enter 會在後方新增一題。
+
+## 存檔
+
+「儲存」下載的 JSON（`version: 4`）包含紙張尺寸、版型、題目、文字階層與畫布物件。圖片以 data URL 內嵌。檔名取自可見的學校名稱與試卷名稱。
+
+「開啟」只接受本編輯器匯出的 JSON。清空會重設題目、版型與物件，可用復原還原。
+
+自動暫存存在本機 IndexedDB（資料庫 `testpaper-editor`），不會上傳。換瀏覽器或清除網站資料後暫存會消失，需要長期保留請另存 JSON。
+
+## 技術
+
+React 19、TypeScript、Vite。紙張以 [Konva](https://konvajs.org/)（react-konva）繪製，PDF 由 [jsPDF](https://github.com/parallax/jsPDF) 將各頁畫布輸出而成。
+
+```
+src/
+  components/   介面（頂列、側欄、紙張、屬性）
+  editor/       狀態、復原、流式排版、存檔
+  export/       PDF
+  types/        題目、版型、畫布物件
 ```
