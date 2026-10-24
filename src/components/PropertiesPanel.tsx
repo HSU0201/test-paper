@@ -1,23 +1,23 @@
-import { AnimatePresence } from 'motion/react'
 import { useState } from 'react'
+
+import { AnimatePresence } from 'motion/react'
+
 import { useEditor } from '../editor/EditorContext'
-import type {
-  BuiltinTextLevelKey,
-  FontStyle,
-  TextAlign,
-  TextLevelPreset,
-  TextLevelOverrides,
-  UserTextTier,
-} from '../types/document'
+import { PAPER_FONTS } from '../fonts/paperFont'
 import {
+  type BuiltinTextLevelKey,
   createDefaultUserTextTier,
+  type FontStyle,
   getTextTierLabel,
   mergeTextLevelPreset,
   TEXT_LEVEL_PRESETS,
   TEXT_PRESET_LEVEL_KEYS,
+  type TextAlign,
+  type TextLevelOverrides,
+  type TextLevelPreset,
+  type UserTextTier,
 } from '../types/document'
 import { MotionDialog } from './MotionDialog'
-import { PAPER_FONTS } from '../fonts/paperFont'
 
 function buildLevelDraft(overrides: TextLevelOverrides): Record<BuiltinTextLevelKey, TextLevelPreset> {
   const out = {} as Record<BuiltinTextLevelKey, TextLevelPreset>

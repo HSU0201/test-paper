@@ -1,4 +1,4 @@
-import { ExamTextStyle } from '../BlockInspector'
+import { ExamTextStyle } from '../exam/ExamTextStyle'
 import { PanelSection, Segmented } from '../ui'
 import { FontPanel } from './FontPanel'
 import { LayoutPanel } from './LayoutPanel'
@@ -29,13 +29,13 @@ export function SheetPanel({ view }: { view: SheetView }) {
       {view === 'header' ? <LayoutPanel part="header" /> : null}
       {view === 'paper' ? (
         <>
-          <PagePanel embedded />
+          <PagePanel />
           <LayoutPanel part="flow" />
         </>
       ) : null}
       {view === 'type' ? (
         <>
-          <FontPanel embedded />
+          <FontPanel />
           <PanelSection
             title="全卷字級"
             description="大題標題、作答說明、小題題文的預設大小。某一題要不同，點那一題後在右側打開「單獨設定」。"

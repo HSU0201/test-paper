@@ -1,13 +1,13 @@
-import type { FrameRef, LayoutWarning } from './flowLayout'
-import { plainText } from './richText'
 import {
+  type BlockRef,
+  type ExamContent,
   FOOTER_CONTINUE_ID,
   FOOTER_END_ID,
   questionNumbers,
   sectionHeading,
-  type BlockRef,
-  type ExamContent,
 } from '../types/exam'
+import type { FrameRef, LayoutWarning } from './flowLayout'
+import { plainText } from './richText'
 
 function frameName(f: FrameRef, frames: number, stacked: boolean): string {
   const col = frames === 2 ? (stacked ? (f.frame === 0 ? '上欄' : '下欄') : f.frame === 0 ? '左欄' : '右欄') : ''

@@ -1,13 +1,15 @@
-import type Konva from 'konva'
 import { useRef } from 'react'
 import { Group, Line, Rect, Text } from 'react-konva'
+
+import type Konva from 'konva'
+
 import type { Box } from '../editor/bounds'
-import type { EditorAction } from '../editor/reducer'
-import { snapBoxPosition, type SnapGuides } from '../editor/snap'
 import { measureText } from '../editor/konvaMeasure'
+import type { EditorAction } from '../editor/reducer'
 import { layoutRichLines, paintText, plainText } from '../editor/richText'
+import { snapBoxPosition, type SnapGuides } from '../editor/snap'
 import { EDITOR_GUIDE } from '../editor/theme'
-import { headerItemHeight, headerItemText, titleBandItems, verticalHeaderText, type HeaderItem, type HeaderLayout, type PageGeometry } from '../types/layout'
+import { type HeaderItem, headerItemHeight, headerItemText, type HeaderLayout, type PageGeometry,titleBandItems, verticalHeaderText } from '../types/layout'
 
 export const EDITOR_ONLY_NAME = 'editor-only'
 export const HEADER_REF_PREFIX = 'hdr:'

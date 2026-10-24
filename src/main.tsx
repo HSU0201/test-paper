@@ -1,9 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+
+import { App } from './App.tsx'
+import { BOPOMOFO_FAMILY } from './fonts/paperFont'
+
 import './index.css'
 import './fonts/bopomofo.css'
-import App from './App.tsx'
-import { BOPOMOFO_FAMILY } from './fonts/paperFont'
 
 const rootEl = document.getElementById('root')!
 const boot = () => {

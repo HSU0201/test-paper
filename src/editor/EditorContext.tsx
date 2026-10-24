@@ -1,5 +1,6 @@
 import {
   createContext,
+  type ReactNode,
   useCallback,
   useContext,
   useEffect,
@@ -7,13 +8,15 @@ import {
   useReducer,
   useRef,
   useState,
-  type ReactNode,
 } from 'react'
-import type { EditorAction } from './reducer'
-import { historyReducer, initialHistory } from './history'
-import { layoutExam, type FlowResult } from './flowLayout'
-import { clearMeasureCache, measureWithFont } from './konvaMeasure'
+
+import { BOPOMOFO_FAMILY, withBopomofoFont } from '../fonts/paperFont'
+import { type EditorState,mergeTextLevelPreset } from '../types/document'
+import { computePageGeometry, type PageGeometry } from '../types/layout'
 import { documentSignature, serializeDocument, toLoadAction } from './documentIO'
+import { type FlowResult,layoutExam } from './flowLayout'
+import { historyReducer, initialHistory } from './history'
+import { clearMeasureCache, measureWithFont } from './konvaMeasure'
 import {
   listSnapshots,
   loadDraft,
@@ -23,9 +26,7 @@ import {
   saveSnapshot,
   SNAPSHOT_INTERVAL_MS,
 } from './persist'
-import { mergeTextLevelPreset, type EditorState } from '../types/document'
-import { computePageGeometry, type PageGeometry } from '../types/layout'
-import { BOPOMOFO_FAMILY, withBopomofoFont } from '../fonts/paperFont'
+import type { EditorAction } from './reducer'
 
 export type SaveStatus = { state: 'loading' | 'idle' | 'saving' | 'saved' | 'error'; at?: number }
 
@@ -86,8 +87,12 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     return (page: number): PageGeometry => (page === 0 ? first : rest)
   }, [state.layout, state.pageWidth, state.pageHeight])
 
-  const measure = useMemo(() => measureWithFont(withBopomofoFont(state.paperFontFamily)), [state.paperFontFamily])
   const [fontsReady, setFontsReady] = useState(() => document.fonts.check(`16px "${BOPOMOFO_FAMILY}"`))
+  const measure = useMemo(() => {
+    // 字型載入後量字快取已清空，要換一個函式參照，排版才會重算
+    void fontsReady
+    return measureWithFont(withBopomofoFont(state.paperFontFamily))
+  }, [state.paperFontFamily, fontsReady])
   useEffect(() => {
     let cancel = false
     document.fonts.load(`16px "${BOPOMOFO_FAMILY}"`).then(
@@ -121,7 +126,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       measure,
       state.pageWidth > state.pageHeight,
     )
-  }, [state.exam, state.textLevelOverrides, state.layout.spacing, state.pageWidth, state.pageHeight, pageGeometry, measure, fontsReady])
+  }, [state.exam, state.textLevelOverrides, state.layout.spacing, state.pageWidth, state.pageHeight, pageGeometry, measure])
 
   const pageCount = useMemo(() => {
     const objMax = state.objects.reduce((m, o) => Math.max(m, (o.page ?? 0) + 1), 0)

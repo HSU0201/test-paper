@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
 import { Ellipse, Group, Rect, Text } from 'react-konva'
+
 import type { PlacedBlock } from '../editor/flowLayout'
+import { FLOW_WRAP } from '../editor/konvaMeasure'
 import { ANSWER_INK, answerMarks } from '../export/answerMarks'
 import { ANSWER_KEY_NAME } from '../export/pdfFromStage'
-import { FLOW_WRAP } from '../editor/konvaMeasure'
 import type { ExamContent } from '../types/exam'
 
 const PAD = 4

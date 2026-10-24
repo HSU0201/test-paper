@@ -1,4 +1,5 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
+
 import { editRuby, editZhuyin, htmlToMarkup, INK_PALETTE, markupToHtml, plainText, type RubyEdit } from '../editor/richText'
 
 type ColorFieldProps = {

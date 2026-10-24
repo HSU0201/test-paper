@@ -1,5 +1,6 @@
 import { motion } from 'motion/react'
 import type { MouseEvent, ReactNode } from 'react'
+
 import { easeOut } from '../motion/presets'
 
 const dialogEase = { duration: 0.26, ease: easeOut }

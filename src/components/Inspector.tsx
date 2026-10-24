@@ -1,5 +1,7 @@
+import { type ReactNode,useEffect, useRef } from 'react'
+
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useRef, type ReactNode } from 'react'
+
 import { useEditor } from '../editor/EditorContext'
 import { describeWarnings } from '../editor/warningText'
 import { easeOut } from '../motion/presets'

@@ -1,15 +1,15 @@
-import { readingsFor } from './hanToZhuyin'
 import {
+  type Choice,
   createChoice,
   createDefaultFooter,
   createQuestion,
   createSection,
-  type Choice,
   type ExamContent,
   type Question,
   type QuestionType,
   type Section,
 } from '../types/exam'
+import { readingsFor } from './hanToZhuyin'
 
 /** 範例卷頁首。國小低年級的題型，卷名用老師說的「國文」。 */
 export const CHINESE_SAMPLE_TITLE = '115學年度第一學期二年級國文第一次定期評量'

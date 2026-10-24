@@ -1,5 +1,7 @@
-import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
+
+import { AnimatePresence, motion } from 'motion/react'
+
 import { useEditor } from '../editor/EditorContext'
 import { describeWarnings } from '../editor/warningText'
 import { easeOut } from '../motion/presets'
@@ -81,46 +83,46 @@ export function StatusBar({
           </button>
           <AnimatePresence>
             {open ? (
-            <motion.div
-              key="notices"
-              className="notice-pop"
-              role="dialog"
-              aria-label="版面提示"
-              initial={{ opacity: 0, y: 8, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 6, scale: 0.98, pointerEvents: 'none' }}
-              transition={{ duration: 0.18, ease: easeOut }}
-              style={{ transformOrigin: 'right bottom' }}
-            >
-              <ul>
-                {notices.map((n, index) => (
-                  <motion.li
-                    key={n.key}
-                    className={`notice-pop__item is-${n.tone}`}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.18, delay: Math.min(index * 0.03, 0.12), ease: easeOut }}
-                  >
-                    <span>{n.text}</span>
-                    {n.target ? (
-                      <button
-                        type="button"
-                        className="text-btn"
-                        onClick={() => {
-                          const target = n.target!
-                          dispatch({ type: 'SELECT_BLOCK', ref: target })
-                          const page = flow.blocks.find((b) => b.ref.id === target.id)?.page
-                          if (page !== undefined) onLocate(page)
-                          setOpen(false)
-                        }}
-                      >
-                        查看
-                      </button>
-                    ) : null}
-                  </motion.li>
-                ))}
-              </ul>
-            </motion.div>
+              <motion.div
+                key="notices"
+                className="notice-pop"
+                role="dialog"
+                aria-label="版面提示"
+                initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 6, scale: 0.98, pointerEvents: 'none' }}
+                transition={{ duration: 0.18, ease: easeOut }}
+                style={{ transformOrigin: 'right bottom' }}
+              >
+                <ul>
+                  {notices.map((n, index) => (
+                    <motion.li
+                      key={n.key}
+                      className={`notice-pop__item is-${n.tone}`}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.18, delay: Math.min(index * 0.03, 0.12), ease: easeOut }}
+                    >
+                      <span>{n.text}</span>
+                      {n.target ? (
+                        <button
+                          type="button"
+                          className="text-btn"
+                          onClick={() => {
+                            const target = n.target!
+                            dispatch({ type: 'SELECT_BLOCK', ref: target })
+                            const page = flow.blocks.find((b) => b.ref.id === target.id)?.page
+                            if (page !== undefined) onLocate(page)
+                            setOpen(false)
+                          }}
+                        >
+                          查看
+                        </button>
+                      ) : null}
+                    </motion.li>
+                  ))}
+                </ul>
+              </motion.div>
             ) : null}
           </AnimatePresence>
         </div>

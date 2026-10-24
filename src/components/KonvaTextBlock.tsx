@@ -1,9 +1,11 @@
-import type Konva from 'konva'
 import { useCallback, useLayoutEffect, useRef } from 'react'
 import { Group, Rect, Text } from 'react-konva'
+
+import type Konva from 'konva'
+
 import type { EditorAction } from '../editor/reducer'
-import { TEXT_BOX_PADDING, type TextObject } from '../types/document'
 import { withBopomofoFont } from '../fonts/paperFont'
+import { TEXT_BOX_PADDING, type TextObject } from '../types/document'
 
 function syncBgToText(bg: Konva.Rect, inner: Konva.Text, outerWidth: number) {
   const th = inner.height()

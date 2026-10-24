@@ -1,8 +1,10 @@
-import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useEditor } from '../editor/EditorContext'
+
+import { AnimatePresence, motion } from 'motion/react'
+
 import { documentBaseName, downloadJson, readDocumentFile, serializeDocument, toLoadAction } from '../editor/documentIO'
+import { useEditor } from '../editor/EditorContext'
 import { loadSnapshot, MAX_SNAPSHOTS, SNAPSHOT_EVERY_MINUTES } from '../editor/persist'
 import { easeOut } from '../motion/presets'
 import { MotionDialog } from './MotionDialog'

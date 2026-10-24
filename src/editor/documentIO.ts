@@ -1,6 +1,6 @@
-import type { EditorAction } from './reducer'
 import type { CanvasObject, EditorState, TextLevelOverrides, UserTextTier } from '../types/document'
 import type { Asset } from '../types/exam'
+import type { EditorAction } from './reducer'
 
 export function downloadJson(filename: string, data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })

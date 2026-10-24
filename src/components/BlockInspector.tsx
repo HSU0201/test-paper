@@ -1,83 +1,52 @@
 import { useEffect, useRef, useState } from 'react'
+
 import { readImageFile } from '../editor/documentIO'
 import { useEditor } from '../editor/EditorContext'
 import { findQuestion } from '../editor/examReducer'
+import { plainText } from '../editor/richText'
+import { mergeTextLevelPreset } from '../types/document'
 import {
-  choiceLabel,
-  FIGURE_MARK,
-  hasFigureMark,
-  type Figure,
-  type FigurePlacement,
-  isChoiceType,
-  QUESTION_TYPE_LABEL,
-  questionRowGroup,
-  sectionRowSize,
-  questionBlankCount,
   ASIDE_WIDTH_DEFAULT,
   ASIDE_WIDTH_MAX,
   ASIDE_WIDTH_MIN,
-  questionAsideWidth,
-  questionRowLines,
-  questionNumbers,
-  questionPoints,
-  questionUsesZhuyin,
-  sectionBlankUnit,
-  sectionHeading,
-  sectionScore,
-  uniformQuestionScore,
+  type Choice,
+  choiceLabel,
+  type ChoiceLayout,
+  type Figure,
+  FIGURE_MARK,
+  type FigurePlacement,
+  type FontOverride,
   FOOTER_CONTINUE_ID,
   FOOTER_END_ID,
+  hasFigureMark,
+  isChoiceType,
   NOTICE_CONTINUE,
   NOTICE_END,
-  type Choice,
-  type ChoiceLayout,
-  type FontOverride,
   type NumberStyle,
+  QUESTION_TYPE_LABEL,
+  questionAsideWidth,
+  questionBlankCount,
+  questionNumbers,
+  questionPoints,
+  questionRowGroup,
+  questionRowLines,
   type QuestionType,
+  questionUsesZhuyin,
   type ScoreMode,
   type Section,
+  sectionBlankUnit,
   type SectionFrame,
+  sectionHeading,
   type SectionLayout,
+  sectionRowSize,
+  sectionScore,
+  uniformQuestionScore,
 } from '../types/exam'
-import { Icon, NumberField, PanelSection, Segmented, Switch } from './ui'
 import { ColorField, type ColorFieldHandle } from './ColorField'
-import { plainText } from '../editor/richText'
-import { mergeTextLevelPreset, type BuiltinTextLevelKey, type TextLevelPreset } from '../types/document'
+import type { ExamTextRole } from './exam/ExamTextStyle'
+import { Icon, NumberField, PanelSection, Segmented, Switch } from './ui'
 
 const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]
-
-/** 全卷共用的大題標題、作答說明、小題題文字級與粗體 */
-export function ExamTextStyle({
-  role,
-  label,
-}: {
-  role: Extract<BuiltinTextLevelKey, 'section_heading' | 'instruction' | 'question_body'>
-  label: string
-}) {
-  const { state, dispatch } = useEditor()
-  const preset = mergeTextLevelPreset(role, state.textLevelOverrides)
-  const set = (patch: Partial<TextLevelPreset>) =>
-    dispatch({ type: 'UPDATE_TEXT_LEVEL_OVERRIDES', patch: { [role]: patch } })
-  return (
-    <div className="exam-style">
-      <span className="exam-style__label">{label}</span>
-      <div className="exam-style__row">
-        <NumberField
-          label="字級"
-          suffix="px"
-          min={8}
-          max={72}
-          value={preset.fontSize}
-          onChange={(v) => set({ fontSize: Math.min(72, Math.max(8, Math.round(v))) })}
-        />
-        <div className="exam-style__bold">
-          <span className="ui-field__label">粗體</span>
-          <Switch checked={!!preset.bold} label={`${label}粗體`} onChange={(v) => set({ bold: v })} />
-        </div>
-      </div>
-    </div>
-  )
-}
 
 /** 某一題覆寫全卷字級；關閉時刪除覆寫，改回跟隨全卷 */
 function FontOverrideField({
@@ -86,7 +55,7 @@ function FontOverrideField({
   value,
   onChange,
 }: {
-  role: Extract<BuiltinTextLevelKey, 'section_heading' | 'instruction' | 'question_body'>
+  role: ExamTextRole
   label: string
   value?: FontOverride
   onChange: (next: FontOverride | undefined) => void

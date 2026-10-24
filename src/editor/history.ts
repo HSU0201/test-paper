@@ -1,5 +1,5 @@
 import type { EditorState } from '../types/document'
-import { editorReducer, initialEditorState, type EditorAction } from './reducer'
+import { type EditorAction,editorReducer, initialEditorState } from './reducer'
 
 const LIMIT = 100
 /** 同一欄位連續輸入在此時間內合併為一步復原 */

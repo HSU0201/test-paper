@@ -1,12 +1,13 @@
 import { Group, Image as KonvaImage, Line, Rect, Text } from 'react-konva'
-import type { EditorAction } from '../editor/reducer'
+
 import type { FlowFrame, FlowImage, FlowRun, PlacedBlock } from '../editor/flowLayout'
 import { FLOW_WRAP, measureText } from '../editor/konvaMeasure'
-import { rubyPlace } from '../editor/rubyLayout'
+import type { EditorAction } from '../editor/reducer'
 import { layoutRichLines, type RubyFace } from '../editor/richText'
+import { rubyPlace } from '../editor/rubyLayout'
+import { EDITOR_FLAG, EDITOR_SELECTION } from '../editor/theme'
 import { needsManualWrap } from '../editor/zhuyin'
 import type { Asset, BlockRef } from '../types/exam'
-import { EDITOR_FLAG, EDITOR_SELECTION } from '../editor/theme'
 import { EDITOR_ONLY_NAME } from './PaperLayoutLayer'
 import { useHtmlImage } from './useHtmlImage'
 

@@ -1,10 +1,11 @@
 import { motion } from 'motion/react'
+
 import { useEditor } from '../../editor/EditorContext'
-import { detectPaperPreset, PAPER_PRESETS, pxToMm, type PaperPresetKey } from '../../types/document'
 import { layoutSpring } from '../../motion/presets'
+import { detectPaperPreset, PAPER_PRESETS, type PaperPresetKey,pxToMm } from '../../types/document'
 import { NumberField, PanelSection, Segmented } from '../ui'
 
-export function PagePanel({ embedded = false }: { embedded?: boolean }) {
+export function PagePanel() {
   const { state, dispatch } = useEditor()
   const landscape = state.pageWidth > state.pageHeight
   const presetKey = detectPaperPreset(state.pageWidth, state.pageHeight)
@@ -17,7 +18,7 @@ export function PagePanel({ embedded = false }: { embedded?: boolean }) {
     setSize(isLandscape ? p.height : p.width, isLandscape ? p.width : p.height)
   }
 
-  const body = (
+  return (
     <>
       <PanelSection title="紙張">
         <div className="paper-presets">
@@ -83,6 +84,4 @@ export function PagePanel({ embedded = false }: { embedded?: boolean }) {
       </PanelSection>
     </>
   )
-  if (embedded) return body
-  return <div className="side-panel__scroll">{body}</div>
 }

@@ -1,4 +1,4 @@
-import { TEXT_BOX_PADDING, type CanvasObject } from '../types/document'
+import { type CanvasObject,TEXT_BOX_PADDING } from '../types/document'
 
 export type Box = { x: number; y: number; w: number; h: number }
 

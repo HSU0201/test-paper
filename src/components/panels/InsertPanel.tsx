@@ -1,8 +1,10 @@
+import { type ChangeEventHandler,useRef } from 'react'
+
 import { motion } from 'motion/react'
-import { useRef, type ChangeEventHandler } from 'react'
+
 import { useEditor } from '../../editor/EditorContext'
-import { mergeTextLevelPreset, TEXT_PRESET_LEVEL_KEYS } from '../../types/document'
 import { layoutSpring } from '../../motion/presets'
+import { mergeTextLevelPreset, TEXT_PRESET_LEVEL_KEYS } from '../../types/document'
 import { Icon, PanelSection } from '../ui'
 
 export function InsertPanel() {

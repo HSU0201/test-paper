@@ -1,33 +1,33 @@
-import type { Box } from './bounds'
 import {
-  choiceLabel,
-  hasFigureMark,
-  isChoiceType,
-  planStemFigures,
-  questionNumbers,
   asideLeftEdge,
-  questionAsideWidth,
-  questionRowLines,
-  questionScoreMark,
-  sectionRowSize,
-  sectionHeading,
-  sectionScoreNote,
-  toChineseNumeral,
   type Asset,
   type BlockRef,
-  FOOTER_CONTINUE_ID,
-  FOOTER_END_ID,
-  footerOf,
+  choiceLabel,
   type ExamContent,
   type Figure,
   type FontOverride,
+  FOOTER_CONTINUE_ID,
+  FOOTER_END_ID,
+  footerOf,
+  hasFigureMark,
+  isChoiceType,
   type NumberStyle,
+  planStemFigures,
   type Question,
+  questionAsideWidth,
+  questionNumbers,
+  questionRowLines,
+  questionScoreMark,
   type Section,
+  sectionHeading,
+  sectionRowSize,
+  sectionScoreNote,
+  toChineseNumeral,
 } from '../types/exam'
-import { toVerticalGlyph, type SpacingSettings } from '../types/layout'
-import { layoutRubyRun, type InkPiece } from './rubyLayout'
+import { type SpacingSettings,toVerticalGlyph } from '../types/layout'
+import type { Box } from './bounds'
 import { hasRubyMarkup, paintText, plainText, richChars } from './richText'
+import { type InkPiece,layoutRubyRun } from './rubyLayout'
 import { clusterUnits, needsManualWrap, textAtoms } from './zhuyin'
 
 export type TextStyle = { fontSize: number; fill: string; bold?: boolean }
@@ -332,7 +332,7 @@ function runHeight(text: string, width: number, style: TextStyle, lineHeight: nu
 }
 
 function stripMarks(stem: string) {
-  return stem.replace(/[\[［]\s*圖\s*[\]］]/g, '')
+  return stem.replace(/[[［]\s*圖\s*[\]］]/g, '')
 }
 
 /** 配分接在題目最後，並先收掉題幹裡還沒關的上色，避免分數被塗成同一色。 */

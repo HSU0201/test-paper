@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
+
 import { useEditor } from '../editor/EditorContext'
 import { EDITOR_SELECTION } from '../editor/theme'
-import { TEXT_BOX_PADDING } from '../types/document'
 import { withBopomofoFont } from '../fonts/paperFont'
+import { TEXT_BOX_PADDING } from '../types/document'
 
 type TextEditOverlayProps = {
   editingId: string | null

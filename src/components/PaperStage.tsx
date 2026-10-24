@@ -1,12 +1,11 @@
-import type Konva from 'konva'
 import {
   forwardRef,
+  type MutableRefObject,
   useCallback,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type MutableRefObject,
 } from 'react'
 import {
   Image as KonvaImage,
@@ -16,19 +15,22 @@ import {
   Stage,
   Transformer,
 } from 'react-konva'
-import { KonvaTextBlock } from './KonvaTextBlock'
-import { EDITOR_ONLY_NAME, HEADER_REF_PREFIX, HeaderItemsLayer, PageDecorLayer } from './PaperLayoutLayer'
-import { AnswerKeyLayer } from './AnswerKeyLayer'
-import { ExamFlowLayer } from './ExamFlowLayer'
-import { useHtmlImage } from './useHtmlImage'
+
+import type Konva from 'konva'
+
+import { type Box,getBoundingBox, lineSegmentBox } from '../editor/bounds'
 import { useEditor } from '../editor/EditorContext'
-import { withBopomofoFont } from '../fonts/paperFont'
-import { EDITOR_GUIDE, EDITOR_SELECTION } from '../editor/theme'
 import type { EditorAction } from '../editor/reducer'
-import { getBoundingBox, lineSegmentBox, type Box } from '../editor/bounds'
 import { snapBoxPosition, type SnapGuides } from '../editor/snap'
+import { EDITOR_GUIDE, EDITOR_SELECTION } from '../editor/theme'
+import { withBopomofoFont } from '../fonts/paperFont'
 import type { CanvasObject, ImageObject, LineObject } from '../types/document'
 import { titleBandItems } from '../types/layout'
+import { AnswerKeyLayer } from './AnswerKeyLayer'
+import { ExamFlowLayer } from './ExamFlowLayer'
+import { KonvaTextBlock } from './KonvaTextBlock'
+import { EDITOR_ONLY_NAME, HEADER_REF_PREFIX, HeaderItemsLayer, PageDecorLayer } from './PaperLayoutLayer'
+import { useHtmlImage } from './useHtmlImage'
 
 type PaperStageProps = {
   pageIndex: number

@@ -1,39 +1,39 @@
+import { DEFAULT_PAPER_FONT, normalizePaperFont } from '../fonts/paperFont'
 import {
   A4_HEIGHT,
   A4_WIDTH,
-  DEFAULT_NEW_TEXT_FONT_SIZE,
-  isValidTierId,
-  normalizeCanvasObject,
-  resolveLockedTextStyle,
-  TEXT_PRESET_LEVEL_KEYS,
   type CanvasObject,
+  DEFAULT_NEW_TEXT_FONT_SIZE,
   type EditorState,
   type FontStyle,
   type ImageObject,
+  isValidTierId,
   type LineObject,
+  normalizeCanvasObject,
   type RectObject,
+  resolveLockedTextStyle,
+  TEXT_PRESET_LEVEL_KEYS,
   type TextAlign,
   type TextLevelOverrides,
   type TextObject,
   type UserTextTier,
 } from '../types/document'
+import { createEmptyExam, FOOTER_CONTINUE_ID, FOOTER_END_ID, normalizeExam } from '../types/exam'
 import {
+  type ColumnLayout,
   computePageGeometry,
   createCustomHeaderItem,
   createDefaultLayout,
-  normalizeLayout,
-  refitHeaderHeight,
-  withDefaultHeaderPlacement,
-  type ColumnLayout,
   type HeaderItem,
   type HeaderLayout,
+  normalizeLayout,
   type PageMargin,
+  refitHeaderHeight,
   type SpacingSettings,
+  withDefaultHeaderPlacement,
 } from '../types/layout'
 import { createSampleExam, sampleTitle } from './chineseSample'
-import { createEmptyExam, FOOTER_CONTINUE_ID, FOOTER_END_ID, normalizeExam } from '../types/exam'
-import { DEFAULT_PAPER_FONT, normalizePaperFont } from '../fonts/paperFont'
-import { EXAM_ACTION_TYPES, examReducer, type ExamAction } from './examReducer'
+import { EXAM_ACTION_TYPES, type ExamAction,examReducer } from './examReducer'
 
 export const initialEditorState = (): EditorState => ({
   version: 1,

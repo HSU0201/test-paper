@@ -1,22 +1,24 @@
+import { type DragEvent, type KeyboardEvent,useEffect, useState } from 'react'
+
 import { motion } from 'motion/react'
-import { useEffect, useState, type DragEvent, type KeyboardEvent } from 'react'
+
 import { SAMPLE_SUBJECTS } from '../../editor/chineseSample'
 import { useEditor } from '../../editor/EditorContext'
 import { hasRubyMarkup, hasZhuyinMarkup, plainText } from '../../editor/richText'
+import { layoutSpring } from '../../motion/presets'
 import {
+  type BlockRef,
   examTotals,
   FOOTER_CONTINUE_ID,
   FOOTER_END_ID,
   QUESTION_TYPE_LABEL,
-  questionRowGroup,
-  sectionRowSize,
   questionNumbers,
   questionPoints,
+  questionRowGroup,
   sectionHeading,
+  sectionRowSize,
   sectionScore,
-  type BlockRef,
 } from '../../types/exam'
-import { layoutSpring } from '../../motion/presets'
 import { Icon, Segmented, Switch } from '../ui'
 
 function SelectMark({ on }: { on: boolean }) {

@@ -2,8 +2,8 @@
  * 國字轉注音。詞庫用 pinyin-pro（含繁體讀音），再把拼音換成注音。
  * 少數台灣教材和詞庫不同的詞，在這裡改成國小常見讀法；轉完仍可在欄位裡直接改注音。
  */
-import { addTraditionalDict, pinyin } from 'pinyin-pro'
 import traditionalDict from '@pinyin-pro/data/traditional'
+import { addTraditionalDict, pinyin } from 'pinyin-pro'
 
 let dictReady = false
 
@@ -182,7 +182,7 @@ export function pinyinSyllableToZhuyin(raw: string): string | null {
     }
   }
   if (!initial) return null
-  let final = ''
+  let final: string
   if (EMPTY_I.has(initial) && (rest === 'i' || rest === '')) final = ''
   else if ((initial === 'j' || initial === 'q' || initial === 'x') && JQX_U[rest]) final = JQX_U[rest]
   else if (FINALS[rest] !== undefined && rest !== '') final = FINALS[rest]

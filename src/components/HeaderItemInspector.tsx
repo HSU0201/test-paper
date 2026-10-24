@@ -1,6 +1,6 @@
 import { useEditor } from '../editor/EditorContext'
-import { ColorField } from './ColorField'
 import { HEADER_ROLE_LABEL, type HeaderItem } from '../types/layout'
+import { ColorField } from './ColorField'
 import { NumberField, PanelSection, Segmented, Switch } from './ui'
 
 export function HeaderItemInspector({ item }: { item: HeaderItem }) {

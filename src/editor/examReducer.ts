@@ -1,24 +1,24 @@
-import { createSampleExam, type SampleSubject } from './chineseSample'
-import { convertAllToZhuyin, revertAllZhuyin } from './richText'
 import {
-  createChoice,
-  createQuestion,
-  createSection,
-  hasFigureMark,
-  isChoiceType,
-  stripFigureMarks,
   type Asset,
   type BlockRef,
   type Choice,
-  type Figure,
+  createChoice,
+  createQuestion,
+  createSection,
   type ExamContent,
   type ExamFooter,
+  type Figure,
   FOOTER_CONTINUE_ID,
   FOOTER_END_ID,
+  hasFigureMark,
+  isChoiceType,
   type Question,
   type QuestionNumbering,
   type Section,
+  stripFigureMarks,
 } from '../types/exam'
+import { createSampleExam, type SampleSubject } from './chineseSample'
+import { convertAllToZhuyin, revertAllZhuyin } from './richText'
 
 export type ExamAction =
   | { type: 'SELECT_BLOCK'; ref: BlockRef | null }

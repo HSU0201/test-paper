@@ -6,10 +6,10 @@ import { needsManualWrap } from '../editor/zhuyin'
 import {
   asideLeftEdge,
   choiceLabel,
-  isChoiceType,
-  questionAsideWidth,
   type ExamContent,
+  isChoiceType,
   type Question,
+  questionAsideWidth,
   type Section,
 } from '../types/exam'
 import { toVerticalGlyph } from '../types/layout'
@@ -197,8 +197,8 @@ function horizontalChoiceRing(
   const widthOf = (sample: string) => charWidth(fontFamily, run, sample)
   const labelW = widthOf(label)
   const manual = needsManualWrap(run.text) || !!run.colors?.some(Boolean)
-  let originX = run.x
-  let centerY = run.y
+  let originX: number
+  let centerY: number
   if (manual) {
     const pieces = layoutRichLines(run.text, run.colors, run.width, widthOf)
     let seen = 0

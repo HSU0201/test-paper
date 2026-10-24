@@ -1,4 +1,5 @@
 import Konva from 'konva'
+
 import type { MeasureFn, TextStyle } from './flowLayout'
 
 /** 以字元換行：中文句子內的空格（如「30 位」）不應成為換行點 */

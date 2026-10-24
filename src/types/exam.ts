@@ -27,7 +27,7 @@ export type FigurePlacement = 'below' | 'middle' | 'right' | 'afterChoices'
 /** 題目文字裡的插圖位置。排版時會拿掉，不會印出來。半形 [圖] 也認。 */
 export const FIGURE_MARK = '［圖］'
 
-const FIGURE_MARK_PATTERN = /[\[［]\s*圖\s*[\]］]/
+const FIGURE_MARK_PATTERN = /[[［]\s*圖\s*[\]］]/
 
 export function hasFigureMark(stem: string): boolean {
   return FIGURE_MARK_PATTERN.test(stem)
