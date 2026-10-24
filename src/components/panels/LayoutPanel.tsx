@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEditor } from '../../editor/EditorContext'
 import { HEADER_ROLE_LABEL, resolveSplit, type HeaderItem, type SpacingSettings } from '../../types/layout'
@@ -11,6 +12,7 @@ function HeaderItemRow({ item, selected }: { item: HeaderItem; selected: boolean
   return (
     <div
       className={`header-field${item.visible ? '' : ' is-off'}${selected ? ' is-selected' : ''}`}
+      data-header-id={item.id}
       onClick={() => item.visible && dispatch({ type: 'SELECT_BLOCK', ref: { kind: 'header', id: item.id } })}
     >
       <div className="header-field__top">
@@ -90,15 +92,21 @@ function RangeRow({
   )
 }
 
-export function LayoutPanel() {
+export function LayoutPanel({ part = 'all' }: { part?: 'all' | 'header' | 'flow' }) {
   const { state, dispatch, flow } = useEditor()
   const { columns, margin, header, spacing } = state.layout
   const selectedHeader = state.selectedBlock?.kind === 'header' ? state.selectedBlock.id : null
   const landscape = state.pageWidth > state.pageHeight
   const effective = resolveSplit(columns, state.pageWidth, state.pageHeight)
 
+  useEffect(() => {
+    if (part === 'flow' || !selectedHeader) return
+    document.querySelector<HTMLElement>(`[data-header-id="${CSS.escape(selectedHeader)}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [part, selectedHeader])
+
   return (
-    <div className="side-panel__scroll">
+    <div className={part === 'all' ? 'side-panel__scroll' : 'sheet-part'}>
+      {part !== 'flow' ? (
       <PanelSection
         title="頁首"
         description={
@@ -137,7 +145,10 @@ export function LayoutPanel() {
           <Switch checked={header.repeat} label="每一頁都印頁首" onChange={(v) => dispatch({ type: 'SET_HEADER', patch: { repeat: v } })} />
         </div>
       </PanelSection>
+      ) : null}
 
+      {part !== 'header' ? (
+      <>
       <PanelSection title="分欄">
         <Segmented
           label="欄數"
@@ -242,6 +253,8 @@ export function LayoutPanel() {
           ))}
         </div>
       </PanelSection>
+      </>
+      ) : null}
     </div>
   )
 }

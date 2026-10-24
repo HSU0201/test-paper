@@ -1,5 +1,5 @@
-import { AnimatePresence, motion } from 'motion/react'
-import { useId, useState, type DragEvent, type KeyboardEvent } from 'react'
+import { motion } from 'motion/react'
+import { useEffect, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { useEditor } from '../../editor/EditorContext'
 import { hasRubyMarkup, hasZhuyinMarkup, plainText } from '../../editor/richText'
 import {
@@ -15,8 +15,7 @@ import {
   sectionScore,
   type BlockRef,
 } from '../../types/exam'
-import { easeOut, layoutSpring } from '../../motion/presets'
-import { ExamTextStyle } from '../BlockInspector'
+import { layoutSpring } from '../../motion/presets'
 import { Icon, Segmented, Switch } from '../ui'
 
 function SelectMark({ on }: { on: boolean }) {
@@ -38,8 +37,6 @@ export function OutlinePanel() {
   const { exam, selectedBlock } = state
   const [drag, setDrag] = useState<Drag>(null)
   const [drop, setDrop] = useState<Drop>(null)
-  const [fontsOpen, setFontsOpen] = useState(false)
-  const fontsBodyId = useId()
   const nums = questionNumbers(exam)
   const totals = examTotals(exam)
   const overflowIds = new Set(flow.warnings.flatMap((w) => (w.type === 'oversize' ? [w.ref.id] : [])))
@@ -47,6 +44,12 @@ export function OutlinePanel() {
 
   const select = (ref: BlockRef) => dispatch({ type: 'SELECT_BLOCK', ref })
   const isSel = (id: string) => selectedBlock?.id === id
+
+  useEffect(() => {
+    const id = selectedBlock?.id
+    if (!id || selectedBlock.kind === 'header') return
+    document.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [selectedBlock?.id, selectedBlock?.kind])
 
   const startDrag = (ref: BlockRef) => (e: DragEvent) => {
     e.dataTransfer.effectAllowed = 'move'
@@ -116,43 +119,6 @@ export function OutlinePanel() {
         />
       </div>
 
-      <div className={`outline__fonts${fontsOpen ? ' is-open' : ''}`}>
-        <button
-          type="button"
-          className="outline__fonts-toggle"
-          aria-expanded={fontsOpen}
-          aria-controls={fontsBodyId}
-          onClick={() => setFontsOpen((open) => !open)}
-        >
-          <span>全卷字級</span>
-          <span className="outline__fonts-chevron" aria-hidden>
-            <Icon name="down" />
-          </span>
-        </button>
-        <AnimatePresence initial={false}>
-          {fontsOpen ? (
-            <motion.div
-              id={fontsBodyId}
-              key="fonts"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: easeOut }}
-              style={{ overflow: 'hidden' }}
-            >
-              <div className="outline__fonts-body">
-                <p className="outline__fonts-hint">
-                  套用到所有大題與小題。某一題要不同，點選後在右側打開「單獨設定」。
-                </p>
-                <ExamTextStyle role="section_heading" label="大題標題" />
-                <ExamTextStyle role="instruction" label="作答說明" />
-                <ExamTextStyle role="question_body" label="小題題文" />
-              </div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-      </div>
-
       {exam.sections.length === 0 ? (
         <div className="outline__empty">
           <p>還沒有任何大題。可以先放入一份範例，看看選項排列、外框、底線、直式表格和圖片。</p>
@@ -174,6 +140,7 @@ export function OutlinePanel() {
             >
               <div
                 className={`outline-row outline-row--section${isSel(s.id) ? ' is-selected' : ''}${overflowIds.has(s.id) ? ' is-overflow' : ''}`}
+                data-block-id={s.id}
                 role="button"
                 tabIndex={0}
                 draggable
@@ -222,6 +189,7 @@ export function OutlinePanel() {
                     <li key={q.id} className={`${dropClass(showBefore, 'before')}${dropClass(showAfter, 'after')}`}>
                       <div
                         className={`outline-row outline-row--question${isSel(q.id) ? ' is-selected' : ''}${drag?.id === q.id ? ' is-dragging' : ''}${overflowIds.has(q.id) ? ' is-overflow' : ''}`}
+                        data-block-id={q.id}
                         role="button"
                         tabIndex={0}
                         draggable
@@ -304,7 +272,7 @@ export function OutlinePanel() {
 
       <div className="outline__footer">
         <p className="outline__footer-hint">有下一頁時顯示「下一頁還有題目」；左右兩欄時只印在右欄，不橫跨整頁。「作答結束」接在最後一題下面。</p>
-        <div className={`outline__footer-row${isSel(FOOTER_CONTINUE_ID) ? ' is-selected' : ''}`}>
+        <div className={`outline__footer-row${isSel(FOOTER_CONTINUE_ID) ? ' is-selected' : ''}`} data-block-id={FOOTER_CONTINUE_ID}>
           <button
             type="button"
             className="outline__footer-label"
@@ -318,7 +286,7 @@ export function OutlinePanel() {
             onChange={(continueOn) => dispatch({ type: 'SET_FOOTER', patch: { continueOn } })}
           />
         </div>
-        <div className={`outline__footer-row${isSel(FOOTER_END_ID) ? ' is-selected' : ''}`}>
+        <div className={`outline__footer-row${isSel(FOOTER_END_ID) ? ' is-selected' : ''}`} data-block-id={FOOTER_END_ID}>
           <button
             type="button"
             className="outline__footer-label"

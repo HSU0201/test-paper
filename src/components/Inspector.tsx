@@ -1,10 +1,10 @@
 import { AnimatePresence, motion } from 'motion/react'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { useEditor } from '../editor/EditorContext'
 import { describeWarnings } from '../editor/warningText'
 import { easeOut } from '../motion/presets'
 import type { CanvasObject } from '../types/document'
-import { FOOTER_END_ID } from '../types/exam'
+import { FOOTER_END_ID, questionNumbers } from '../types/exam'
 import { HEADER_ROLE_LABEL, resolveSplit } from '../types/layout'
 import { BlockInspector } from './BlockInspector'
 import { HeaderItemInspector } from './HeaderItemInspector'
@@ -29,6 +29,13 @@ const SHORTCUTS: [string, string][] = [
 
 export function Inspector() {
   const { state, dispatch, pageGeometry, flow, pageCount } = useEditor()
+  const scrollerRef = useRef<HTMLElement>(null)
+  const scrollKey = state.selectedBlock
+    ? `${state.selectedBlock.kind}:${state.selectedBlock.id}`
+    : (state.selectedId ?? 'overview')
+  useEffect(() => {
+    scrollerRef.current?.scrollTo({ top: 0 })
+  }, [scrollKey])
   const obj = state.selectedId ? state.objects.find((o) => o.id === state.selectedId) : null
   const block = state.selectedBlock
   const frames = pageGeometry(0).frames.length
@@ -78,7 +85,13 @@ export function Inspector() {
       <>
         <div className="inspector__head">
           <span className="inspector__badge">
-            {block.kind === 'section' ? '大題' : block.kind === 'notice' ? '提示' : '小題'}
+            {block.kind === 'section'
+              ? '大題'
+              : block.kind === 'notice'
+                ? '提示'
+                : questionNumbers(state.exam).get(block.id)
+                  ? `第 ${questionNumbers(state.exam).get(block.id)} 題`
+                  : '小題'}
           </span>
           <div className="inspector__tools">
             <button
@@ -121,9 +134,9 @@ export function Inspector() {
     }, {})
     body = (
       <div className="inspector__empty">
-        <h2 className="inspector__title">試卷總覽</h2>
+        <h2 className="inspector__title">題目內容</h2>
         <p className="inspector__hint">
-          點選紙張上的題目或左側「大綱」即可在此編輯；點頁首文字可拖曳排版，欄位與分欄請到「版型」。
+          點左側「出題」的一題，或直接點卷上的題目，這裡就會變成那一題的題幹、選項與配分。學校、紙張與字級在「卷面」；線條、方框與自由文字在「物件」。
         </p>
         <dl className="inspector__stats">
           <div>
@@ -190,8 +203,9 @@ export function Inspector() {
 
   return (
     <motion.aside
+      ref={scrollerRef}
       className="inspector"
-      aria-label="屬性"
+      aria-label="題目內容"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.32, delay: 0.06, ease: easeOut }}

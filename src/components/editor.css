@@ -320,12 +320,29 @@ kbd {
 
 .side-panel__title {
   margin: 0;
-  padding: 14px 16px 10px;
+  padding: 14px 16px 4px;
   font-size: 15px;
   font-weight: 700;
   color: var(--c-text);
   letter-spacing: 0;
   line-height: 1.4;
+}
+
+.side-panel__hint {
+  margin: 0;
+  padding: 0 16px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--c-text-3);
+}
+
+.sheet-switch {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  background: var(--c-surface);
 }
 
 .side-panel__scroll {

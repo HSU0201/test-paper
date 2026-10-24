@@ -2,11 +2,10 @@ import { useEditor } from '../../editor/EditorContext'
 import { BOPOMOFO_FAMILY, PAPER_FONTS, withBopomofoFont } from '../../fonts/paperFont'
 import { PanelSection } from '../ui'
 
-export function FontPanel() {
+export function FontPanel({ embedded = false }: { embedded?: boolean }) {
   const { state, dispatch } = useEditor()
 
-  return (
-    <div className="side-panel__scroll">
+  const body = (
       <PanelSection
         title="全卷字型"
         description="頁首、題目與畫布的國字會一起換成這個字。注音符號另外用內建注音字型。編輯器的按鈕仍用系統字。"
@@ -44,6 +43,7 @@ export function FontPanel() {
           </span>
         </div>
       </PanelSection>
-    </div>
   )
+  if (embedded) return body
+  return <div className="side-panel__scroll">{body}</div>
 }

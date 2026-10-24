@@ -49,7 +49,7 @@ export function InsertPanel() {
 
   return (
     <div className="side-panel__scroll">
-      <PanelSection title="文字" description="選一種階層，再到紙張上點一下放置；會自動對齊所在欄位。">
+      <PanelSection title="文字" description="選一種階層，再到紙張上點一下放置。這是額外的文字，不會變成題目。">
         <div className="insert-tiers">
           {tiers.map((t) => (
             <motion.button

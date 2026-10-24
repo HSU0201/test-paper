@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { readImageFile } from '../editor/documentIO'
 import { useEditor } from '../editor/EditorContext'
 import { findQuestion } from '../editor/examReducer'
@@ -171,7 +171,7 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
         </div>
       </PanelSection>
 
-      <PanelSection title="文字樣式" description="只影響這一大題。全卷預設在左側大綱的「全卷字級」。">
+      <PanelSection title="文字樣式" description="只影響這一大題。全卷預設在左側「卷面」的「字級」。">
         <FontOverrideField
           role="section_heading"
           label="大題標題"
@@ -593,7 +593,14 @@ function ChoiceRow({
 function QuestionEditor({ questionId }: { questionId: string }) {
   const { state, dispatch } = useEditor()
   const stemRef = useRef<ColorFieldHandle>(null)
+  const openedId = useRef<string | null>(null)
   const hit = findQuestion(state.exam, questionId)
+  const stem = hit?.question.stem ?? ''
+  useEffect(() => {
+    if (openedId.current === questionId) return
+    openedId.current = questionId
+    if (!plainText(stem)) stemRef.current?.focus()
+  }, [questionId, stem])
   if (!hit) return null
   const { question: q, section, index } = hit
   const num = questionNumbers(state.exam).get(q.id)
@@ -601,7 +608,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
 
   return (
     <div className="inspector__body">
-      <PanelSection title={`第 ${num} 題・${plainText(section.title)}`}>
+      <PanelSection title={`第 ${num} 題`} description={plainText(section.title) || '這個大題還沒有名稱'}>
         <div className="ui-grid-2">
           <label className="ui-field">
             <span className="ui-field__label">題型</span>
@@ -630,57 +637,6 @@ function QuestionEditor({ questionId }: { questionId: string }) {
             <NumberField label="配分" suffix="分" min={0} max={100} value={q.score} onChange={(v) => set({ score: v })} />
           )}
         </div>
-        <div className="exam-style">
-          <div className="exam-style__head">
-            <span className="exam-style__label">這一題換成注音</span>
-            <Switch
-              checked={questionUsesZhuyin(section, q)}
-              label="這一題換成注音"
-              onChange={(zhuyin) => set({ zhuyin })}
-            />
-          </div>
-          <p className="exam-style__follow">
-            打開會把這一題的題幹和選項改成注音，關掉會改回國字。只換幾個字時，在下面選取後按「轉成注音」。
-            {typeof q.zhuyin === 'boolean' ? (
-              <>
-                {' '}
-                這一題已單獨設定。
-                <button type="button" className="text-btn" onClick={() => set({ zhuyin: undefined })}>
-                  改回跟隨大題
-                </button>
-              </>
-            ) : (
-              <> 目前跟隨大題（{section.zhuyin ? '整題注音' : '不自動改'}）。</>
-            )}
-          </p>
-        </div>
-        {sectionRowSize(section) !== 1 ? (
-          <p className="exam-style__follow">
-            這一題跟著大題：{section.rowSize === 'all' ? '全部小題同一列' : '兩題一列'}。要改的話，請到大題的「小題並排」。
-          </p>
-        ) : questionRowGroup(section, index)?.start !== index && questionRowGroup(section, index) ? (
-          <p className="exam-style__follow">
-            這一題在上一題的右半邊。要改回各佔一列，請到上一題關掉「與下一題同一列」。
-          </p>
-        ) : (
-          <>
-            <div className="ui-row">
-              <span className="ui-row__label">與下一題同一列</span>
-              <Switch
-                checked={q.pairNext === true}
-                label="與下一題同一列"
-                onChange={(v) => set({ pairNext: v })}
-              />
-            </div>
-            <p className="exam-style__follow">
-              {section.questions[index + 1]
-                ? (section.layout ?? 'flow') === 'rows'
-                  ? '打開後，這一題在左、下一題在右，中間有分隔線。'
-                  : '打開後，這一題在左、下一題在右，各佔一半。'
-                : '這是最後一題，沒有下一題可以並排，打開後仍會佔滿整列。'}
-            </p>
-          </>
-        )}
         {section.scoreMode === 'blank' ? (
           <div className="exam-style__follow">
             每格 {sectionBlankUnit(section)} 分，這一題 {questionPoints(section, q)} 分。
@@ -729,15 +685,6 @@ function QuestionEditor({ questionId }: { questionId: string }) {
             不想用這個標記，就直接在卷面上拖曳圖片。選取國字後可加上右側注音，再改成方格或只留注音。
           </p>
         </div>
-      </PanelSection>
-
-      <PanelSection title="文字樣式" description="題號、題幹與選項一起套用，只影響這一題。全卷預設在左側大綱。">
-        <FontOverrideField
-          role="question_body"
-          label="題文"
-          value={q.bodyStyle}
-          onChange={(bodyStyle) => set({ bodyStyle })}
-        />
       </PanelSection>
 
       {isChoiceType(q.type) ? (
@@ -839,6 +786,65 @@ function QuestionEditor({ questionId }: { questionId: string }) {
           </div>
         </PanelSection>
       ) : null}
+
+      <PanelSection title="注音與並排" description="不影響怎麼寫題目。需要注音卷或兩題並排時再改。">
+        <div className="exam-style">
+          <div className="exam-style__head">
+            <span className="exam-style__label">這一題換成注音</span>
+            <Switch
+              checked={questionUsesZhuyin(section, q)}
+              label="這一題換成注音"
+              onChange={(zhuyin) => set({ zhuyin })}
+            />
+          </div>
+          <p className="exam-style__follow">
+            打開會把這一題的題幹和選項改成注音，關掉會改回國字。只換幾個字時，在題目文字裡選取後按「轉成注音」。
+            {typeof q.zhuyin === 'boolean' ? (
+              <>
+                {' '}
+                這一題已單獨設定。
+                <button type="button" className="text-btn" onClick={() => set({ zhuyin: undefined })}>
+                  改回跟隨大題
+                </button>
+              </>
+            ) : (
+              <> 目前跟隨大題（{section.zhuyin ? '整題注音' : '不自動改'}）。</>
+            )}
+          </p>
+        </div>
+        {sectionRowSize(section) !== 1 ? (
+          <p className="exam-style__follow">
+            這一題跟著大題：{section.rowSize === 'all' ? '全部小題同一列' : '兩題一列'}。要改的話，請到大題的「小題並排」。
+          </p>
+        ) : questionRowGroup(section, index)?.start !== index && questionRowGroup(section, index) ? (
+          <p className="exam-style__follow">
+            這一題在上一題的右半邊。要改回各佔一列，請到上一題關掉「與下一題同一列」。
+          </p>
+        ) : (
+          <>
+            <div className="ui-row">
+              <span className="ui-row__label">與下一題同一列</span>
+              <Switch checked={q.pairNext === true} label="與下一題同一列" onChange={(v) => set({ pairNext: v })} />
+            </div>
+            <p className="exam-style__follow">
+              {section.questions[index + 1]
+                ? (section.layout ?? 'flow') === 'rows'
+                  ? '打開後，這一題在左、下一題在右，中間有分隔線。'
+                  : '打開後，這一題在左、下一題在右，各佔一半。'
+                : '這是最後一題，沒有下一題可以並排，打開後仍會佔滿整列。'}
+            </p>
+          </>
+        )}
+      </PanelSection>
+
+      <PanelSection title="文字樣式" description="題號、題幹與選項一起套用，只影響這一題。全卷預設在左側「卷面」的「字級」。">
+        <FontOverrideField
+          role="question_body"
+          label="題文"
+          value={q.bodyStyle}
+          onChange={(bodyStyle) => set({ bodyStyle })}
+        />
+      </PanelSection>
 
       <PanelSection title="答案" description="只存在檔案中，不會印在試卷上。">
         <input

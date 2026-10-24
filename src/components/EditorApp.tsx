@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { easeOut, fadeEase, layoutSpring, paneVariants } from '../motion/presets'
 import { getTextTierLabel } from '../types/document'
+import { questionNumbers, type BlockRef } from '../types/exam'
 import { StatusBar } from './StatusBar'
 import { EditorProvider, useEditor } from '../editor/EditorContext'
 import { Inspector } from './Inspector'
@@ -10,22 +11,25 @@ import { PaperStage } from './PaperStage'
 import { TextEditOverlay } from './TextEditOverlay'
 import { TopBar } from './TopBar'
 import { InsertPanel } from './panels/InsertPanel'
-import { LayoutPanel } from './panels/LayoutPanel'
 import { OutlinePanel } from './panels/OutlinePanel'
-import { PagePanel } from './panels/PagePanel'
-import { FontPanel } from './panels/FontPanel'
+import { SheetPanel, type SheetView } from './panels/SheetPanel'
 import { Icon, type IconName } from './ui'
 import './editor.css'
 
-type SideTab = 'outline' | 'layout' | 'font' | 'insert' | 'page'
+type SideTab = 'questions' | 'sheet' | 'decorate'
 
-const SIDE_TABS: { id: SideTab; label: string; icon: IconName }[] = [
-  { id: 'outline', label: '大綱', icon: 'outline' },
-  { id: 'layout', label: '版型', icon: 'layout' },
-  { id: 'font', label: '字體', icon: 'font' },
-  { id: 'insert', label: '插入', icon: 'insert' },
-  { id: 'page', label: '頁面', icon: 'page' },
+const SIDE_TABS: { id: SideTab; label: string; icon: IconName; title: string }[] = [
+  { id: 'questions', label: '出題', icon: 'outline', title: '題目順序' },
+  { id: 'sheet', label: '卷面', icon: 'page', title: '頁首、紙張、字級' },
+  { id: 'decorate', label: '物件', icon: 'insert', title: '線條、方框、圖片與自由文字' },
 ]
+
+function tabForSelection(block: BlockRef | null, selectedId: string | null): SideTab {
+  if (block?.kind === 'header') return 'sheet'
+  if (block) return 'questions'
+  if (selectedId) return 'decorate'
+  return 'questions'
+}
 
 const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.9, 1, 1.25, 1.5, 2]
 
@@ -42,8 +46,21 @@ function isTypingTarget(target: EventTarget | null) {
   return el.isContentEditable || !!el.closest('[contenteditable="true"]')
 }
 
+function focusKeyOf(block: BlockRef | null, selectedId: string | null) {
+  if (block) return `${block.kind}:${block.id}`
+  if (selectedId) return `obj:${selectedId}`
+  return ''
+}
+
+function tabForFocusKey(focusKey: string): SideTab {
+  if (focusKey.startsWith('obj:')) return 'decorate'
+  if (focusKey.startsWith('header:')) return 'sheet'
+  return 'questions'
+}
+
 function EditorShell() {
   const { state, dispatch, undo, redo, pageCount, saveStatus } = useEditor()
+  const focusKey = focusKeyOf(state.selectedBlock, state.selectedId)
   const stagesRef = useRef<(Konva.Stage | null)[]>([])
   const pageElsRef = useRef<(HTMLDivElement | null)[]>([])
   const canvasAreaRef = useRef<HTMLDivElement>(null)
@@ -59,8 +76,23 @@ function EditorShell() {
   const [fitScale, setFitScale] = useState(1)
   const [zoom, setZoom] = useState<number | 'fit'>('fit')
   const [showGuides, setShowGuides] = useState(true)
-  const [tab, setTab] = useState<SideTab>('outline')
+  const [tab, setTab] = useState<SideTab>(() => tabForSelection(state.selectedBlock, state.selectedId))
+  const [sheetView, setSheetView] = useState<SheetView>('header')
   const [tabDir, setTabDir] = useState(1)
+  const [seenFocus, setSeenFocus] = useState(focusKey)
+  if (focusKey !== seenFocus) {
+    setSeenFocus(focusKey)
+    if (focusKey) {
+      const next = tabForFocusKey(focusKey)
+      if (next !== tab) {
+        const cur = SIDE_TABS.findIndex((t) => t.id === tab)
+        const nxt = SIDE_TABS.findIndex((t) => t.id === next)
+        setTabDir(nxt >= cur ? 1 : -1)
+        setTab(next)
+      }
+      if (focusKey.startsWith('header:')) setSheetView('header')
+    }
+  }
   const [editingId, setEditingId] = useState<string | null>(null)
   const scale = zoom === 'fit' ? fitScale : zoom
   scaleRef.current = scale
@@ -119,6 +151,23 @@ function EditorShell() {
     setTabDir(next >= cur ? 1 : -1)
     setTab(id)
   }
+
+  const taskHint = (() => {
+    if (tab === 'sheet') {
+      if (sheetView === 'header') return '學校、科目、座號、姓名。點卷上的頁首文字也會打開這裡。'
+      if (sheetView === 'paper') return '紙張大小、分欄、行距與頁邊距。'
+      return '全卷的字型與字級。某一題要不同，回到「出題」點那一題，在右側打開「單獨設定」。'
+    }
+    if (tab === 'decorate') return '固定在某一頁的文字、線條、方框、圖片。題目請在「出題」新增。'
+    const block = state.selectedBlock
+    if (block?.kind === 'question') {
+      const num = questionNumbers(state.exam).get(block.id)
+      return num ? `正在編輯第 ${num} 題。題幹、選項與配分在右側。` : '正在編輯這一題。內容在右側。'
+    }
+    if (block?.kind === 'section') return '正在編輯這個大題。名稱、說明與配分在右側；小題請點下面的列。'
+    if (block?.kind === 'notice') return '頁尾文字在右側。'
+    return '由上到下就是卷上的順序。點一題，右側就是這一題的內容。'
+  })()
 
   const stepZoom = (dir: 1 | -1) => {
     const cur = scaleRef.current
@@ -200,6 +249,7 @@ function EditorShell() {
               type="button"
               className={`side-rail__btn${tab === t.id ? ' is-active' : ''}`}
               aria-pressed={tab === t.id}
+              title={t.title}
               onClick={() => selectTab(t.id)}
             >
               {tab === t.id ? (
@@ -231,16 +281,13 @@ function EditorShell() {
                 transition={fadeEase}
               >
                 <h2 className="side-panel__title">{SIDE_TABS.find((t) => t.id === tab)?.label}</h2>
-                {tab === 'outline' ? (
+                <p className="side-panel__hint">{taskHint}</p>
+                {tab === 'questions' ? (
                   <OutlinePanel />
-                ) : tab === 'layout' ? (
-                  <LayoutPanel />
-                ) : tab === 'font' ? (
-                  <FontPanel />
-                ) : tab === 'insert' ? (
-                  <InsertPanel />
+                ) : tab === 'sheet' ? (
+                  <SheetPanel view={sheetView} onView={setSheetView} />
                 ) : (
-                  <PagePanel />
+                  <InsertPanel />
                 )}
               </motion.div>
             </AnimatePresence>

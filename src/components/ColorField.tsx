@@ -12,6 +12,7 @@ type ColorFieldProps = {
 
 export type ColorFieldHandle = {
   insert: (token: string) => void
+  focus: () => void
 }
 
 /** 考卷文字欄位。先選取字，再點色盤，只改那些字的顏色；其餘維持黑色。 */
@@ -59,6 +60,9 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
       document.execCommand('insertText', false, token)
       emit()
       saveSel()
+    },
+    focus() {
+      ref.current?.focus()
     },
   }))
 

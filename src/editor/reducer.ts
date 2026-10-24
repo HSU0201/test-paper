@@ -240,6 +240,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         ...state,
         objects: [...state.objects, text],
         selectedId: text.id,
+        selectedBlock: null,
         textPlacementMode: false,
       }
     }
@@ -261,6 +262,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         ...state,
         objects: [...state.objects, line],
         selectedId: line.id,
+        selectedBlock: null,
       }
     }
     case 'ADD_RECT': {
@@ -283,6 +285,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         ...state,
         objects: [...state.objects, rect],
         selectedId: rect.id,
+        selectedBlock: null,
       }
     }
     case 'ADD_IMAGE': {
@@ -306,6 +309,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         ...state,
         objects: [...state.objects, img],
         selectedId: img.id,
+        selectedBlock: null,
       }
     }
     case 'DELETE_SELECTED': {
