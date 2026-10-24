@@ -13,7 +13,13 @@ function timeLabel(at?: number) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export function StatusBar({ onLocate }: { onLocate: (page: number) => void }) {
+export function StatusBar({
+  onLocate,
+  onContact,
+}: {
+  onLocate: (page: number) => void
+  onContact: () => void
+}) {
   const { state, dispatch, flow, pageCount, saveStatus, snapshots, pageGeometry } = useEditor()
   const [open, setOpen] = useState(false)
   const popRef = useRef<HTMLDivElement>(null)
@@ -133,6 +139,9 @@ export function StatusBar({ onLocate }: { onLocate: (page: number) => void }) {
         {save}
         {backupNote}
       </motion.span>
+      <button type="button" className="statusbar__contact" onClick={onContact}>
+        聯繫開發者
+      </button>
       <span className="statusbar__version" title="應用程式版本">
         v{APP_VERSION}
       </span>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { easeOut, fadeEase, layoutSpring, paneVariants } from '../motion/presets'
 import { getTextTierLabel } from '../types/document'
 import { questionNumbers, type BlockRef } from '../types/exam'
+import { ContactPage } from './ContactPage'
 import { StatusBar } from './StatusBar'
 import { EditorProvider, useEditor } from '../editor/EditorContext'
 import { Inspector } from './Inspector'
@@ -94,6 +95,7 @@ function EditorShell() {
     }
   }
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [contactOpen, setContactOpen] = useState(() => window.location.hash === '#contact')
   const scale = zoom === 'fit' ? fitScale : zoom
   scaleRef.current = scale
 
@@ -112,7 +114,38 @@ function EditorShell() {
   }, [state.pageWidth, state.pageHeight])
 
   useEffect(() => {
+    const sync = () => setContactOpen(window.location.hash === '#contact')
+    window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
+  }, [])
+
+  const openContact = useCallback(() => {
+    if (window.location.hash !== '#contact') window.location.hash = 'contact'
+    else setContactOpen(true)
+  }, [])
+
+  const closeContact = useCallback(() => {
+    if (window.location.hash === '#contact') {
+      const next = `${window.location.pathname}${window.location.search}`
+      window.history.replaceState(null, '', next)
+    }
+    setContactOpen(false)
+  }, [])
+
+  useEffect(() => {
+    const prev = document.title
+    if (contactOpen) document.title = '聯繫開發者 — 試卷編輯器'
+    return () => {
+      document.title = prev
+    }
+  }, [contactOpen])
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (contactOpen) {
+        if (e.key === 'Escape') closeContact()
+        return
+      }
       if (isTypingTarget(e.target) || isTypingTarget(document.activeElement)) return
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.key.toLowerCase() === 'z') {
@@ -139,7 +172,7 @@ function EditorShell() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [dispatch, undo, redo, state.selectedId, state.selectedBlock, state.textPlacementMode])
+  }, [contactOpen, closeContact, dispatch, undo, redo, state.selectedId, state.selectedBlock, state.textPlacementMode])
 
   const handleTextDoubleClick = useCallback((id: string) => {
     setEditingId(id)
@@ -234,6 +267,8 @@ function EditorShell() {
 
   return (
     <div className="editor-root">
+      {contactOpen ? <ContactPage onBack={closeContact} /> : null}
+      <div className="editor-root__work" hidden={contactOpen}>
       <TopBar stagesRef={stagesRef} />
       <div className="editor-body">
         <motion.nav
@@ -416,7 +451,8 @@ function EditorShell() {
 
         <Inspector />
       </div>
-      <StatusBar onLocate={locatePage} />
+      <StatusBar onLocate={locatePage} onContact={openContact} />
+      </div>
     </div>
   )
 }
