@@ -6,21 +6,26 @@ import { PagePanel } from './PagePanel'
 
 export type SheetView = 'header' | 'paper' | 'type'
 
-export function SheetPanel({ view, onView }: { view: SheetView; onView: (view: SheetView) => void }) {
+export function SheetSwitch({ view, onView }: { view: SheetView; onView: (view: SheetView) => void }) {
   return (
-    <div className="side-panel__scroll sheet">
-      <div className="sheet-switch">
-        <Segmented<SheetView>
-          label="卷面項目"
-          value={view}
-          options={[
-            { value: 'header', label: '頁首' },
-            { value: 'paper', label: '紙張' },
-            { value: 'type', label: '字級' },
-          ]}
-          onChange={onView}
-        />
-      </div>
+    <div className="side-panel__switch">
+      <Segmented<SheetView>
+        label="卷面項目"
+        value={view}
+        options={[
+          { value: 'header', label: '頁首' },
+          { value: 'paper', label: '紙張' },
+          { value: 'type', label: '字級' },
+        ]}
+        onChange={onView}
+      />
+    </div>
+  )
+}
+
+export function SheetPanel({ view }: { view: SheetView }) {
+  return (
+    <div className="side-panel__scroll">
       {view === 'header' ? <LayoutPanel part="header" /> : null}
       {view === 'paper' ? (
         <>

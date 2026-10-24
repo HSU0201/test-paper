@@ -12,7 +12,7 @@ import { TextEditOverlay } from './TextEditOverlay'
 import { TopBar } from './TopBar'
 import { InsertPanel } from './panels/InsertPanel'
 import { OutlinePanel } from './panels/OutlinePanel'
-import { SheetPanel, type SheetView } from './panels/SheetPanel'
+import { SheetPanel, SheetSwitch, type SheetView } from './panels/SheetPanel'
 import { Icon, type IconName } from './ui'
 import './editor.css'
 
@@ -281,11 +281,12 @@ function EditorShell() {
                 transition={fadeEase}
               >
                 <h2 className="side-panel__title">{SIDE_TABS.find((t) => t.id === tab)?.label}</h2>
+                {tab === 'sheet' ? <SheetSwitch view={sheetView} onView={setSheetView} /> : null}
                 <p className="side-panel__hint">{taskHint}</p>
                 {tab === 'questions' ? (
                   <OutlinePanel />
                 ) : tab === 'sheet' ? (
-                  <SheetPanel view={sheetView} onView={setSheetView} />
+                  <SheetPanel view={sheetView} />
                 ) : (
                   <InsertPanel />
                 )}

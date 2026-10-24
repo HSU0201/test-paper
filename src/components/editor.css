@@ -329,6 +329,7 @@ kbd {
 }
 
 .side-panel__hint {
+  flex-shrink: 0;
   margin: 0;
   padding: 0 16px 12px;
   font-size: 12px;
@@ -336,13 +337,9 @@ kbd {
   color: var(--c-text-3);
 }
 
-.sheet-switch {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  margin-bottom: 14px;
-  padding-bottom: 10px;
-  background: var(--c-surface);
+.side-panel__switch {
+  flex-shrink: 0;
+  padding: 2px 16px 10px;
 }
 
 .side-panel__scroll {
