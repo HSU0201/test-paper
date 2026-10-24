@@ -146,9 +146,7 @@ export function OutlinePanel() {
           ))}
         </div>
         <p className="outline__example-hint">
-          {exam.sections.length === 0
-            ? '先放入國文範例。裡面有基礎、詞彙、文法、寫作共十四種題型，點開題目可以看怎麼寫。'
-            : '國文範例含十四種題型。數學和自然接著做。'}
+          國文、數學、英文都是國小範例。國文有十四種題型，數學含直式計算，英文含單字、文法與閱讀。
         </p>
       </div>
 
