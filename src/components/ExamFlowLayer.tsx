@@ -2,7 +2,7 @@ import { Group, Image as KonvaImage, Line, Rect, Text } from 'react-konva'
 import type { EditorAction } from '../editor/reducer'
 import type { FlowFrame, FlowImage, FlowRun, PlacedBlock } from '../editor/flowLayout'
 import { FLOW_WRAP, measureText } from '../editor/konvaMeasure'
-import { rubyAdvance } from '../editor/rubyLayout'
+import { rubyPlace } from '../editor/rubyLayout'
 import { layoutRichLines, type RubyFace } from '../editor/richText'
 import { needsManualWrap } from '../editor/zhuyin'
 import type { Asset, BlockRef } from '../types/exam'
@@ -171,26 +171,23 @@ function RubyCluster({
   han: string
   reading: string
 }) {
-  const adv = rubyAdvance(fontSize, face, reading)
-  const blockH = Math.max(fontSize, adv.stack)
-  const top = y + Math.max(0, (step - blockH) / 2)
-  const baseY = top + (blockH - fontSize) / 2
-  const stackY = top + (blockH - adv.stack) / 2
-  const colX = adv.base + adv.mid
-  const pad = Math.max(1, fontSize * 0.06)
+  const place = rubyPlace(fontSize, step, face, reading)
+  const adv = place.adv
+  const baseY = y + place.baseY
+  const sideY = y + place.sideY
   return (
     <Group x={x} y={0} listening={false}>
-      {face === 'box' ? (
+      {place.box ? (
         <Rect
-          x={pad}
-          y={baseY + pad}
-          width={Math.max(4, adv.base - pad * 2)}
-          height={Math.max(4, fontSize - pad * 2)}
+          x={place.box.x}
+          y={y + place.box.y}
+          width={place.box.w}
+          height={place.box.h}
           stroke={fill}
-          strokeWidth={1.25}
+          strokeWidth={1.35}
           listening={false}
         />
-      ) : face === 'char' ? (
+      ) : face === 'char' || face === 'blank' ? (
         <Text
           x={0}
           y={baseY}
@@ -202,11 +199,22 @@ function RubyCluster({
           listening={false}
         />
       ) : null}
-      {adv.letters.map((ch, i) => (
+      {place.blank ? (
+        <Rect
+          x={place.blank.x}
+          y={y + place.blank.y}
+          width={place.blank.w}
+          height={place.blank.h}
+          stroke={fill}
+          strokeWidth={1}
+          dash={[3, 2]}
+          listening={false}
+        />
+      ) : adv.letters.map((ch, i) => (
         <Text
           key={i}
-          x={colX}
-          y={stackY + i * adv.pitch}
+          x={place.colX}
+          y={sideY + i * adv.pitch}
           width={adv.letter * 1.15}
           height={adv.pitch}
           text={ch}
@@ -219,10 +227,10 @@ function RubyCluster({
           listening={false}
         />
       ))}
-      {adv.tone ? (
+      {face !== 'blank' && adv.tone ? (
         <Text
-          x={colX + adv.letter * 1.02}
-          y={stackY + (adv.stack - adv.letter) / 2}
+          x={place.colX + adv.letter * 1.02}
+          y={sideY + (adv.stack - adv.letter) / 2}
           width={adv.letter}
           height={adv.letter}
           text={adv.tone}

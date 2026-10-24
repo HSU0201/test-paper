@@ -1,8 +1,8 @@
+import { createSampleExam, type SampleSubject } from './chineseSample'
 import { convertAllToZhuyin, revertAllZhuyin } from './richText'
 import {
   createChoice,
   createQuestion,
-  createSampleExam,
   createSection,
   hasFigureMark,
   isChoiceType,
@@ -23,7 +23,7 @@ import {
 export type ExamAction =
   | { type: 'SELECT_BLOCK'; ref: BlockRef | null }
   | { type: 'ADD_SECTION'; afterId?: string }
-  | { type: 'LOAD_EXAMPLE' }
+  | { type: 'LOAD_EXAMPLE'; subject?: SampleSubject }
   | { type: 'UPDATE_SECTION'; id: string; patch: Partial<Omit<Section, 'id' | 'questions'>> }
   | { type: 'REMOVE_SECTION'; id: string }
   | { type: 'MOVE_SECTION'; id: string; toIndex: number }
@@ -133,7 +133,7 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
       return { ...state, selectedBlock: action.ref }
 
     case 'LOAD_EXAMPLE': {
-      const sample = createSampleExam()
+      const sample = createSampleExam(action.subject ?? 'chinese')
       const first = sample.sections[0]
       return { exam: sample, selectedBlock: first ? { kind: 'section', id: first.id } : null }
     }

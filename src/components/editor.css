@@ -137,6 +137,18 @@ kbd {
   background: var(--c-primary-hover);
 }
 
+.btn--answer {
+  background: var(--c-surface);
+  color: var(--c-danger);
+  border-color: #f0c4bc;
+  box-shadow: var(--shadow-s);
+}
+
+.btn--answer:hover {
+  background: var(--c-danger-soft);
+  border-color: #e8a99a;
+}
+
 .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -231,6 +243,13 @@ kbd {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.topbar__export {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 4px;
 }
 
 .topbar__sep {
@@ -722,6 +741,31 @@ kbd {
   flex-direction: column;
   gap: 4px;
   margin-bottom: 14px;
+}
+
+.outline__examples {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.outline__example-row {
+  display: flex;
+  gap: 6px;
+}
+
+.outline__example-row .btn {
+  flex: 1;
+  justify-content: center;
+  border-color: var(--c-border);
+}
+
+.outline__example-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--c-text-3);
 }
 
 .outline__fonts {
@@ -1431,6 +1475,7 @@ kbd {
 
 .paper-stage-wrap {
   overflow: hidden;
+  background: #fff;
   box-shadow: 0 1px 3px rgba(28, 40, 22, 0.08), 0 12px 32px -8px rgba(28, 40, 22, 0.16);
 }
 
@@ -2367,6 +2412,14 @@ kbd {
 .color-field__box .ruby--reading .ruby__ann {
   margin-left: 0;
   margin-right: 0.45em;
+}
+
+.color-field__box .ruby--blank .ruby__ann {
+  opacity: 0.45;
+  outline: 1px dashed currentColor;
+  outline-offset: 1px;
+  border-radius: 2px;
+  padding: 0 0.08em;
 }
 
 .color-field__box .ruby__letters {

@@ -112,7 +112,7 @@ type Seed = Omit<HeaderItem, 'id' | 'label' | 'fill'> & { label?: string }
 
 const DEFAULT_ITEMS: Seed[] = [
   { role: 'schoolName', value: '臺中市北屯區北屯國民小學', showLabel: false, visible: true, xr: 0, wr: 1, y: 0, fontSize: 20, bold: true, align: 'center' },
-  { role: 'examTitle', value: '115學年度第一學期二年級數學第一次定期評量', showLabel: false, visible: true, xr: 0, wr: 1, y: 0, fontSize: 20, bold: true, align: 'center' },
+  { role: 'examTitle', value: '115學年度第一學期二年級國文第一次定期評量', showLabel: false, visible: true, xr: 0, wr: 1, y: 0, fontSize: 20, bold: true, align: 'center' },
   { role: 'teacher', label: '出題者', value: '○○○ 老師', showLabel: true, visible: true, xr: 0.02, wr: 0.24, y: 40, fontSize: 16, bold: false, align: 'left' },
   { role: 'classInfo', value: '○年○班', showLabel: false, visible: true, xr: 0.28, wr: 0.12, y: 40, fontSize: 16, bold: false, align: 'left' },
   { role: 'studentName', value: '', showLabel: true, visible: true, xr: 0.42, wr: 0.27, y: 40, fontSize: 16, bold: false, align: 'left' },
@@ -187,6 +187,7 @@ const LEGACY_HEADER_VALUE: Partial<Record<HeaderRole, readonly string[]>> = {
   examTitle: [
     '115 學年度第一學期 第一次段考',
     '115 學年度第一學期二年級數學第一次定期評量',
+    '115學年度第一學期二年級數學第一次定期評量',
     '○○學年度第○學期○○科定期評量',
   ],
   subject: ['數學'],

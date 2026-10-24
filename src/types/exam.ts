@@ -198,6 +198,11 @@ export type Section = {
   rowSize: 1 | 2 | 'all'
   /** 這一題用注音出題。新的小題跟著這個設定，各題仍可單獨改 */
   zhuyin: boolean
+  /**
+   * 閱讀短文。印在作答說明和題目之間，並加上外框。
+   * 空字串表示沒有短文。
+   */
+  passage: string
 }
 
 export type QuestionNumbering = 'continuous' | 'perSection'
@@ -233,7 +238,7 @@ export function choiceLabel(index: number): string {
 
 /** 題幹裡一個（ ）、一段底線，或一個注音方格算一格 */
 export function countAnswerBlanks(stem: string): number {
-  const boxes = stem.match(/\{\{yb:/g)?.length ?? 0
+  const boxes = stem.match(/\{\{y[bn]:/g)?.length ?? 0
   const text = plainText(stem).replace(new RegExp(FIGURE_MARK_PATTERN.source, 'g'), '')
   return boxes + (text.match(/（[\s　]*）|\([\s]*\)|＿{2,}|_{2,}/g)?.length ?? 0)
 }
@@ -434,246 +439,12 @@ export function createSection(title = '新大題', defaultType: QuestionType = '
     numberStyle: 'dot',
     rowSize: 1,
     zhuyin: false,
+    passage: '',
   }
 }
 
 export function isChoiceType(t: QuestionType): boolean {
   return t === 'single_choice' || t === 'multi_choice'
-}
-
-function q(
-  type: QuestionType,
-  score: number,
-  stem: string,
-  choices: Array<string | { text: string; image?: ChoiceImage }> = [],
-  answer = '',
-): Question {
-  return {
-    ...createQuestion(type, score),
-    stem,
-    choices: choices.map((item) => {
-      const text = typeof item === 'string' ? item : item.text
-      const image = typeof item === 'string' ? undefined : item.image
-      return { id: newId(), text, ...(image ? { image } : {}) }
-    }),
-    answer,
-  }
-}
-
-function sampleSvg(width: number, height: number, inner: string, framed = true): Asset {
-  const frame = framed
-    ? `<rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="8" fill="#fffaf0" stroke="#3a2e10" stroke-width="2"/>`
-    : ''
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${frame}${inner}</svg>`
-  return { src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, width, height }
-}
-
-function figure(assetId: string, placement: FigurePlacement, widthRatio: number, align?: number): Figure {
-  return {
-    id: newId(),
-    assetId,
-    placement,
-    widthRatio,
-    ...(align != null ? { align } : {}),
-  }
-}
-
-/**
- * 空白試卷用的排版目錄：四種題型，加上選項欄數、外框、底線、
- * 直式表格、配分寫法，以及圖片可以放的位置。
- */
-const SAMPLE_RUBY: Record<string, string> = {
-  小: 'ㄒㄧㄠˇ',
-  魚: 'ㄩˊ',
-  逆: 'ㄋㄧˋ',
-  流: 'ㄌㄧㄡˊ',
-  而: 'ㄦˊ',
-  上: 'ㄕㄤˋ',
-}
-
-/** 範例用。face 決定這一格印國字、方格，或只留注音。 */
-function rubyRun(text: string, face: 'char' | 'box' | 'reading'): string {
-  const mark = face === 'box' ? 'yb' : face === 'reading' ? 'yr' : 'y'
-  return [...text].map((ch) => (SAMPLE_RUBY[ch] ? `{{${mark}:${ch}|${SAMPLE_RUBY[ch]}}}` : ch)).join('')
-}
-
-export function createSampleExam(): ExamContent {
-  const assets: Record<string, Asset> = {}
-  const add = (asset: Asset) => {
-    const id = newId()
-    assets[id] = asset
-    return id
-  }
-  const triangle = add(
-    sampleSvg(160, 110, `<polygon points="80,22 28,92 132,92" fill="#f0c431" stroke="#3a2e10" stroke-width="2"/>`),
-  )
-  const plot = add(
-    sampleSvg(180, 96, `<rect x="28" y="22" width="124" height="54" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/>`),
-  )
-  const badge = add(sampleSvg(96, 96, `<circle cx="48" cy="48" r="28" fill="#fee2e2" stroke="#d92d20" stroke-width="3"/>`))
-  const bars = add(
-    sampleSvg(
-      180,
-      84,
-      `<rect x="28" y="40" width="28" height="28" fill="#f0c431"/><rect x="68" y="24" width="28" height="44" fill="#1d4ed8"/><rect x="108" y="32" width="28" height="36" fill="#1f7a45"/>`,
-    ),
-  )
-  const iconRed = add(sampleSvg(64, 64, `<circle cx="32" cy="32" r="22" fill="#d92d20"/>`, false))
-  const iconBlue = add(sampleSvg(64, 64, `<rect x="12" y="12" width="40" height="40" rx="4" fill="#1d4ed8"/>`, false))
-  const iconGreen = add(sampleSvg(64, 64, `<polygon points="32,8 56,54 8,54" fill="#1f7a45"/>`, false))
-  const pic = (assetId: string, widthRatio: number): ChoiceImage => ({ assetId, widthRatio })
-
-  const phrase = '小魚逆流而上'
-  const ruby = createSection('國字注音', 'fill_blank')
-  ruby.defaultScore = 1
-  ruby.scoreMode = 'blank'
-  ruby.blankScore = 1
-  ruby.instruction = '選取國字後可「加上注音」。同一批字還能「改成方格」或「只留注音」，也能「去掉注音」。方格算一格。'
-  ruby.questions = [
-    {
-      ...q(
-        'fill_blank',
-        1,
-        [rubyRun(phrase, 'char'), rubyRun(phrase, 'box'), rubyRun(phrase, 'reading')].join('\n'),
-        [],
-        phrase,
-      ),
-      bodyStyle: { fontSize: 22 },
-    },
-    {
-      ...q(
-        'fill_blank',
-        1,
-        `只改其中幾個字：${rubyRun('小魚', 'char')}${rubyRun('逆流', 'box')}${rubyRun('而上', 'reading')}`,
-        [],
-        phrase,
-      ),
-      bodyStyle: { fontSize: 22 },
-    },
-  ]
-
-  const single = createSection('單選題', 'single_choice')
-  single.defaultScore = 4
-  single.instruction = '選項可排成四欄、兩欄或一欄，也可以在選項放圖。'
-  single.questions = [
-    {
-      ...q('single_choice', 4, '下列哪一個數是{{#d92d20}}質數{{/}}？', ['21', '27', '29', '33'], 'C'),
-      choiceLayout: 4,
-    },
-    {
-      ...q(
-        'single_choice',
-        4,
-        '若一個長方形的長是 12 公分、寬是 5 公分，它的周長是多少？',
-        ['17 公分', '24 公分', '34 公分', '60 公分'],
-        'C',
-      ),
-      choiceLayout: 2,
-    },
-    {
-      ...q(
-        'single_choice',
-        4,
-        '下列哪一個敘述是正確的？',
-        [
-          '所有的質數都是奇數。',
-          '兩個奇數相加，和一定是偶數。',
-          '一個數只要能被 2 整除，就一定是 4 的倍數。',
-          '0 是最小的正整數。',
-        ],
-        'B',
-      ),
-      choiceLayout: 1,
-      bodyStyle: { bold: true },
-    },
-    {
-      ...q('single_choice', 4, '哪一個選項是圓形？', [
-        { text: '', image: pic(iconRed, 0.85) },
-        { text: '', image: pic(iconBlue, 0.85) },
-        { text: '三角形', image: pic(iconGreen, 0.7) },
-        '只有文字、沒有圖',
-      ], 'A'),
-      choiceLayout: 2,
-    },
-  ]
-
-  const multi = createSection('多選題', 'multi_choice')
-  multi.defaultScore = 4
-  multi.frame = 'body'
-  multi.instruction = '外框只圍住題目，標題留在框外。圖放在選項後面。'
-  multi.questions = [
-    {
-      ...q('multi_choice', 4, '下列哪些是偶數？', ['2', '5', '8', '11'], 'A、C'),
-      choiceLayout: 4,
-    },
-    {
-      ...q('multi_choice', 4, '看完選項後，圖在選項的下面。哪些長條比較高？', ['左', '中', '右'], 'B'),
-      figures: [figure(bars, 'afterChoices', 0.55)],
-      choiceLayout: 4,
-    },
-  ]
-
-  const fill = createSection('填充題', 'fill_blank')
-  fill.defaultScore = 2
-  fill.scoreMode = 'blank'
-  fill.blankScore = 2
-  fill.instruction = '（　　）和底線各算一格，每格分數相同，各題格數可以不同。'
-  fill.questions = [
-    q('fill_blank', 2, '3 的平方是（　　）。', [], '9'),
-    q('fill_blank', 2, '長 8 公分、寬 3 公分的長方形，周長是＿＿＿＿公分，面積是＿＿＿＿平方公分。', [], '22；24'),
-    {
-      ...q('fill_blank', 2, '觀察圖形。\n［圖］\n這個三角形的底是＿＿＿＿公分。', [], '8'),
-      figures: [figure(triangle, 'middle', 0.46, 0)],
-    },
-  ]
-
-  const essay = createSection('問答題', 'short_answer')
-  essay.defaultScore = 8
-  essay.frame = 'all'
-  essay.headingStyle = { fontSize: 20 }
-  essay.instruction = '標題和題目框在一起。作答區可以畫底線，也可以只留白。各題分數不同時，會寫在題目最後。'
-  essay.questions = [
-    {
-      ...q('short_answer', 6, '買了 3 枝筆和 2 本筆記本共花了 110 元，一枝筆 20 元。一本筆記本多少元？'),
-      answerLines: 3,
-    },
-    {
-      ...q('short_answer', 6, '用自己的話說說，什麼是質數？'),
-      answerLines: 3,
-      answerRuled: false,
-    },
-    {
-      ...q('short_answer', 10, '圖在題目右側。請說明這個圓形記號可能代表什麼，並寫出一個例子。'),
-      answerLines: 3,
-      figures: [figure(badge, 'right', 0.55)],
-    },
-    {
-      ...q('short_answer', 8, '圖在題目下方。請依照圖中的長方形，寫出周長怎麼算。'),
-      answerLines: 3,
-      figures: [figure(plot, 'below', 0.62)],
-    },
-  ]
-
-  const table = createSection('直式計算', 'short_answer')
-  table.defaultScore = 5
-  table.layout = 'rows'
-  table.rowLines = 3
-  table.numberStyle = 'paren'
-  table.keepTogether = 'whole'
-  table.instruction = '每一題一列。(1) 右側留驗算，(2) 與 (3) 並排，(4) 這一列比較高。'
-  table.questions = [
-    { ...q('short_answer', 5, '36 × 4 ='), aside: '驗算：' },
-    { ...q('short_answer', 5, '70 − 28 ='), pairNext: true },
-    q('short_answer', 5, '15 + 9 ='),
-    { ...q('short_answer', 5, '128 ÷ 4 ='), rowLines: 6 },
-  ]
-
-  return {
-    numbering: 'perSection',
-    sections: [ruby, single, multi, fill, essay, table],
-    assets,
-    footer: { ...createDefaultFooter(), continueOn: true, endOn: true },
-  }
 }
 
 export function createEmptyExam(): ExamContent {
@@ -814,6 +585,7 @@ export function normalizeExam(raw: unknown): ExamContent {
         rowSize: s.rowSize === 2 || s.rowSize === 'all' ? s.rowSize : 1,
         numberStyle: s.numberStyle === 'paren' ? 'paren' : 'dot',
         zhuyin: s.zhuyin === true,
+        passage: typeof s.passage === 'string' ? s.passage : '',
         headingStyle: normalizeFontOverride(s.headingStyle),
         instructionStyle: normalizeFontOverride(s.instructionStyle),
         questions: (Array.isArray(s.questions) ? s.questions : []).map((item) => {

@@ -30,7 +30,8 @@ import {
   type PageMargin,
   type SpacingSettings,
 } from '../types/layout'
-import { createEmptyExam, createSampleExam, FOOTER_CONTINUE_ID, FOOTER_END_ID, normalizeExam } from '../types/exam'
+import { CHINESE_SAMPLE_TITLE, createSampleExam } from './chineseSample'
+import { createEmptyExam, FOOTER_CONTINUE_ID, FOOTER_END_ID, normalizeExam } from '../types/exam'
 import { DEFAULT_PAPER_FONT, normalizePaperFont } from '../fonts/paperFont'
 import { EXAM_ACTION_TYPES, examReducer, type ExamAction } from './examReducer'
 
@@ -161,12 +162,21 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
   if (isExamAction(action)) {
     const next = examReducer({ exam: state.exam, selectedBlock: state.selectedBlock }, action)
     const blockSelected = next.selectedBlock !== null && next.selectedBlock !== state.selectedBlock
-    return {
+    const merged: EditorState = {
       ...state,
       ...next,
       selectedId: blockSelected ? null : state.selectedId,
       textPlacementMode: blockSelected ? false : state.textPlacementMode,
     }
+    if (action.type === 'LOAD_EXAMPLE' && (action.subject ?? 'chinese') === 'chinese') {
+      return withHeader(merged, (header) => ({
+        ...header,
+        items: header.items.map((item) =>
+          item.role === 'examTitle' ? { ...item, value: CHINESE_SAMPLE_TITLE } : item,
+        ),
+      }))
+    }
+    return merged
   }
   switch (action.type) {
     case 'SELECT':

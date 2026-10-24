@@ -38,6 +38,36 @@ export function clearMeasureCache(): void {
   cache.clear()
 }
 
+/**
+ * 一行文字裡，這個字的墨水中心離文字框頂端多遠。
+ * 演算法跟 Konva 畫字時一樣：以 M 的字框決定基準線，再取實際筆畫的中心。
+ */
+export function lineInkCenter(
+  fontFamily: string,
+  sample: string,
+  style: TextStyle,
+  lineHeight: number,
+): number {
+  const step = style.fontSize * lineHeight
+  probe ??= new Konva.Text({ wrap: FLOW_WRAP })
+  probe.setAttrs({
+    text: sample || 'M',
+    fontFamily,
+    fontSize: style.fontSize,
+    fontStyle: style.bold ? 'bold' : 'normal',
+    lineHeight,
+  })
+  if (Konva.legacyTextRendering) return step / 2
+  const font = probe.measureSize('M')
+  const ink = probe.measureSize(sample || 'M')
+  const ascent = font.fontBoundingBoxAscent ?? font.actualBoundingBoxAscent ?? style.fontSize
+  const descent = font.fontBoundingBoxDescent ?? font.actualBoundingBoxDescent ?? 0
+  const inkAscent = ink.actualBoundingBoxAscent ?? ascent
+  const inkDescent = ink.actualBoundingBoxDescent ?? 0
+  const baseline = (ascent - descent) / 2 + step / 2
+  return baseline - (inkAscent - inkDescent) / 2
+}
+
 export function measureWithFont(fontFamily: string): MeasureFn {
   return (text, width, style, lineHeight) => measureText(fontFamily, text, width, style, lineHeight)
 }

@@ -229,6 +229,9 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
           <button type="button" className="text-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyRuby('box')}>
             改成方格
           </button>
+          <button type="button" className="text-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyRuby('blank')}>
+            注音留白
+          </button>
           <button type="button" className="text-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyRuby('reading')}>
             只留注音
           </button>

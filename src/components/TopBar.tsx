@@ -87,17 +87,32 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
           清空
         </button>
         <span className="topbar__sep" aria-hidden />
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={() => {
-            const stages = (stagesRef.current ?? []).slice(0, pageCount).filter((s): s is Konva.Stage => !!s)
-            exportStagesToPdf(stages, `${baseName}.pdf`)
-          }}
-        >
-          <Icon name="pdf" />
-          匯出 PDF
-        </button>
+        <span className="topbar__export">
+          <button
+            type="button"
+            className="btn btn--primary"
+            title="下載沒有答案的試卷"
+            onClick={() => {
+              const stages = (stagesRef.current ?? []).slice(0, pageCount).filter((s): s is Konva.Stage => !!s)
+              exportStagesToPdf(stages, `${baseName}.pdf`, false)
+            }}
+          >
+            <Icon name="pdf" />
+            匯出試卷
+          </button>
+          <button
+            type="button"
+            className="btn btn--answer"
+            title="另存一份印上答案的試卷"
+            onClick={() => {
+              const stages = (stagesRef.current ?? []).slice(0, pageCount).filter((s): s is Konva.Stage => !!s)
+              exportStagesToPdf(stages, `${baseName}-答案.pdf`, true)
+            }}
+          >
+            <Icon name="pdf" />
+            匯出答案
+          </button>
+        </span>
       </div>
       <BackupDialog open={backupOpen} onClose={() => setBackupOpen(false)} />
     </motion.header>

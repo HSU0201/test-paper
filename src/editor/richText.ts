@@ -5,13 +5,13 @@ import { textAtoms } from './zhuyin'
 const OPEN = /^\{\{#([0-9a-fA-F]{6})\}\}/
 const CLOSE = '{{/}}'
 const ZY = /^\{\{z:([^|}]+)\|([^}]*)\}\}/
-const RUBY = /^\{\{y([br])?:([^|}]+)\|([^}]*)\}\}/
+const RUBY = /^\{\{y([brn])?:([^|}]+)\|([^}]*)\}\}/
 const TONE_MARK = new Set(['\u02c7', '\u02c9', '\u02ca', '\u02cb', '\u02d9'])
 
 export type RichChar = { ch: string; color?: string }
 
-/** char：國字＋注音。box：方格＋注音。reading：只留注音。 */
-export type RubyFace = 'char' | 'box' | 'reading'
+/** char：國字＋注音。box：方格＋注音。reading：只留注音。blank：國字＋注音留白，給學生書寫。 */
+export type RubyFace = 'char' | 'box' | 'reading' | 'blank'
 
 type Seg =
   | { kind: 'ch'; ch: string; color?: string }
@@ -21,12 +21,14 @@ type Seg =
 function rubyFace(mark: string | undefined): RubyFace {
   if (mark === 'b') return 'box'
   if (mark === 'r') return 'reading'
+  if (mark === 'n') return 'blank'
   return 'char'
 }
 
 function rubyMark(face: RubyFace): string {
   if (face === 'box') return 'yb'
   if (face === 'reading') return 'yr'
+  if (face === 'blank') return 'yn'
   return 'y'
 }
 
@@ -79,7 +81,7 @@ export function hasZhuyinMarkup(input: string): boolean {
 }
 
 export function hasRubyMarkup(input: string): boolean {
-  return /\{\{y[br]?:/.test(input)
+  return /\{\{y[brn]?:/.test(input)
 }
 
 export type InkAtom =
@@ -239,8 +241,9 @@ function rubyHtml(face: RubyFace, han: string, reading: string): string {
   const { letters, tone } = splitTone(reading)
   const lettersHtml = (letters.length ? letters : ['·']).map((ch) => escapeHtml(ch)).join('<br>')
   const toneHtml = tone ? `<span class="ruby__tone">${escapeHtml(tone)}</span>` : ''
-  const base = face === 'char' ? escapeHtml(han) : ''
-  return `<span class="ruby ruby--${face}" contenteditable="false" data-face="${face}" data-han="${escapeAttr(han)}" data-reading="${escapeAttr(reading)}"><span class="ruby__base">${base}</span><span class="ruby__ann"><span class="ruby__letters">${lettersHtml}</span>${toneHtml}</span></span>`
+  const base = face === 'char' || face === 'blank' ? escapeHtml(han) : ''
+  const title = face === 'blank' ? ' title="卷上只留空位，不印出注音"' : ''
+  return `<span class="ruby ruby--${face}" contenteditable="false"${title} data-face="${face}" data-han="${escapeAttr(han)}" data-reading="${escapeAttr(reading)}"><span class="ruby__base">${base}</span><span class="ruby__ann"><span class="ruby__letters">${lettersHtml}</span>${toneHtml}</span></span>`
 }
 
 function escapeHtml(s: string): string {
@@ -356,7 +359,7 @@ export function htmlToMarkup(root: HTMLElement): string {
       return
     }
     if (el.classList.contains('ruby')) {
-      const face = el.dataset.face === 'box' ? 'b' : el.dataset.face === 'reading' ? 'r' : ''
+      const face = el.dataset.face === 'box' ? 'b' : el.dataset.face === 'reading' ? 'r' : el.dataset.face === 'blank' ? 'n' : ''
       const han = (el.dataset.han ?? '').replace(/[|}]/g, '')
       const reading = (el.dataset.reading ?? '').replace(/[|}]/g, '')
       if (han) pushText(`{{y${face}:${han}|${reading}}}`, color)
@@ -514,7 +517,7 @@ export function revertAllZhuyin(input: string): string {
   return editZhuyin(input, 0, Number.MAX_SAFE_INTEGER, 'to-han')
 }
 
-export type RubyEdit = 'char' | 'box' | 'reading' | 'plain'
+export type RubyEdit = 'char' | 'box' | 'reading' | 'blank' | 'plain'
 
 /** 把畫面上 [start, end) 加上右側注音、改印法，或去掉注音。位置以印出來的字為準。 */
 export function editRuby(input: string, start: number, end: number, mode: RubyEdit): string {

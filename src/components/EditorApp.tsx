@@ -371,9 +371,7 @@ function EditorShell() {
                 <motion.div
                   key={i}
                   className={`canvas-page${state.activePage === i ? ' is-active' : ''}`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.32, delay: Math.min(i * 0.045, 0.22), ease: easeOut }}
+                  initial={false}
                   ref={(el) => {
                     pageElsRef.current[i] = el
                   }}

@@ -19,10 +19,17 @@ export type RubyMetrics = {
   letter: number
   pitch: number
   stack: number
+  /** 國字或方格的寬。方格是給手寫的正方形，比正文大。 */
   base: number
   mid: number
   width: number
+  /** 注音留白的虛線框。不是這種空格時為 0。 */
+  slotW: number
+  slotH: number
 }
+
+/** 學生要在裡面寫字，空格要比正文字大一圈。 */
+const WRITE = 1.72
 
 export function splitRubyReading(reading: string): { letters: string[]; tone: string } {
   const letters: string[] = []
@@ -34,19 +41,59 @@ export function splitRubyReading(reading: string): { letters: string[]; tone: st
   return { letters, tone }
 }
 
-/** 一格的寬度。方格和國字約一個字寬，注音在右側；只留注音時字位不佔寬，格與格仍分開。 */
+/** 一格的寬度。方格比正文大，注音留白的虛線框也要比印出來的注音高、寬。 */
 export function rubyAdvance(fontSize: number, face: RubyFace, reading: string): RubyMetrics {
   const split = splitRubyReading(reading)
   const letters = split.letters.length ? split.letters : ['·']
   const letter = fontSize * 0.48
   const pitch = letter * 1.05
   const stack = letters.length * pitch
-  const base = face === 'reading' ? 0 : fontSize
-  const mid = face === 'reading' ? 0 : fontSize * 0.12
+  const write = fontSize * WRITE
   const toneW = split.tone ? letter * 0.85 : 0
   const colW = letter * 1.05 + toneW
-  const tail = face === 'reading' ? fontSize * 0.62 : fontSize * 0.22
-  return { letters, tone: split.tone, letter, pitch, stack, base, mid, width: base + mid + colW + tail }
+  const base = face === 'box' ? write : face === 'reading' ? 0 : fontSize
+  const mid = face === 'reading' ? 0 : fontSize * (face === 'box' ? 0.24 : 0.2)
+  const slotW = face === 'blank' ? Math.max(fontSize * 1.45, colW + fontSize * 0.55) : 0
+  const slotH = face === 'blank' ? Math.max(write, stack + fontSize * 0.62) : 0
+  const rubyCol = face === 'blank' ? slotW : colW
+  const tail = face === 'reading' ? fontSize * 0.62 : fontSize * (face === 'blank' ? 0.3 : 0.36)
+  return {
+    letters,
+    tone: split.tone,
+    letter,
+    pitch,
+    stack,
+    base,
+    mid,
+    width: base + mid + rubyCol + tail,
+    slotW,
+    slotH,
+  }
+}
+
+/** 方格、國字、注音虛線框在一行裡的位置。畫卷和印答案都用這一份。 */
+export function rubyPlace(fontSize: number, lineStep: number, face: RubyFace, reading: string) {
+  const adv = rubyAdvance(fontSize, face, reading)
+  const hanH = face === 'box' ? adv.base : fontSize
+  const sideH = face === 'blank' ? adv.slotH : adv.stack
+  const blockH = Math.max(hanH, sideH)
+  const top = Math.max(0, (lineStep - blockH) / 2)
+  const pad = Math.max(1.25, fontSize * 0.08)
+  const baseY = top + (blockH - hanH) / 2
+  const sideY = top + (blockH - sideH) / 2
+  const colX = adv.base + adv.mid
+  return {
+    adv,
+    pad,
+    baseY,
+    sideY,
+    colX,
+    box:
+      face === 'box'
+        ? { x: pad, y: baseY + pad, w: Math.max(4, adv.base - pad * 2), h: Math.max(4, adv.base - pad * 2) }
+        : null,
+    blank: face === 'blank' ? { x: colX, y: sideY, w: adv.slotW, h: adv.slotH } : null,
+  }
 }
 
 type Unit =
@@ -68,7 +115,7 @@ export function layoutRubyRun(
   for (const atom of inkAtoms(input)) {
     if (atom.kind === 'ruby') {
       const adv = rubyAdvance(fontSize, atom.face, atom.reading)
-      tallest = Math.max(tallest, adv.stack, fontSize)
+      tallest = Math.max(tallest, adv.stack, adv.base, adv.slotH, fontSize)
       units.push({
         kind: 'ruby',
         face: atom.face,

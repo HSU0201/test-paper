@@ -18,6 +18,7 @@ import {
 } from 'react-konva'
 import { KonvaTextBlock } from './KonvaTextBlock'
 import { EDITOR_ONLY_NAME, HEADER_REF_PREFIX, HeaderItemsLayer, PageDecorLayer } from './PaperLayoutLayer'
+import { AnswerKeyLayer } from './AnswerKeyLayer'
 import { ExamFlowLayer } from './ExamFlowLayer'
 import { useHtmlImage } from './useHtmlImage'
 import { useEditor } from '../editor/EditorContext'
@@ -119,6 +120,21 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
       objectsRef.current = pageObjects
       layoutBoxesRef.current = [geometry.content, ...geometry.frames]
     }, [state, pageObjects, geometry])
+
+    const stageRef = useRef<Konva.Stage | null>(null)
+    const setStageRef = useCallback(
+      (node: Konva.Stage | null) => {
+        stageRef.current = node
+        if (typeof ref === 'function') ref(node)
+        else if (ref) ref.current = node
+      },
+      [ref],
+    )
+    useLayoutEffect(() => {
+      const stage = stageRef.current
+      if (!stage) return
+      stage.getLayers().forEach((layer) => layer.batchDraw())
+    })
 
     const transformerRef = useRef<Konva.Transformer>(null)
     const shapeRefs = useRef<Record<string, Konva.Node>>({})
@@ -270,7 +286,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
           }}
         >
           <Stage
-            ref={ref}
+            ref={setStageRef}
             width={pageW}
             height={pageH}
             onMouseDown={handleStageMouseDown}
@@ -412,6 +428,12 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                 }
                 return null
               })}
+              <AnswerKeyLayer
+                exam={state.exam}
+                blocks={flow.blocks}
+                page={pageIndex}
+                fontFamily={withBopomofoFont(state.paperFontFamily)}
+              />
               <Transformer
                 ref={transformerRef}
                 name={EDITOR_ONLY_NAME}

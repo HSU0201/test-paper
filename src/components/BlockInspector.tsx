@@ -169,6 +169,17 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
             onChange={(instruction) => set({ instruction })}
           />
         </div>
+        <div className="ui-field">
+          <span className="ui-field__label">閱讀短文</span>
+          <ColorField
+            ariaLabel="閱讀短文"
+            multiline
+            rows={4}
+            value={section.passage ?? ''}
+            placeholder="閱讀測驗把文章貼在這裡。會印在說明和題目之間，並加上外框。"
+            onChange={(passage) => set({ passage })}
+          />
+        </div>
       </PanelSection>
 
       <PanelSection title="文字樣式" description="只影響這一大題。全卷預設在左側「卷面」的「字級」。">
@@ -682,7 +693,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
             {hasFigureMark(q.stem)
               ? '題目裡的［圖］不會印在卷上，只代表圖片要插在這裡。可以剪到別的句子後面，半形的 [圖] 也有效。'
               : '圖片要出現在句子中間時，把游標點在那個位置，再按「插入圖片位置」。出現的［圖］不會印出來。'}
-            不想用這個標記，就直接在卷面上拖曳圖片。選取國字後可加上右側注音，再改成方格或只留注音。
+            不想用這個標記，就直接在卷面上拖曳圖片。選取國字後可加上右側注音，再改成方格、注音留白或只留注音。注音留白會印出國字，旁邊空出位置讓學生寫注音。
           </p>
         </div>
       </PanelSection>
@@ -846,7 +857,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
         />
       </PanelSection>
 
-      <PanelSection title="答案" description="只存在檔案中，不會印在試卷上。">
+      <PanelSection title="答案" description="編輯時不印在卷面上。「匯出試卷」不含答案；「匯出答案」會另外存一份印上答案的 PDF。">
         <input
           className="ui-input"
           value={q.answer}

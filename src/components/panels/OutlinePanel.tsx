@@ -1,5 +1,6 @@
 import { motion } from 'motion/react'
 import { useEffect, useState, type DragEvent, type KeyboardEvent } from 'react'
+import { SAMPLE_SUBJECTS } from '../../editor/chineseSample'
 import { useEditor } from '../../editor/EditorContext'
 import { hasRubyMarkup, hasZhuyinMarkup, plainText } from '../../editor/richText'
 import {
@@ -119,14 +120,37 @@ export function OutlinePanel() {
         />
       </div>
 
-      {exam.sections.length === 0 ? (
-        <div className="outline__empty">
-          <p>還沒有任何大題。可以先放入一份範例，看看選項排列、外框、底線、直式表格和圖片。</p>
-          <button type="button" className="btn btn--primary btn--block" onClick={() => dispatch({ type: 'LOAD_EXAMPLE' })}>
-            放入排版範例
-          </button>
+      <div className="outline__examples">
+        <span className="ui-field__label">範例考卷</span>
+        <div className="outline__example-row">
+          {SAMPLE_SUBJECTS.map((sample) => (
+            <button
+              key={sample.id}
+              type="button"
+              className={`btn btn--ghost${sample.ready ? '' : ' is-disabled'}`}
+              disabled={!sample.ready}
+              title={sample.ready ? `放入${sample.label}範例，取代目前的題目` : `${sample.label}範例接著做`}
+              onClick={() => {
+                if (!sample.ready) return
+                if (
+                  exam.sections.length > 0 &&
+                  !window.confirm(`放入${sample.label}範例會取代目前的題目，頁首評量名稱也會改成這科。要繼續嗎？`)
+                ) {
+                  return
+                }
+                dispatch({ type: 'LOAD_EXAMPLE', subject: sample.id })
+              }}
+            >
+              {sample.label}
+            </button>
+          ))}
         </div>
-      ) : null}
+        <p className="outline__example-hint">
+          {exam.sections.length === 0
+            ? '先放入國文範例。裡面有基礎、詞彙、文法、寫作共十四種題型，點開題目可以看怎麼寫。'
+            : '國文範例含十四種題型。數學和自然接著做。'}
+        </p>
+      </div>
 
       <ol className="outline__sections">
         {exam.sections.map((s, si) => {
@@ -171,6 +195,7 @@ export function OutlinePanel() {
                 {sectionRowSize(s) === 2 ? <span className="outline-row__badge">兩題</span> : null}
                 {sectionRowSize(s) === 'all' ? <span className="outline-row__badge">同列</span> : null}
                 {s.zhuyin ? <span className="outline-row__badge">注音</span> : null}
+                {plainText(s.passage ?? '').trim() ? <span className="outline-row__badge">短文</span> : null}
                 {pageOf.has(s.id) ? <span className="outline-row__page">P{pageOf.get(s.id)! + 1}</span> : null}
                 <span className="outline-row__score">{sectionScore(s)} 分</span>
               </div>

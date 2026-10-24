@@ -213,21 +213,77 @@ function buildNotice(text: string, w: number, c: Ctx): Built {
   }
 }
 
+function pushFlowText(
+  runs: FlowRun[],
+  key: string,
+  text: string,
+  x: number,
+  y: number,
+  width: number,
+  style: TextStyle,
+  lineHeight: number,
+  m: MeasureFn,
+): number {
+  if (hasRubyMarkup(text)) {
+    const laid = layoutRubyRun(text, width, style.fontSize, lineHeight, (sample) =>
+      m(sample, 10000, style, lineHeight).naturalWidth,
+    )
+    runs.push({
+      key,
+      x,
+      y,
+      width,
+      height: laid.height,
+      text: plainText(text),
+      style,
+      lineHeight,
+      ink: laid.pieces,
+      inkStep: laid.step,
+      lineCount: laid.lineCount,
+    })
+    return laid.height
+  }
+  const painted = paintText(text)
+  const height = runHeight(painted.text, width, style, lineHeight, m)
+  runs.push({
+    key,
+    x,
+    y,
+    width,
+    text: painted.text,
+    colors: painted.colors,
+    style,
+    lineHeight,
+  })
+  return height
+}
+
 function buildSectionHead(s: Section, index: number, w: number, c: Ctx): Built {
   const { st, m, mt } = c
   const heading = resolveStyle(st.heading, s.headingStyle)
   const instruction = resolveStyle(st.instruction, s.instructionStyle)
   const runs: FlowRun[] = []
+  const rules: FlowRule[] = []
   const title = paintText(`${toChineseNumeral(index + 1)}、${s.title}${sectionScoreNote(s)}`)
   runs.push({ key: 'title', x: 0, y: 0, width: w, text: title.text, colors: title.colors, style: heading, lineHeight: mt.lineHeight })
   let h = runHeight(title.text, w, heading, mt.lineHeight, m)
   if (plainText(s.instruction).trim()) {
     h += 2
-    const inst = paintText(s.instruction)
-    runs.push({ key: 'inst', x: 0, y: h, width: w, text: inst.text, colors: inst.colors, style: instruction, lineHeight: mt.lineHeight })
-    h += runHeight(inst.text, w, instruction, mt.lineHeight, m)
+    h += pushFlowText(runs, 'inst', s.instruction, 0, h, w, instruction, mt.lineHeight, m)
   }
-  return { height: h + 4, runs, rules: [], images: [] }
+  const passage = (s.passage ?? '').trim()
+  if (plainText(passage).trim()) {
+    h += 8
+    const pad = 8
+    const inner = Math.max(40, w - pad * 2)
+    const textH = pushFlowText(runs, 'passage', passage, pad, h + pad, inner, st.body, mt.lineHeight, m)
+    const boxH = textH + pad * 2
+    for (const rule of boxRules(w, boxH)) {
+      rules.push({ ...rule, key: `passage-${rule.key}`, y1: rule.y1 + h, y2: rule.y2 + h })
+    }
+    h += boxH
+  }
+  return { height: h + 4, runs, rules, images: [] }
 }
 
 function figureSize(c: Ctx, assetId: string, maxW: number, ratio: number) {
@@ -1134,7 +1190,11 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     if (it.kind === 'section' && !atStart()) {
       const fh = frame().h
       const title = `${sectionHeading(it.section, it.index)}${sectionScoreNote(it.section)}`
-      const headW = textWidth(title, heading.fontSize, fh) + (plainText(it.section.instruction).trim() ? textWidth(it.section.instruction, instruction.fontSize, fh) : 0)
+      const passageText = plainText(it.section.passage ?? '').trim()
+      const headW =
+        textWidth(title, heading.fontSize, fh) +
+        (plainText(it.section.instruction).trim() ? textWidth(it.section.instruction, instruction.fontSize, fh) : 0) +
+        (passageText ? textWidth(passageText, st.body.fontSize, fh) : 0)
       const follower = items[i + 1]
       const followerSize = follower?.kind === 'question' ? resolveStyle(st.body, follower.question.bodyStyle).fontSize : st.body.fontSize
       const oneCol = colPitchOf(followerSize)
@@ -1169,6 +1229,10 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
       if (plainText(it.section.instruction).trim()) {
         closeOpen()
         write(it.section.instruction.trim(), instruction, 'inst')
+      }
+      if (plainText(it.section.passage ?? '').trim()) {
+        closeOpen()
+        write(it.section.passage.trim(), st.body, 'passage')
       }
       continue
     }

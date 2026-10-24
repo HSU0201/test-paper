@@ -44,6 +44,7 @@ const TW: Record<string, string[]> = {
   她們: ['ta1', 'men0'],
   它們: ['ta1', 'men0'],
   謝謝: ['xie4', 'xie0'],
+  美麗: ['mei3', 'li4'],
 }
 
 const INITIALS = ['zh', 'ch', 'sh', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'z', 'c', 's']
