@@ -3,7 +3,7 @@ import { Group, Image as KonvaImage, Line, Rect, Text } from 'react-konva'
 import type { FlowFrame, FlowImage, FlowRun, PlacedBlock } from '../editor/flowLayout'
 import { FLOW_WRAP, measureText } from '../editor/konvaMeasure'
 import type { EditorAction } from '../editor/reducer'
-import { layoutRichLines, type RubyFace } from '../editor/richText'
+import { fontStyleFor, layoutRichLines, type RubyFace,textDecorationFor } from '../editor/richText'
 import { rubyPlace } from '../editor/rubyLayout'
 import { EDITOR_FLAG, EDITOR_SELECTION } from '../editor/theme'
 import { needsManualWrap } from '../editor/zhuyin'
@@ -156,6 +156,7 @@ function RubyCluster({
   fontSize,
   fontFamily,
   hanBold,
+  hanDeco,
   fill,
   face,
   han,
@@ -167,6 +168,7 @@ function RubyCluster({
   fontSize: number
   fontFamily: string
   hanBold: string
+  hanDeco: string
   fill: string
   face: RubyFace
   han: string
@@ -195,7 +197,8 @@ function RubyCluster({
           text={han}
           fontSize={fontSize}
           fontFamily={fontFamily}
-          fontStyle={hanBold}
+          fontStyle={fontStyleFor(hanBold === 'bold' || hanBold === 'italic bold', hanDeco)}
+          textDecoration={textDecorationFor(hanDeco) || undefined}
           fill={fill}
           listening={false}
         />
@@ -276,6 +279,7 @@ function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
                 fontSize={r.style.fontSize}
                 fontFamily={fontFamily}
                 hanBold={fontStyle}
+                hanDeco={p.deco || ''}
                 fill={fill}
                 face={p.ruby.face}
                 han={p.ruby.han}
@@ -283,6 +287,7 @@ function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
               />
             )
           }
+          const mark = fontStyleFor(!!r.style.bold, p.deco || '')
           return (
             <Text
               key={i}
@@ -293,7 +298,8 @@ function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
               text={p.text}
               fontSize={r.style.fontSize}
               fontFamily={fontFamily}
-              fontStyle={fontStyle}
+              fontStyle={mark}
+              textDecoration={textDecorationFor(p.deco || '') || undefined}
               fill={fill}
               verticalAlign="middle"
               wrap="none"
@@ -307,14 +313,16 @@ function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
   const base = r.placeholder ? '#94a3b8' : r.style.fill || '#000000'
   const fontStyle = r.style.bold ? 'bold' : 'normal'
   const step = r.style.fontSize * r.lineHeight
-  if (r.vertical && r.colors?.some(Boolean)) {
+  const marked = !!r.decos?.some(Boolean)
+  if (r.vertical && (r.colors?.some(Boolean) || marked)) {
     const glyphs = r.text.split('\n')
-    const groups: { text: string; color: string; start: number }[] = []
+    const groups: { text: string; color: string; deco: string; start: number }[] = []
     glyphs.forEach((g, i) => {
       const color = r.colors?.[i] || base
+      const deco = r.decos?.[i] || ''
       const last = groups[groups.length - 1]
-      if (last && last.color === color) last.text += `\n${g}`
-      else groups.push({ text: g, color, start: i })
+      if (last && last.color === color && last.deco === deco) last.text += `\n${g}`
+      else groups.push({ text: g, color, deco, start: i })
     })
     return (
       <Group>
@@ -329,7 +337,8 @@ function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
             text={g.text}
             fontSize={r.style.fontSize}
             fontFamily={fontFamily}
-            fontStyle={fontStyle}
+            fontStyle={fontStyleFor(!!r.style.bold, g.deco)}
+            textDecoration={textDecorationFor(g.deco) || undefined}
             fill={g.color}
             align="center"
             lineHeight={r.lineHeight}
@@ -341,17 +350,24 @@ function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
     )
   }
   const manual = !r.vertical && needsManualWrap(r.text)
-  if (!r.vertical && (r.colors?.some(Boolean) || manual)) {
-    const widthOf = (sample: string) => measureText(fontFamily, sample, 10000, r.style, r.lineHeight).naturalWidth
-    const pieces = layoutRichLines(r.text, r.colors, r.width, widthOf)
+  if (!r.vertical && (r.colors?.some(Boolean) || marked || manual)) {
+    const widthOf = (sample: string, deco = '') =>
+      measureText(
+        fontFamily,
+        sample,
+        10000,
+        { ...r.style, bold: !!r.style.bold || deco.includes('b'), italic: deco.includes('i') },
+        r.lineHeight,
+      ).naturalWidth
+    const pieces = layoutRichLines(r.text, r.colors, r.width, widthOf, r.decos)
     const lineWidth = new Map<number, number>()
-    if (manual && (r.align === 'center' || r.align === 'right')) {
+    if (r.align === 'center' || r.align === 'right') {
       for (const p of pieces) {
-        lineWidth.set(p.line, Math.max(lineWidth.get(p.line) ?? 0, p.x + widthOf(p.text)))
+        lineWidth.set(p.line, Math.max(lineWidth.get(p.line) ?? 0, p.x + widthOf(p.text, p.deco)))
       }
     }
     const shift = (line: number) => {
-      if (!manual || !r.align || r.align === 'left') return 0
+      if (!r.align || r.align === 'left') return 0
       const used = lineWidth.get(line) ?? 0
       return r.align === 'center' ? Math.max(0, (r.width - used) / 2) : Math.max(0, r.width - used)
     }
@@ -366,7 +382,8 @@ function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
             text={p.text}
             fontSize={r.style.fontSize}
             fontFamily={fontFamily}
-            fontStyle={fontStyle}
+            fontStyle={fontStyleFor(!!r.style.bold, p.deco)}
+            textDecoration={textDecorationFor(p.deco) || undefined}
             fill={p.color || base}
             wrap="none"
             listening={false}

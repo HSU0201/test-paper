@@ -134,6 +134,25 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
     onChange(next)
   }
 
+  const applyFormat = (command: 'bold' | 'italic' | 'underline' | 'strikeThrough') => {
+    const el = ref.current
+    const range = rangeRef.current
+    if (!el || !range || range.collapsed) {
+      setMsg('請先在文字裡選取要設定的字')
+      return
+    }
+    setMsg(null)
+    el.focus()
+    const sel = window.getSelection()
+    sel?.removeAllRanges()
+    sel?.addRange(range)
+    document.execCommand('styleWithCSS', false, 'false')
+    document.execCommand(command)
+    document.execCommand('styleWithCSS', false, 'true')
+    emit()
+    saveSel()
+  }
+
   const apply = (color: string) => {
     const el = ref.current
     const range = rangeRef.current
@@ -207,6 +226,20 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
           <span className="visually-hidden">自訂顏色</span>
           <input type="color" defaultValue="#d92d20" onChange={(e) => apply(e.target.value)} />
         </label>
+        <span className="color-field__format" role="group" aria-label="文字樣式">
+          <button type="button" className="text-btn is-bold" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('bold')}>
+            粗體
+          </button>
+          <button type="button" className="text-btn is-italic" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('italic')}>
+            斜體
+          </button>
+          <button type="button" className="text-btn is-underline" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('underline')}>
+            底線
+          </button>
+          <button type="button" className="text-btn is-strike" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('strikeThrough')}>
+            刪除線
+          </button>
+        </span>
         <span className="color-field__actions">
           <button
             type="button"

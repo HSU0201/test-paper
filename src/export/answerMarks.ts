@@ -194,20 +194,20 @@ function horizontalChoiceRing(
   if (at < 0) return null
   const fontSize = run.style.fontSize
   const step = fontSize * run.lineHeight
-  const widthOf = (sample: string) => charWidth(fontFamily, run, sample)
+  const widthOf = (sample: string, deco = '') => charWidth(fontFamily, run, sample, deco)
   const labelW = widthOf(label)
-  const manual = needsManualWrap(run.text) || !!run.colors?.some(Boolean)
+  const manual = needsManualWrap(run.text) || !!run.colors?.some(Boolean) || !!run.decos?.some(Boolean)
   let originX: number
   let centerY: number
   if (manual) {
-    const pieces = layoutRichLines(run.text, run.colors, run.width, widthOf)
+    const pieces = layoutRichLines(run.text, run.colors, run.width, widthOf, run.decos)
     let seen = 0
     let hit: { x: number; line: number } | null = null
     for (const piece of pieces) {
       const start = seen
       seen += piece.text.length
       if (at < start || at + label.length > seen) continue
-      hit = { x: piece.x + widthOf(piece.text.slice(0, at - start)), line: piece.line }
+      hit = { x: piece.x + widthOf(piece.text.slice(0, at - start), piece.deco), line: piece.line }
       break
     }
     if (!hit) return null
@@ -247,14 +247,14 @@ function horizontalChoiceRing(
 
 function manualLineShift(
   run: FlowRun,
-  pieces: { text: string; x: number; line: number }[],
-  widthOf: (sample: string) => number,
+  pieces: { text: string; x: number; line: number; deco?: string }[],
+  widthOf: (sample: string, deco?: string) => number,
   line: number,
 ): number {
   if (!run.align || run.align === 'left') return 0
   let used = 0
   for (const piece of pieces) {
-    if (piece.line === line) used = Math.max(used, piece.x + widthOf(piece.text))
+    if (piece.line === line) used = Math.max(used, piece.x + widthOf(piece.text, piece.deco))
   }
   return run.align === 'center' ? Math.max(0, (run.width - used) / 2) : Math.max(0, run.width - used)
 }
@@ -266,9 +266,15 @@ const PAREN_OPEN = new Set(['（', '('])
 const PAREN_CLOSE = new Set(['）', ')'])
 const BLANK_SPACE = new Set([' ', '　', '\t'])
 
-function charWidth(fontFamily: string, run: FlowRun, sample: string): number {
+function charWidth(fontFamily: string, run: FlowRun, sample: string, deco = ''): number {
   if (!sample) return 0
-  return measureText(fontFamily, sample, 10000, run.style, run.lineHeight).naturalWidth
+  return measureText(
+    fontFamily,
+    sample,
+    10000,
+    { ...run.style, bold: !!run.style.bold || deco.includes('b'), italic: deco.includes('i') },
+    run.lineHeight,
+  ).naturalWidth
 }
 
 function lineShift(run: FlowRun, line: number): number {
@@ -293,9 +299,9 @@ function stemGlyphs(run: FlowRun, page: number, fontFamily: string): Glyph[] {
       for (const ch of piece.text) {
         glyphs.push({
           ch,
-          x: origin + charWidth(fontFamily, run, consumed),
+          x: origin + charWidth(fontFamily, run, consumed, piece.deco),
           y,
-          w: charWidth(fontFamily, run, ch),
+          w: charWidth(fontFamily, run, ch, piece.deco),
           h: fontSize,
           fontSize,
           page,
@@ -316,7 +322,7 @@ function stemGlyphs(run: FlowRun, page: number, fontFamily: string): Glyph[] {
       page,
     }))
   }
-  const pieces = layoutRichLines(run.text, run.colors, run.width, (sample) => charWidth(fontFamily, run, sample))
+  const pieces = layoutRichLines(run.text, run.colors, run.width, (sample, deco) => charWidth(fontFamily, run, sample, deco), run.decos)
   const glyphs: Glyph[] = []
   for (const piece of pieces) {
     let consumed = ''
@@ -324,9 +330,9 @@ function stemGlyphs(run: FlowRun, page: number, fontFamily: string): Glyph[] {
     for (const ch of piece.text) {
       glyphs.push({
         ch,
-        x: run.x + piece.x + charWidth(fontFamily, run, consumed),
+        x: run.x + piece.x + charWidth(fontFamily, run, consumed, piece.deco),
         y,
-        w: charWidth(fontFamily, run, ch),
+        w: charWidth(fontFamily, run, ch, piece.deco),
         h: fontSize,
         fontSize,
         page,

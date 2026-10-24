@@ -1,6 +1,7 @@
 import Konva from 'konva'
 
 import type { MeasureFn, TextStyle } from './flowLayout'
+import { fontStyleFor } from './richText'
 
 /** 以字元換行：中文句子內的空格（如「30 位」）不應成為換行點 */
 export const FLOW_WRAP = 'char'
@@ -15,7 +16,8 @@ export function measureText(
   style: TextStyle,
   lineHeight: number,
 ) {
-  const key = `${fontFamily}|${width}|${style.fontSize}|${style.bold ? 1 : 0}|${lineHeight}|${text}`
+  const fontStyle = fontStyleFor(!!style.bold, style.italic ? 'i' : '')
+  const key = `${fontFamily}|${width}|${style.fontSize}|${fontStyle}|${lineHeight}|${text}`
   const hit = cache.get(key)
   if (hit) return hit
   probe ??= new Konva.Text({ wrap: FLOW_WRAP })
@@ -23,7 +25,7 @@ export function measureText(
     text,
     fontFamily,
     fontSize: style.fontSize,
-    fontStyle: style.bold ? 'bold' : 'normal',
+    fontStyle,
     lineHeight,
     width: undefined,
   })
@@ -55,7 +57,7 @@ export function lineInkCenter(
     text: sample || 'M',
     fontFamily,
     fontSize: style.fontSize,
-    fontStyle: style.bold ? 'bold' : 'normal',
+    fontStyle: fontStyleFor(!!style.bold, style.italic ? 'i' : ''),
     lineHeight,
   })
   if (Konva.legacyTextRendering) return step / 2

@@ -7,6 +7,7 @@ const TONE_MARK = new Set(['\u02c7', '\u02c9', '\u02ca', '\u02cb', '\u02d9'])
 export type InkPiece = {
   text: string
   color: string
+  deco: string
   x: number
   line: number
   width: number
@@ -97,15 +98,15 @@ export function rubyPlace(fontSize: number, lineStep: number, face: RubyFace, re
 }
 
 type Unit =
-  | { kind: 'text'; text: string; color: string; width: number }
-  | { kind: 'ruby'; face: RubyFace; han: string; reading: string; color: string; width: number }
+  | { kind: 'text'; text: string; color: string; deco: string; width: number }
+  | { kind: 'ruby'; face: RubyFace; han: string; reading: string; color: string; deco: string; width: number }
 
 export function layoutRubyRun(
   input: string,
   width: number,
   fontSize: number,
   lineHeight: number,
-  measure: (sample: string) => number,
+  measure: (sample: string, deco?: string) => number,
 ): { pieces: InkPiece[]; height: number; lineCount: number; step: number } {
   if (!hasRubyMarkup(input)) {
     return { pieces: [], height: 0, lineCount: 0, step: fontSize * lineHeight }
@@ -122,6 +123,7 @@ export function layoutRubyRun(
         han: atom.han,
         reading: atom.reading,
         color: atom.color ?? '',
+        deco: atom.deco ?? '',
         width: adv.width,
       })
       continue
@@ -131,7 +133,8 @@ export function layoutRubyRun(
         kind: 'text',
         text: piece,
         color: atom.color ?? '',
-        width: piece === '\n' ? 0 : measure(piece),
+        deco: atom.deco ?? '',
+        width: piece === '\n' ? 0 : measure(piece, atom.deco),
       })
     }
   }
@@ -141,11 +144,12 @@ export function layoutRubyRun(
   let x = 0
   let buf = ''
   let bufColor = ''
+  let bufDeco = ''
   let bufX = 0
   let bufW = 0
   const flush = () => {
     if (!buf) return
-    pieces.push({ text: buf, color: bufColor, x: bufX, line, width: bufW })
+    pieces.push({ text: buf, color: bufColor, deco: bufDeco, x: bufX, line, width: bufW })
     buf = ''
     bufW = 0
   }
@@ -165,6 +169,7 @@ export function layoutRubyRun(
       pieces.push({
         text: '',
         color: unit.color,
+        deco: unit.deco,
         x,
         line,
         width: unit.width,
@@ -173,10 +178,11 @@ export function layoutRubyRun(
       x += unit.width
       continue
     }
-    if (buf && unit.color !== bufColor) flush()
+    if (buf && (unit.color !== bufColor || unit.deco !== bufDeco)) flush()
     if (!buf) {
       bufX = x
       bufColor = unit.color
+      bufDeco = unit.deco
     }
     buf += unit.text
     bufW += unit.width

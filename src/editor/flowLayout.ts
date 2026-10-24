@@ -26,11 +26,11 @@ import {
 } from '../types/exam'
 import { type SpacingSettings,toVerticalGlyph } from '../types/layout'
 import type { Box } from './bounds'
-import { hasRubyMarkup, paintText, plainText, richChars } from './richText'
-import { type InkPiece,layoutRubyRun } from './rubyLayout'
+import { hasRubyMarkup, layoutRichLines, paintText, plainText, richChars } from './richText'
+import { type InkPiece, layoutRubyRun } from './rubyLayout'
 import { clusterUnits, needsManualWrap, textAtoms } from './zhuyin'
 
-export type TextStyle = { fontSize: number; fill: string; bold?: boolean }
+export type TextStyle = { fontSize: number; fill: string; bold?: boolean; italic?: boolean }
 
 export type FlowStyles = {
   heading: TextStyle
@@ -57,6 +57,8 @@ export type FlowRun = {
   vertical?: boolean
   /** 與 text 的每個字對應；空字串表示用 style.fill（黑色）。直排時不含換行。 */
   colors?: string[]
+  /** 與 text 的每個字對應。b 粗體、i 斜體、u 底線、s 刪除線，可並用。 */
+  decos?: string[]
   height?: number
   /** 直排題號佔用的前幾個字，不計入文中插入位置 */
   stemFrom?: number
@@ -146,7 +148,7 @@ function resolveStyle(base: TextStyle, over?: FontOverride): TextStyle {
 }
 
 function sameStyle(a: TextStyle, b: TextStyle) {
-  return a.fontSize === b.fontSize && a.fill === b.fill && !!a.bold === !!b.bold
+  return a.fontSize === b.fontSize && a.fill === b.fill && !!a.bold === !!b.bold && !!a.italic === !!b.italic
 }
 
 type Metrics = { lineHeight: number; questionGap: number; sectionGap: number }
@@ -189,7 +191,7 @@ function buildNotice(text: string, w: number, c: Ctx): Built {
   const painted = paintText(raw || '（請輸入提示）')
   const padX = 12
   const inner = Math.max(40, w - padX * 2)
-  const textH = runHeight(painted.text, inner, body, c.mt.lineHeight, c.m)
+  const textH = paintedHeight(painted.text, painted.decos, inner, body, c.mt.lineHeight, c.m)
   const height = Math.max(textH + 28, Math.round(body.fontSize * c.mt.lineHeight * 2.4))
   return {
     height,
@@ -202,6 +204,7 @@ function buildNotice(text: string, w: number, c: Ctx): Built {
         height: textH,
         text: painted.text,
         colors: raw ? painted.colors : undefined,
+        decos: raw ? painted.decos : undefined,
         style: body,
         lineHeight: c.mt.lineHeight,
         align: 'center',
@@ -225,8 +228,8 @@ function pushFlowText(
   m: MeasureFn,
 ): number {
   if (hasRubyMarkup(text)) {
-    const laid = layoutRubyRun(text, width, style.fontSize, lineHeight, (sample) =>
-      m(sample, 10000, style, lineHeight).naturalWidth,
+    const laid = layoutRubyRun(text, width, style.fontSize, lineHeight, (sample, deco = '') =>
+      m(sample, 10000, { ...style, bold: !!style.bold || deco.includes('b'), italic: deco.includes('i') }, lineHeight).naturalWidth,
     )
     runs.push({
       key,
@@ -244,7 +247,7 @@ function pushFlowText(
     return laid.height
   }
   const painted = paintText(text)
-  const height = runHeight(painted.text, width, style, lineHeight, m)
+  const height = paintedHeight(painted.text, painted.decos, width, style, lineHeight, m)
   runs.push({
     key,
     x,
@@ -252,6 +255,7 @@ function pushFlowText(
     width,
     text: painted.text,
     colors: painted.colors,
+    decos: painted.decos,
     style,
     lineHeight,
   })
@@ -265,8 +269,8 @@ function buildSectionHead(s: Section, index: number, w: number, c: Ctx): Built {
   const runs: FlowRun[] = []
   const rules: FlowRule[] = []
   const title = paintText(`${toChineseNumeral(index + 1)}、${s.title}${sectionScoreNote(s)}`)
-  runs.push({ key: 'title', x: 0, y: 0, width: w, text: title.text, colors: title.colors, style: heading, lineHeight: mt.lineHeight })
-  let h = runHeight(title.text, w, heading, mt.lineHeight, m)
+  runs.push({ key: 'title', x: 0, y: 0, width: w, text: title.text, colors: title.colors, decos: title.decos, style: heading, lineHeight: mt.lineHeight })
+  let h = paintedHeight(title.text, title.decos, w, heading, mt.lineHeight, m)
   if (plainText(s.instruction).trim()) {
     h += 2
     h += pushFlowText(runs, 'inst', s.instruction, 0, h, w, instruction, mt.lineHeight, m)
@@ -331,6 +335,28 @@ function runHeight(text: string, width: number, style: TextStyle, lineHeight: nu
   return Math.max(1, lines.length) * style.fontSize * lineHeight
 }
 
+/** 局部粗體或斜體會改寬度，行高要照實際換行，不能整段用正體量。 */
+function paintedHeight(
+  text: string,
+  decos: string[] | undefined,
+  width: number,
+  style: TextStyle,
+  lineHeight: number,
+  m: MeasureFn,
+): number {
+  if (!decos?.some((mark) => mark.includes('b') || mark.includes('i'))) return runHeight(text, width, style, lineHeight, m)
+  const pieces = layoutRichLines(
+    text,
+    undefined,
+    width,
+    (sample, deco = '') =>
+      m(sample, 10000, { ...style, bold: !!style.bold || deco.includes('b'), italic: deco.includes('i') }, lineHeight).naturalWidth,
+    decos,
+  )
+  const lines = Math.max(1, ...pieces.map((piece) => piece.line + 1))
+  return lines * style.fontSize * lineHeight
+}
+
 function stripMarks(stem: string) {
   return stem.replace(/[[［]\s*圖\s*[\]］]/g, '')
 }
@@ -338,7 +364,7 @@ function stripMarks(stem: string) {
 /** 配分接在題目最後，並先收掉題幹裡還沒關的上色，避免分數被塗成同一色。 */
 function stemWithScore(stem: string, scoreMark: string): string {
   if (!scoreMark) return stem
-  return stem ? `${stem}{{/}}${scoreMark}` : stem
+  return stem ? `${stem}{{/*}}{{/}}${scoreMark}` : stem
 }
 
 function buildQuestion(
@@ -379,10 +405,10 @@ function buildQuestion(
     }
   }
 
-  const pushStem = (text: string, key: string, y: number, placeholder = false, colors?: string[], singleLine = false) => {
-    if (!placeholder && !colors && hasRubyMarkup(text)) {
-      const laid = layoutRubyRun(text, stemW, body.fontSize, mt.lineHeight, (sample) =>
-        m(sample, 10000, body, mt.lineHeight).naturalWidth,
+  const pushStem = (text: string, key: string, y: number, placeholder = false, colors?: string[], singleLine = false, decos?: string[]) => {
+    if (!placeholder && !colors && !decos && hasRubyMarkup(text)) {
+      const laid = layoutRubyRun(text, stemW, body.fontSize, mt.lineHeight, (sample, deco = '') =>
+        m(sample, 10000, { ...body, bold: !!body.bold || deco.includes('b'), italic: deco.includes('i') }, mt.lineHeight).naturalWidth,
       )
       runs.push({
         key,
@@ -399,16 +425,18 @@ function buildQuestion(
       })
       return laid.height
     }
-    const painted = placeholder ? { text, colors: undefined as string[] | undefined } : paintText(text)
-    const height = runHeight(painted.text, stemW, body, mt.lineHeight, m)
+    const painted = placeholder ? { text, colors: undefined as string[] | undefined, decos: undefined as string[] | undefined } : paintText(text)
+    const usedDecos = decos ?? painted.decos
+    const height = paintedHeight(colors || decos ? text : painted.text, usedDecos, stemW, body, mt.lineHeight, m)
     runs.push({
       key,
       x: indent,
       y,
       width: stemW,
       height,
-      text: colors ? text : painted.text,
+      text: colors || decos ? text : painted.text,
       colors: colors ?? painted.colors,
+      decos: usedDecos,
       style: body,
       lineHeight: mt.lineHeight,
       placeholder,
@@ -459,7 +487,8 @@ function buildQuestion(
       char += line.length
       if (!line) continue
       const colors = painted.colors?.slice(start, char)
-      h += pushStem(line, lineNo === 0 ? 'stem' : `stem-${lineNo}`, h, false, colors, true)
+      const decos = painted.decos?.slice(start, char)
+      h += pushStem(line, lineNo === 0 ? 'stem' : `stem-${lineNo}`, h, false, colors, true, decos)
       lineNo += 1
       placeAt(lineNo)
     }
@@ -521,10 +550,11 @@ function buildQuestion(
           width: textW,
           text: labels[i].text,
           colors: labels[i].colors,
+          decos: labels[i].decos,
           style: body,
           lineHeight: mt.lineHeight,
         })
-        let cellH = runHeight(labels[i].text, textW, body, mt.lineHeight, m)
+        let cellH = paintedHeight(labels[i].text, labels[i].decos, textW, body, mt.lineHeight, m)
         if (ch.image && hasImage(ch)) {
           const inline = !plainText(ch.text).trim()
           const labelW = m(`${choiceLabel(i)} `, 10000, body, mt.lineHeight).naturalWidth
@@ -647,6 +677,7 @@ function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): Pa
         width: Math.max(24, w - chrome.pad - ax),
         text: painted.text,
         colors: painted.colors,
+        decos: painted.decos,
         style: body,
         lineHeight: c.mt.lineHeight,
       })
@@ -912,7 +943,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
   }
 
   type Open = {
-    chars: { g: string; color?: string }[]
+    chars: { g: string; color?: string; deco?: string }[]
     style: TextStyle
     key: string
     placeholder: boolean
@@ -933,6 +964,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     const step = open.style.fontSize * lh
     const height = open.chars.length * step
     const colors = open.chars.some((c) => c.color) ? open.chars.map((c) => c.color ?? '') : undefined
+    const decos = open.chars.some((c) => c.deco) ? open.chars.map((c) => c.deco ?? '') : undefined
     const skip = Math.min(pendingSkip, open.chars.length)
     pendingSkip -= skip
     acc.runs.push({
@@ -943,6 +975,7 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
       height,
       text: open.chars.map((c) => c.g).join('\n'),
       colors,
+      decos,
       style: open.style,
       lineHeight: lh,
       vertical: true,
@@ -995,11 +1028,11 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     write(text, style, key, placeholder)
   }
 
-  const pushGlyph = (unit: { ch: string; color?: string }, style: TextStyle, key: string, placeholder: boolean) => {
+  const pushGlyph = (unit: { ch: string; color?: string; deco?: string }, style: TextStyle, key: string, placeholder: boolean) => {
     if (open && (!sameStyle(open.style, style) || !!open.placeholder !== placeholder || open.chars.length >= open.cap)) closeOpen()
     if (!open) startOpen(style, key, placeholder)
     const col = open
-    if (col) col.chars.push({ g: toVerticalGlyph(unit.ch), color: unit.color })
+    if (col) col.chars.push({ g: toVerticalGlyph(unit.ch), color: unit.color, deco: unit.deco })
   }
 
   const write = (text: string, style: TextStyle, key: string, placeholder = false, stemFrom?: number) => {

@@ -6,7 +6,7 @@ import type Konva from 'konva'
 import type { Box } from '../editor/bounds'
 import { measureText } from '../editor/konvaMeasure'
 import type { EditorAction } from '../editor/reducer'
-import { layoutRichLines, paintText, plainText } from '../editor/richText'
+import { fontStyleFor, layoutRichLines, paintText, plainText, textDecorationFor } from '../editor/richText'
 import { snapBoxPosition, type SnapGuides } from '../editor/snap'
 import { EDITOR_GUIDE } from '../editor/theme'
 import { type HeaderItem, headerItemHeight, headerItemText, type HeaderLayout, type PageGeometry,titleBandItems, verticalHeaderText } from '../types/layout'
@@ -46,14 +46,18 @@ function HeaderInk({
 }: {
   box: Box
   item: HeaderItem
-  painted: { text: string; colors?: string[] }
+  painted: { text: string; colors?: string[]; decos?: string[] }
   vertical: boolean
   fontFamily: string
 }) {
-  const fontStyle = item.bold ? 'bold' : 'normal'
-  const widthOf = (sample: string) =>
-    measureText(fontFamily, sample, 10000, { fontSize: item.fontSize, fill: '#000000', bold: item.bold }, vertical ? 1.15 : 1)
-      .naturalWidth
+  const widthOf = (sample: string, deco = '') =>
+    measureText(
+      fontFamily,
+      sample,
+      10000,
+      { fontSize: item.fontSize, fill: '#000000', bold: item.bold || deco.includes('b'), italic: deco.includes('i') },
+      vertical ? 1.15 : 1,
+    ).naturalWidth
   if (vertical) {
     const glyphs = [...painted.text].map((ch) => verticalHeaderText(ch))
     const step = item.fontSize * 1.15
@@ -62,7 +66,8 @@ function HeaderInk({
     return (
       <Group listening={false}>
         {glyphs.map((g, i) => {
-          const w = widthOf(g)
+          const deco = painted.decos?.[i] || ''
+          const w = widthOf(g, deco)
           return (
             <Text
               key={i}
@@ -71,7 +76,8 @@ function HeaderInk({
               text={g}
               fontSize={item.fontSize}
               fontFamily={fontFamily}
-              fontStyle={fontStyle}
+              fontStyle={fontStyleFor(item.bold, deco)}
+              textDecoration={textDecorationFor(deco) || undefined}
               fill={painted.colors?.[i] || '#000000'}
               listening={false}
             />
@@ -80,9 +86,9 @@ function HeaderInk({
       </Group>
     )
   }
-  const fullW = widthOf(painted.text)
+  const pieces = layoutRichLines(painted.text, painted.colors, 100000, widthOf, painted.decos)
+  const fullW = pieces.reduce((max, p) => Math.max(max, p.x + widthOf(p.text, p.deco)), 0)
   const origin = item.align === 'center' ? Math.max(0, (box.w - fullW) / 2) : item.align === 'right' ? Math.max(0, box.w - fullW) : 0
-  const pieces = layoutRichLines(painted.text, painted.colors, 100000, widthOf)
   return (
     <Group listening={false}>
       {pieces.map((p, i) => (
@@ -93,7 +99,8 @@ function HeaderInk({
           text={p.text}
           fontSize={item.fontSize}
           fontFamily={fontFamily}
-          fontStyle={fontStyle}
+          fontStyle={fontStyleFor(item.bold, p.deco)}
+          textDecoration={textDecorationFor(p.deco) || undefined}
           fill={p.color || '#000000'}
           listening={false}
         />
@@ -102,8 +109,18 @@ function HeaderInk({
   )
 }
 
-function textWidth(fontFamily: string, text: string, fontSize: number, bold: boolean): number {
-  return measureText(fontFamily, text, 10000, { fontSize, fill: '#000000', bold }, 1).naturalWidth
+function inkSpanWidth(
+  fontFamily: string,
+  painted: { text: string; colors?: string[]; decos?: string[] },
+  fontSize: number,
+  bold: boolean,
+): number {
+  const widthOf = (sample: string, deco = '') =>
+    measureText(fontFamily, sample, 10000, { fontSize, fill: '#000000', bold: bold || deco.includes('b'), italic: deco.includes('i') }, 1)
+      .naturalWidth
+  if (!painted.decos?.some((mark) => mark.includes('b') || mark.includes('i'))) return widthOf(painted.text)
+  const pieces = layoutRichLines(painted.text, painted.colors, 100000, widthOf, painted.decos)
+  return pieces.reduce((max, piece) => Math.max(max, piece.x + widthOf(piece.text, piece.deco)), 0)
 }
 
 /** 標題列：學校名稱與試卷名稱排成一行，置中。字級與粗體沿用各欄位自己的設定 */
@@ -112,13 +129,13 @@ function layoutTitleBand(items: HeaderItem[], box: Box, vertical: boolean, fontF
   const boxes = new Map<string, Box>()
   if (!band) return boxes
   const filled = band
-    .map((it) => ({ it, text: paintText(headerItemText(it)).text }))
-    .filter((p) => p.text)
-  const parts = filled.length ? filled : band.map((it) => ({ it, text: `（${plainText(it.label)}）` }))
+    .map((it) => ({ it, painted: paintText(headerItemText(it)) }))
+    .filter((p) => p.painted.text)
+  const parts = filled.length ? filled : band.map((it) => ({ it, painted: { text: `（${plainText(it.label)}）` } }))
   const lineH = Math.max(...parts.map((p) => headerItemHeight(p.it)))
   if (vertical) {
     const step = Math.max(...parts.map((p) => p.it.fontSize)) * 1.15
-    const heights = parts.map((p) => Math.max(step, [...p.text].length * step))
+    const heights = parts.map((p) => Math.max(step, [...p.painted.text].length * step))
     const total = heights.reduce((sum, h) => sum + h, 0)
     let y = box.y + Math.max(0, (box.h - total) / 2)
     const x = box.x + box.w - band[0].y - lineH
@@ -129,7 +146,7 @@ function layoutTitleBand(items: HeaderItem[], box: Box, vertical: boolean, fontF
     return boxes
   }
   const gap = Math.round(Math.max(...parts.map((p) => p.it.fontSize)) * 0.35)
-  const widths = parts.map((p) => textWidth(fontFamily, p.text, p.it.fontSize, p.it.bold) + 2)
+  const widths = parts.map((p) => inkSpanWidth(fontFamily, p.painted, p.it.fontSize, p.it.bold) + 2)
   const total = widths.reduce((sum, w) => sum + w, 0) + gap * Math.max(0, parts.length - 1)
   let x = box.x + Math.max(0, (box.w - total) / 2)
   const y = box.y + band[0].y
@@ -217,11 +234,15 @@ export function HeaderItemsLayer({
         const text = headerItemText(it, vertical ? b.h / 1.15 : b.w)
         const painted = paintText(text)
         const blankAt = !vertical && it.align === 'left' ? painted.text.indexOf('＿') : -1
+        const blankCount = blankAt >= 0 ? [...painted.text.slice(0, blankAt)].length : 0
         const blankLabel = blankAt >= 0 ? painted.text.slice(0, blankAt) : painted.text
-        const blankWidth = blankAt >= 0 ? textWidth(fontFamily, blankLabel, it.fontSize, it.bold) : 0
-        const inkPainted = blankAt >= 0 ? { text: blankLabel, colors: painted.colors?.slice(0, [...blankLabel].length) } : painted
+        const inkPainted =
+          blankAt >= 0
+            ? { text: blankLabel, colors: painted.colors?.slice(0, blankCount), decos: painted.decos?.slice(0, blankCount) }
+            : painted
+        const blankWidth = blankAt >= 0 ? inkSpanWidth(fontFamily, inkPainted, it.fontSize, it.bold) : 0
         const shown = vertical && painted.text ? verticalHeaderText(painted.text) : blankAt >= 0 ? blankLabel : painted.text
-        const colored = !!inkPainted.colors?.some(Boolean)
+        const colored = !!inkPainted.colors?.some(Boolean) || !!inkPainted.decos?.some(Boolean)
         const isPlaceholder = !text
         const isSel = selectedId === it.id
         const syncInk = (n: Konva.Node) => {

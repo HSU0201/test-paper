@@ -1,22 +1,48 @@
-/** 考卷內文的局部上色、換成注音，以及國字右側的直排注音。標記只存在資料裡。 */
+/** 考卷內文的局部上色、粗斜體、底線、刪除線、換成注音，以及國字右側的直排注音。標記只存在資料裡。 */
 import { readingsFor } from './hanToZhuyin'
 import { textAtoms } from './zhuyin'
 
 const OPEN = /^\{\{#([0-9a-fA-F]{6})\}\}/
 const CLOSE = '{{/}}'
+const STYLE_OPEN = /^\{\{\*([bius]*)\}\}/
+const STYLE_CLOSE = '{{/*}}'
 const ZY = /^\{\{z:([^|}]+)\|([^}]*)\}\}/
 const RUBY = /^\{\{y([brn])?:([^|}]+)\|([^}]*)\}\}/
 const TONE_MARK = new Set(['\u02c7', '\u02c9', '\u02ca', '\u02cb', '\u02d9'])
 
-export type RichChar = { ch: string; color?: string }
+/** b 粗體、i 斜體、u 底線、s 刪除線，可同時存在。 */
+export type TextDeco = { bold?: boolean; italic?: boolean; underline?: boolean; strike?: boolean }
+
+export type RichChar = { ch: string; color?: string; deco?: string }
+
+export function decoKey(deco?: TextDeco): string {
+  if (!deco) return ''
+  return `${deco.bold ? 'b' : ''}${deco.italic ? 'i' : ''}${deco.underline ? 'u' : ''}${deco.strike ? 's' : ''}`
+}
+
+export function fontStyleFor(baseBold: boolean, deco: string): string {
+  const bold = baseBold || deco.includes('b')
+  const italic = deco.includes('i')
+  if (bold && italic) return 'italic bold'
+  if (bold) return 'bold'
+  if (italic) return 'italic'
+  return 'normal'
+}
+
+export function textDecorationFor(deco: string): string {
+  const parts: string[] = []
+  if (deco.includes('u')) parts.push('underline')
+  if (deco.includes('s')) parts.push('line-through')
+  return parts.join(' ')
+}
 
 /** char：國字＋注音。box：方格＋注音。reading：只留注音。blank：國字＋注音留白，給學生書寫。 */
 export type RubyFace = 'char' | 'box' | 'reading' | 'blank'
 
 type Seg =
-  | { kind: 'ch'; ch: string; color?: string }
-  | { kind: 'zy'; han: string; reading: string; color?: string }
-  | { kind: 'ruby'; face: RubyFace; han: string; reading: string; color?: string }
+  | { kind: 'ch'; ch: string; color?: string; deco?: string }
+  | { kind: 'zy'; han: string; reading: string; color?: string; deco?: string }
+  | { kind: 'ruby'; face: RubyFace; han: string; reading: string; color?: string; deco?: string }
 
 function rubyFace(mark: string | undefined): RubyFace {
   if (mark === 'b') return 'box'
@@ -39,14 +65,30 @@ function rubyShown(face: RubyFace, han: string, reading: string): string {
   return han
 }
 
+function withInk(color?: string, deco?: string): { color?: string; deco?: string } {
+  return { ...(color ? { color } : {}), ...(deco ? { deco } : {}) }
+}
+
 function parseSegments(input: string): Seg[] {
   const out: Seg[] = []
   let color: string | undefined
+  let deco = ''
   let i = 0
   while (i < input.length) {
+    if (input.startsWith(STYLE_CLOSE, i)) {
+      deco = ''
+      i += STYLE_CLOSE.length
+      continue
+    }
     if (input.startsWith(CLOSE, i)) {
       color = undefined
       i += CLOSE.length
+      continue
+    }
+    const style = STYLE_OPEN.exec(input.slice(i))
+    if (style) {
+      deco = style[1]
+      i += style[0].length
       continue
     }
     const open = OPEN.exec(input.slice(i))
@@ -58,19 +100,19 @@ function parseSegments(input: string): Seg[] {
     }
     const ruby = RUBY.exec(input.slice(i))
     if (ruby) {
-      out.push({ kind: 'ruby', face: rubyFace(ruby[1]), han: ruby[2], reading: ruby[3], color })
+      out.push({ kind: 'ruby', face: rubyFace(ruby[1]), han: ruby[2], reading: ruby[3], ...withInk(color, deco) })
       i += ruby[0].length
       continue
     }
     const zy = ZY.exec(input.slice(i))
     if (zy) {
-      out.push({ kind: 'zy', han: zy[1], reading: zy[2], color })
+      out.push({ kind: 'zy', han: zy[1], reading: zy[2], ...withInk(color, deco) })
       i += zy[0].length
       continue
     }
     const cp = input.codePointAt(i)!
     const ch = String.fromCodePoint(cp)
-    out.push({ kind: 'ch', ch, color })
+    out.push({ kind: 'ch', ch, ...withInk(color, deco) })
     i += ch.length
   }
   return out
@@ -85,25 +127,27 @@ export function hasRubyMarkup(input: string): boolean {
 }
 
 export type InkAtom =
-  | { kind: 'text'; text: string; color?: string }
-  | { kind: 'ruby'; face: RubyFace; han: string; reading: string; color?: string }
+  | { kind: 'text'; text: string; color?: string; deco?: string }
+  | { kind: 'ruby'; face: RubyFace; han: string; reading: string; color?: string; deco?: string }
 
 /** 一般字連成一段；右側注音每一格單獨一段，給排版量寬度。 */
 export function inkAtoms(input: string): InkAtom[] {
   const out: InkAtom[] = []
   let buf = ''
   let color: string | undefined
+  let deco = ''
   let prevZy = false
   const flush = () => {
     if (!buf) return
-    out.push(color ? { kind: 'text', text: buf, color } : { kind: 'text', text: buf })
+    out.push({ kind: 'text', text: buf, ...withInk(color, deco) })
     buf = ''
   }
-  const pushText = (text: string, next?: string) => {
+  const pushText = (text: string, nextColor?: string, nextDeco = '') => {
     if (!text) return
-    if (next !== color) {
+    if (nextColor !== color || nextDeco !== deco) {
       flush()
-      color = next
+      color = nextColor
+      deco = nextDeco
     }
     buf += text
   }
@@ -115,25 +159,25 @@ export function inkAtoms(input: string): InkAtom[] {
         face: seg.face,
         han: seg.han,
         reading: seg.reading,
-        ...(seg.color ? { color: seg.color } : {}),
+        ...withInk(seg.color, seg.deco),
       })
       prevZy = false
       continue
     }
     if (seg.kind === 'zy') {
       const reading = seg.reading || seg.han
-      pushText(prevZy && reading ? ` ${reading}` : reading, seg.color)
+      pushText(prevZy && reading ? ` ${reading}` : reading, seg.color, seg.deco ?? '')
       prevZy = Boolean(reading)
       continue
     }
     prevZy = false
-    pushText(seg.ch, seg.color)
+    pushText(seg.ch, seg.color, seg.deco ?? '')
   }
   flush()
   return out
 }
 
-export type RichPiece = { text: string; color: string; x: number; line: number }
+export type RichPiece = { text: string; color: string; x: number; line: number; deco: string }
 
 export const INK_PALETTE: { hex: string; label: string }[] = [
   { hex: '#000000', label: '黑' },
@@ -153,18 +197,18 @@ export function richChars(input: string): RichChar[] {
     if (seg.kind === 'ruby') {
       prevZy = false
       for (const ch of rubyShown(seg.face, seg.han, seg.reading)) {
-        out.push(seg.color ? { ch, color: seg.color } : { ch })
+        out.push({ ch, ...withInk(seg.color, seg.deco) })
       }
       continue
     }
     if (seg.kind === 'zy') {
       const reading = seg.reading || seg.han
       if (prevZy && reading) out.push({ ch: ' ' })
-      for (const ch of reading) out.push(seg.color ? { ch, color: seg.color } : { ch })
+      for (const ch of reading) out.push({ ch, ...withInk(seg.color, seg.deco) })
       prevZy = Boolean(reading)
       continue
     }
-    out.push(seg.color ? { ch: seg.ch, color: seg.color } : { ch: seg.ch })
+    out.push({ ch: seg.ch, ...withInk(seg.color, seg.deco) })
     prevZy = false
   }
   return out
@@ -176,29 +220,34 @@ export function plainText(input: string): string {
     .join('')
 }
 
-export function paintText(input: string): { text: string; colors?: string[] } {
+export function paintText(input: string): { text: string; colors?: string[]; decos?: string[] } {
   const chars = richChars(input)
   const text = chars.map((c) => c.ch).join('')
   const colors = chars.some((c) => c.color) ? chars.map((c) => c.color ?? '') : undefined
-  return { text, colors }
+  const decos = chars.some((c) => c.deco) ? chars.map((c) => c.deco ?? '') : undefined
+  return { text, colors, decos }
 }
 
-/** 橫排換行：同一行、同一色的字合成一段，x 是該段在行內的起點。有注音時以音節為單位。 */
+/** 橫排換行：同一行、同一色、同一樣式的字合成一段，x 是該段在行內的起點。有注音時以音節為單位。 */
 export function layoutRichLines(
   text: string,
   colors: string[] | undefined,
   width: number,
-  measure: (sample: string) => number,
+  measure: (sample: string, deco?: string) => number,
+  decos?: string[],
 ): RichPiece[] {
   const pieces: RichPiece[] = []
   let line = 0
   let lineText = ''
   let buf = ''
   let bufColor = ''
+  let bufDeco = ''
   let index = 0
+  let used = 0
+  const styled = !!decos?.some((mark) => mark.includes('b') || mark.includes('i'))
   const flush = () => {
     if (!buf) return
-    pieces.push({ text: buf, color: bufColor, x: measure(lineText), line })
+    pieces.push({ text: buf, color: bufColor, deco: bufDeco, x: styled ? used - measure(buf, bufDeco) : measure(lineText), line })
     lineText += buf
     buf = ''
   }
@@ -207,20 +256,28 @@ export function layoutRichLines(
       flush()
       line += 1
       lineText = ''
+      used = 0
       index += 1
       continue
     }
-    if (lineText + buf && measure(lineText + buf + atom) > width + 0.5) {
+    const atomWidth = styled
+      ? [...atom].reduce((sum, _ch, offset) => sum + measure(_ch, decos?.[index + offset] || ''), 0)
+      : measure(lineText + buf + atom) - measure(lineText + buf)
+    if ((styled ? used : lineText + buf) && (styled ? used + atomWidth : measure(lineText + buf + atom)) > width + 0.5) {
       flush()
       line += 1
       lineText = ''
+      used = 0
     }
     for (const ch of atom) {
       const color = colors?.[index] || ''
+      const deco = decos?.[index] || ''
       index += 1
-      if (buf && color !== bufColor) flush()
+      if (buf && (color !== bufColor || deco !== bufDeco)) flush()
       bufColor = color
+      bufDeco = deco
       buf += ch
+      if (styled) used += measure(ch, deco)
     }
   }
   flush()
@@ -254,25 +311,36 @@ function escapeAttr(s: string): string {
   return escapeHtml(s).replace(/"/g, '&quot;')
 }
 
+function wrapInk(body: string, color: string, deco: string): string {
+  let html = body
+  if (deco.includes('s')) html = `<s>${html}</s>`
+  if (deco.includes('u')) html = `<u>${html}</u>`
+  if (deco.includes('i')) html = `<em>${html}</em>`
+  if (deco.includes('b')) html = `<strong>${html}</strong>`
+  if (color) html = `<span style="color:${color}">${html}</span>`
+  return html
+}
+
 export function markupToHtml(input: string): string {
   let html = ''
   let buf = ''
   let color = ''
+  let deco = ''
   let prevZy = false
   const flush = () => {
     if (!buf) return
     const body = escapeHtml(buf).replace(/\n/g, '<br>')
-    html += color ? `<span style="color:${color}">${body}</span>` : body
+    html += wrapInk(body, color, deco)
     buf = ''
   }
   for (const seg of parseSegments(input)) {
     if (seg.kind === 'ruby') {
       flush()
       const span = rubyHtml(seg.face, seg.han, seg.reading)
-      const ink = seg.color ?? ''
-      html += ink ? `<span style="color:${ink}">${span}</span>` : span
+      html += wrapInk(span, seg.color ?? '', seg.deco ?? '')
       prevZy = false
       color = ''
+      deco = ''
       continue
     }
     if (seg.kind === 'zy') {
@@ -280,16 +348,18 @@ export function markupToHtml(input: string): string {
       const reading = seg.reading || seg.han
       if (prevZy && reading) html += ' '
       const span = `<span class="zy" data-han="${escapeAttr(seg.han)}" title="${escapeAttr(seg.han)}">${escapeHtml(reading)}</span>`
-      const ink = seg.color ?? ''
-      html += ink ? `<span style="color:${ink}">${span}</span>` : span
+      html += wrapInk(span, seg.color ?? '', seg.deco ?? '')
       prevZy = Boolean(reading)
       color = ''
+      deco = ''
       continue
     }
     prevZy = false
     const next = seg.color ?? ''
-    if (next !== color) flush()
+    const nextDeco = seg.deco ?? ''
+    if (next !== color || nextDeco !== deco) flush()
     color = next
+    deco = nextDeco
     buf += seg.ch
   }
   flush()
@@ -314,9 +384,10 @@ function readColor(el: HTMLElement): string | null {
 export function htmlToMarkup(root: HTMLElement): string {
   const lines: string[] = ['']
   let seenBlock = false
-  const pushText = (t: string, color: string | null) => {
+  const pushText = (t: string, color: string | null, deco: string) => {
     if (!t) return
-    lines[lines.length - 1] += color ? `{{#${color.slice(1)}}}${t}{{/}}` : t
+    const body = deco ? `{{*${deco}}}${t}{{/*}}` : t
+    lines[lines.length - 1] += color ? `{{#${color.slice(1)}}}${body}{{/}}` : body
   }
   const edgeIsZy = (node: Node | null, dir: 'prev' | 'next'): boolean => {
     let n = node
@@ -339,7 +410,25 @@ export function htmlToMarkup(root: HTMLElement): string {
     }
     return false
   }
-  const walk = (node: Node, color: string | null) => {
+  const readDeco = (el: HTMLElement, parent: string): string => {
+    const tag = el.tagName
+    const painted = `${el.style.fontWeight} ${el.style.fontStyle} ${el.style.textDecoration} ${el.style.textDecorationLine}`
+    let next = parent
+    const add = (flag: string) => {
+      if (!next.includes(flag)) next += flag
+    }
+    if (tag === 'B' || tag === 'STRONG' || /bold|[6-9]00/.test(painted)) add('b')
+    if (tag === 'I' || tag === 'EM' || painted.includes('italic')) add('i')
+    if (tag === 'U' || painted.includes('underline')) add('u')
+    if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL' || painted.includes('line-through')) add('s')
+    return decoKey({
+      bold: next.includes('b'),
+      italic: next.includes('i'),
+      underline: next.includes('u'),
+      strike: next.includes('s'),
+    })
+  }
+  const walk = (node: Node, color: string | null, deco: string) => {
     if (node.nodeType === Node.TEXT_NODE) {
       let t = (node.textContent ?? '').replace(/\u00a0/g, ' ')
       if (
@@ -349,7 +438,7 @@ export function htmlToMarkup(root: HTMLElement): string {
       ) {
         t = ''
       }
-      pushText(t, color)
+      pushText(t, color, deco)
       return
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return
@@ -362,19 +451,20 @@ export function htmlToMarkup(root: HTMLElement): string {
       const face = el.dataset.face === 'box' ? 'b' : el.dataset.face === 'reading' ? 'r' : el.dataset.face === 'blank' ? 'n' : ''
       const han = (el.dataset.han ?? '').replace(/[|}]/g, '')
       const reading = (el.dataset.reading ?? '').replace(/[|}]/g, '')
-      if (han) pushText(`{{y${face}:${han}|${reading}}}`, color)
+      if (han) pushText(`{{y${face}:${han}|${reading}}}`, color, deco)
       return
     }
     if (el.dataset.han) {
       const han = el.dataset.han.replace(/[|}]/g, '')
       const shown = (el.textContent ?? '').replace(/\u00a0/g, ' ').replace(/}/g, '').trim()
-      if (han) pushText(shown ? `{{z:${han}|${shown}}}` : han, color)
+      if (han) pushText(shown ? `{{z:${han}|${shown}}}` : han, color, deco)
       return
     }
     const next = readColor(el) ?? color
+    const nextDeco = readDeco(el, deco)
     const block = el.tagName === 'DIV' || el.tagName === 'P'
     if (!block) {
-      el.childNodes.forEach((child) => walk(child, next))
+      el.childNodes.forEach((child) => walk(child, next, nextDeco))
       return
     }
     const atStart = !seenBlock && lines.length === 1 && lines[0] === ''
@@ -385,10 +475,10 @@ export function htmlToMarkup(root: HTMLElement): string {
       el.childNodes[0].nodeType === Node.ELEMENT_NODE &&
       (el.childNodes[0] as HTMLElement).tagName === 'BR'
     if (onlyBr) return
-    el.childNodes.forEach((child) => walk(child, next))
+    el.childNodes.forEach((child) => walk(child, next, nextDeco))
   }
-  root.childNodes.forEach((child) => walk(child, null))
-  return lines.join('\n')
+  root.childNodes.forEach((child) => walk(child, null, ''))
+  return serializeSegments(placeSegments(parseSegments(lines.join('\n'))))
 }
 
 type Placed = Seg & { start: number; len: number; gap?: boolean }
@@ -427,19 +517,24 @@ function placeSegments(segs: Seg[]): Placed[] {
 function serializeSegments(pieces: Placed[]): string {
   let out = ''
   let color: string | undefined
-  const setColor = (next?: string) => {
-    if (next === color) return
+  let deco = ''
+  const setInk = (nextColor?: string, nextDeco = '') => {
+    if (nextColor === color && nextDeco === deco) return
+    if (deco) out += STYLE_CLOSE
     if (color) out += CLOSE
-    if (next) out += `{{#${next.slice(1)}}}`
-    color = next
+    if (nextColor) out += `{{#${nextColor.slice(1)}}}`
+    if (nextDeco) out += `{{*${nextDeco}}}`
+    color = nextColor
+    deco = nextDeco
   }
   for (const piece of pieces) {
     if (piece.gap) continue
-    setColor(piece.color)
+    setInk(piece.color, piece.deco ?? '')
     if (piece.kind === 'zy') out += `{{z:${piece.han}|${piece.reading}}}`
     else if (piece.kind === 'ruby') out += `{{${rubyMark(piece.face)}:${piece.han}|${piece.reading}}}`
     else out += piece.ch
   }
+  if (deco) out += STYLE_CLOSE
   if (color) out += CLOSE
   return out
 }
@@ -472,7 +567,7 @@ export function editZhuyin(input: string, start: number, end: number, mode: 'to-
     const next = pieces.map((piece) => {
       if (piece.kind !== 'zy' || !overlaps(piece, start, end)) return piece
       changed = true
-      const han: Placed = { kind: 'ch', ch: piece.han, color: piece.color, start: piece.start, len: [...piece.han].length }
+      const han: Placed = { kind: 'ch', ch: piece.han, color: piece.color, deco: piece.deco, start: piece.start, len: [...piece.han].length }
       return han
     })
     return changed ? serializeSegments(next) : input
@@ -503,7 +598,7 @@ export function editZhuyin(input: string, start: number, end: number, mode: 'to-
       const reading = readings[k]
       const prev = replaced[index]
       if (!reading || prev.kind !== 'ch') return
-      replaced[index] = { kind: 'zy', han: prev.ch, reading, color: prev.color, start: prev.start, len: [...reading].length }
+      replaced[index] = { kind: 'zy', han: prev.ch, reading, color: prev.color, deco: prev.deco, start: prev.start, len: [...reading].length }
     })
   }
   return serializeSegments(replaced)
@@ -528,7 +623,7 @@ export function editRuby(input: string, start: number, end: number, mode: RubyEd
     const next = pieces.map((piece) => {
       if (piece.kind !== 'ruby' || !overlaps(piece, start, end)) return piece
       changed = true
-      const han: Placed = { kind: 'ch', ch: piece.han, color: piece.color, start: piece.start, len: [...piece.han].length }
+      const han: Placed = { kind: 'ch', ch: piece.han, color: piece.color, deco: piece.deco, start: piece.start, len: [...piece.han].length }
       return han
     })
     return changed ? serializeSegments(next) : input
@@ -570,6 +665,7 @@ export function editRuby(input: string, start: number, end: number, mode: RubyEd
         han: prev.ch,
         reading,
         color: prev.color,
+        deco: prev.deco,
         start: prev.start,
         len: [...rubyShown(mode, prev.ch, reading)].length,
       }
