@@ -168,8 +168,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       selectedId: blockSelected ? null : state.selectedId,
       textPlacementMode: blockSelected ? false : state.textPlacementMode,
     }
-    if (action.type === 'LOAD_EXAMPLE') {
-      const title = sampleTitle(action.subject ?? 'chinese')
+    if (action.type === 'LOAD_EXAMPLE' || (action.type === 'IMPORT_EXAM' && action.mode === 'replace' && action.title)) {
+      const title = action.type === 'IMPORT_EXAM' ? (action.title ?? '') : sampleTitle(action.subject ?? 'chinese')
       return withHeader(merged, (header) => ({
         ...header,
         items: header.items.map((item) => (item.role === 'examTitle' ? { ...item, value: title } : item)),

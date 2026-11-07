@@ -8,8 +8,11 @@ export function downloadJson(filename: string, data: unknown) {
   const a = document.createElement('a')
   a.href = url
   a.download = filename
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  a.remove()
+  // 立刻撤銷網址，部分瀏覽器會來不及開始下載
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
 export function serializeDocument(state: EditorState) {

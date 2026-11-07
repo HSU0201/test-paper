@@ -24,7 +24,7 @@ import { Icon } from './ui'
 import './editor.css'
 
 function EditorShell() {
-  const { state, dispatch, pageCount, saveStatus } = useEditor()
+  const { state, dispatch, pageCount, draftReady } = useEditor()
   const focusKey = focusKeyOf(state.selectedBlock, state.selectedId)
   const stagesRef = useRef<(Konva.Stage | null)[]>([])
   const pageElsRef = useRef<(HTMLDivElement | null)[]>([])
@@ -150,7 +150,7 @@ function EditorShell() {
             </AnimatePresence>
             <div className="canvas-scroll" ref={canvasScrollRef}>
               <AnimatePresence mode="wait">
-                {saveStatus.state === 'loading' ? (
+                {!draftReady ? (
                   <motion.p
                     key="loading"
                     className="canvas-loading"

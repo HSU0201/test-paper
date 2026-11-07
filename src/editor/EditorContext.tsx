@@ -41,16 +41,23 @@ type EditorContextValue = {
   redo: () => void
   canUndo: boolean
   canRedo: boolean
+  /** 注音字型已可量字。字型載入後會重排一次 */
+  fontsReady: boolean
+  /** 暫存稿已讀取完成（只會變一次） */
+  draftReady: boolean
+}
+
+/** 暫存與備份狀態另外放：每次自動暫存都會變，放在一起會讓整個編輯器重畫 */
+type EditorPersistValue = {
   saveStatus: SaveStatus
   /** 本機定時備份的時間戳，新的在前 */
   snapshots: number[]
   backupNow: () => Promise<number | null>
   reloadSnapshots: () => Promise<void>
-  /** 注音字型已可量字。字型載入後會重排一次 */
-  fontsReady: boolean
 }
 
 const EditorContext = createContext<EditorContextValue | null>(null)
+const EditorPersistContext = createContext<EditorPersistValue | null>(null)
 
 const AUTOSAVE_DELAY_MS = 800
 
@@ -293,7 +300,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
   const stableDispatch = useCallback(
     (action: EditorAction) => {
-      if ((action.type === 'RESET' || action.type === 'LOAD_DOCUMENT') && docRef.current) {
+      const replacing =
+        action.type === 'RESET' || action.type === 'LOAD_DOCUMENT' || (action.type === 'IMPORT_EXAM' && action.mode === 'replace')
+      if (replacing && docRef.current) {
         void commitSnapshot(docRef.current)
       }
       dispatchHistory({ kind: 'do', action, at: Date.now() })
@@ -317,11 +326,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       redo,
       canUndo,
       canRedo,
-      saveStatus,
-      snapshots,
-      backupNow,
-      reloadSnapshots,
       fontsReady,
+      draftReady,
     }),
     [
       state,
@@ -334,19 +340,31 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       redo,
       canUndo,
       canRedo,
-      saveStatus,
-      snapshots,
-      backupNow,
-      reloadSnapshots,
       fontsReady,
+      draftReady,
     ],
   )
 
-  return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>
+  const persistValue = useMemo(
+    () => ({ saveStatus, snapshots, backupNow, reloadSnapshots }),
+    [saveStatus, snapshots, backupNow, reloadSnapshots],
+  )
+
+  return (
+    <EditorContext.Provider value={value}>
+      <EditorPersistContext.Provider value={persistValue}>{children}</EditorPersistContext.Provider>
+    </EditorContext.Provider>
+  )
 }
 
 export function useEditor(): EditorContextValue {
   const ctx = useContext(EditorContext)
   if (!ctx) throw new Error('useEditor 必須在 EditorProvider 內使用')
+  return ctx
+}
+
+export function useEditorPersist(): EditorPersistValue {
+  const ctx = useContext(EditorPersistContext)
+  if (!ctx) throw new Error('useEditorPersist 必須在 EditorProvider 內使用')
   return ctx
 }

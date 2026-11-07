@@ -1,5 +1,6 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 
+import { withZhuyin } from '../editor/hanToZhuyin'
 import { editRuby, editZhuyin, htmlToMarkup, INK_PALETTE, markupToHtml, plainText, type RubyEdit } from '../editor/richText'
 
 type ColorFieldProps = {
@@ -98,14 +99,16 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
     const start = displayIndex(range.startContainer, range.startOffset)
     const end = displayIndex(range.endContainer, range.endOffset)
     const current = htmlToMarkup(el)
-    const next = editZhuyin(current, Math.min(start, end), Math.max(start, end), mode)
-    if (next === current) {
-      setMsg(mode === 'to-zhuyin' ? '選取的範圍裡沒有可換的國字' : '選取的範圍裡沒有注音')
-      return
-    }
-    setMsg(null)
-    el.innerHTML = markupToHtml(next)
-    onChange(next)
+    withZhuyin(() => {
+      const next = editZhuyin(current, Math.min(start, end), Math.max(start, end), mode)
+      if (next === current) {
+        setMsg(mode === 'to-zhuyin' ? '選取的範圍裡沒有可換的國字' : '選取的範圍裡沒有注音')
+        return
+      }
+      setMsg(null)
+      el.innerHTML = markupToHtml(next)
+      onChange(next)
+    })
   }
 
   const applyRuby = (mode: RubyEdit) => {
@@ -124,14 +127,16 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
     const start = displayIndex(range.startContainer, range.startOffset)
     const end = displayIndex(range.endContainer, range.endOffset)
     const current = htmlToMarkup(el)
-    const next = editRuby(current, Math.min(start, end), Math.max(start, end), mode)
-    if (next === current) {
-      setMsg(mode === 'plain' ? '選取的範圍裡沒有右側注音' : '選取的範圍裡沒有可加注音的國字')
-      return
-    }
-    setMsg(null)
-    el.innerHTML = markupToHtml(next)
-    onChange(next)
+    withZhuyin(() => {
+      const next = editRuby(current, Math.min(start, end), Math.max(start, end), mode)
+      if (next === current) {
+        setMsg(mode === 'plain' ? '選取的範圍裡沒有右側注音' : '選取的範圍裡沒有可加注音的國字')
+        return
+      }
+      setMsg(null)
+      el.innerHTML = markupToHtml(next)
+      onChange(next)
+    })
   }
 
   const applyFormat = (command: 'bold' | 'italic' | 'underline' | 'strikeThrough') => {

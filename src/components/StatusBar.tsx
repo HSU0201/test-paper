@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { AnimatePresence, motion } from 'motion/react'
 
-import { useEditor } from '../editor/EditorContext'
+import { useEditor, useEditorPersist } from '../editor/EditorContext'
 import { describeWarnings } from '../editor/warningText'
 import { easeOut } from '../motion/presets'
 import { examTotals } from '../types/exam'
@@ -22,7 +22,8 @@ export function StatusBar({
   onLocate: (page: number) => void
   onContact: () => void
 }) {
-  const { state, dispatch, flow, pageCount, saveStatus, snapshots, pageGeometry } = useEditor()
+  const { state, dispatch, flow, pageCount, pageGeometry } = useEditor()
+  const { saveStatus, snapshots } = useEditorPersist()
   const [open, setOpen] = useState(false)
   const popRef = useRef<HTMLDivElement>(null)
   const totals = examTotals(state.exam)

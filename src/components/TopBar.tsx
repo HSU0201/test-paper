@@ -8,13 +8,27 @@ import { useEditor } from '../editor/EditorContext'
 import { exportStagesToPdf } from '../export/pdfFromStage'
 import { easeOut } from '../motion/presets'
 import { BackupDialog } from './BackupDialog'
+import { ImportWordDialog } from './ImportWordDialog'
 import { Icon } from './ui'
 
 export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null)[]> }) {
   const { state, dispatch, undo, redo, canUndo, canRedo, pageCount } = useEditor()
   const openRef = useRef<HTMLInputElement>(null)
   const [backupOpen, setBackupOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [exporting, setExporting] = useState<{ answers: boolean; done: number; total: number } | null>(null)
   const baseName = documentBaseName(state)
+
+  const runExport = (answers: boolean) => {
+    const stages = (stagesRef.current ?? []).slice(0, pageCount).filter((s): s is Konva.Stage => !!s)
+    if (!stages.length) return
+    setExporting({ answers, done: 0, total: stages.length })
+    exportStagesToPdf(stages, `${baseName}${answers ? '-答案' : ''}.pdf`, answers, (done, total) =>
+      setExporting({ answers, done, total }),
+    )
+      .catch(() => window.alert('匯出 PDF 失敗，請重新整理頁面後再試一次。'))
+      .finally(() => setExporting(null))
+  }
 
   return (
     <motion.header
@@ -66,6 +80,10 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
             if (file) readDocumentFile(file, dispatch)
           }}
         />
+        <button type="button" className="btn btn--ghost" title="把廠商的 Word 考卷轉成題目" onClick={() => setImportOpen(true)}>
+          <Icon name="word" />
+          匯入 Word
+        </button>
         <button
           type="button"
           className="btn btn--ghost"
@@ -94,29 +112,28 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
             type="button"
             className="btn btn--primary"
             title="下載沒有答案的試卷"
-            onClick={() => {
-              const stages = (stagesRef.current ?? []).slice(0, pageCount).filter((s): s is Konva.Stage => !!s)
-              exportStagesToPdf(stages, `${baseName}.pdf`, false)
-            }}
+            disabled={exporting !== null}
+            aria-busy={exporting?.answers === false}
+            onClick={() => runExport(false)}
           >
             <Icon name="pdf" />
-            匯出試卷
+            {exporting?.answers === false ? `匯出中 ${exporting.done}/${exporting.total}` : '匯出試卷'}
           </button>
           <button
             type="button"
             className="btn btn--answer"
             title="另存一份印上答案的試卷"
-            onClick={() => {
-              const stages = (stagesRef.current ?? []).slice(0, pageCount).filter((s): s is Konva.Stage => !!s)
-              exportStagesToPdf(stages, `${baseName}-答案.pdf`, true)
-            }}
+            disabled={exporting !== null}
+            aria-busy={exporting?.answers === true}
+            onClick={() => runExport(true)}
           >
             <Icon name="pdf" />
-            匯出答案
+            {exporting?.answers === true ? `匯出中 ${exporting.done}/${exporting.total}` : '匯出答案'}
           </button>
         </span>
       </div>
       <BackupDialog open={backupOpen} onClose={() => setBackupOpen(false)} />
+      <ImportWordDialog open={importOpen} onClose={() => setImportOpen(false)} />
     </motion.header>
   )
 }

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { memo,useMemo } from 'react'
 import { Ellipse, Group, Rect, Text } from 'react-konva'
 
 import type { PlacedBlock } from '../editor/flowLayout'
@@ -10,7 +10,7 @@ import type { ExamContent } from '../types/exam'
 const PAD = 4
 
 /** 平常隱藏。匯出答案卷時才顯示，不出現在編輯畫面與空白試卷。 */
-export function AnswerKeyLayer({
+function AnswerKeyLayerInner({
   exam,
   blocks,
   page,
@@ -86,3 +86,6 @@ export function AnswerKeyLayer({
     </Group>
   )
 }
+
+/** 只在自己的資料變動時重畫；選取別的物件、存檔狀態改變時不必重算 */
+export const AnswerKeyLayer = memo(AnswerKeyLayerInner)

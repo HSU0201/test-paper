@@ -253,15 +253,20 @@ export function sectionBlankUnit(s: Section): number {
   return Number.isFinite(n) ? n : 0
 }
 
+/** 分數相加會出現 0.1 + 0.2 這種浮點誤差，配分最多算到小數第三位 */
+function roundScore(n: number): number {
+  return Math.round(n * 1000) / 1000
+}
+
 /** 這一題實際占的分數。每格計分時是格數乘以每格分數 */
 export function questionPoints(s: Section, q: Question): number {
-  if (s.scoreMode === 'blank') return questionBlankCount(q) * sectionBlankUnit(s)
+  if (s.scoreMode === 'blank') return roundScore(questionBlankCount(q) * sectionBlankUnit(s))
   const n = Number(q.score)
   return Number.isFinite(n) ? n : 0
 }
 
 export function sectionScore(s: Section): number {
-  return s.questions.reduce((sum, q) => sum + questionPoints(s, q), 0)
+  return roundScore(s.questions.reduce((sum, q) => sum + questionPoints(s, q), 0))
 }
 
 export function examTotals(exam: ExamContent) {
@@ -271,7 +276,7 @@ export function examTotals(exam: ExamContent) {
     questions += s.questions.length
     score += sectionScore(s)
   }
-  return { questions, score, sections: exam.sections.length }
+  return { questions, score: roundScore(score), sections: exam.sections.length }
 }
 
 /** 題號一律由順序推導，不存檔 */

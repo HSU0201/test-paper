@@ -2845,3 +2845,106 @@ kbd {
     scale: 0.97;
   }
 }
+
+/* ============ 匯入 Word ============ */
+.import-word {
+  width: min(560px, 100%);
+}
+
+.import-word__pick,
+.import-word__mode {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.import-word__pick-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.import-word__pick-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.import-word__pick-hint {
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+
+.import-word__pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.import-word__file {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.import-word__file.is-empty {
+  color: var(--c-text-3);
+}
+
+.import-word__note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--c-text-2);
+}
+
+.import-word__status,
+.import-word__error {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-m);
+  font-size: 13px;
+}
+
+.import-word__status {
+  background: var(--c-primary-soft);
+  color: var(--c-accent-ink);
+}
+
+.import-word__error {
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
+}
+
+.import-word__result {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-m);
+  background: var(--c-surface-2);
+  font-size: 13px;
+}
+
+.import-word__summary {
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.import-word__ok {
+  margin: 0;
+  color: var(--c-text-2);
+}
+
+.import-word__warnings {
+  margin: 0;
+  padding-left: 18px;
+  max-height: 180px;
+  overflow: auto;
+  color: var(--c-warn-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { readImageFile } from '../editor/documentIO'
 import { useEditor } from '../editor/EditorContext'
 import { findQuestion } from '../editor/examReducer'
+import { withZhuyin } from '../editor/hanToZhuyin'
 import { plainText } from '../editor/richText'
 import { mergeTextLevelPreset } from '../types/document'
 import {
@@ -300,7 +301,11 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
         <div className="exam-style">
           <div className="exam-style__head">
             <span className="exam-style__label">整題換成注音</span>
-            <Switch checked={section.zhuyin === true} label="整題換成注音" onChange={(zhuyin) => set({ zhuyin })} />
+            <Switch
+              checked={section.zhuyin === true}
+              label="整題換成注音"
+              onChange={(zhuyin) => withZhuyin(() => set({ zhuyin }))}
+            />
           </div>
           <p className="exam-style__follow">
             打開後，這個大題的題幹和選項會改成注音，關掉會改回國字。只要某幾個字換成注音，不必開這裡，在文字裡選取後按「轉成注音」。讀音不對就直接改注音符號。音節和作答空格換行時不會被拆開。
@@ -774,7 +779,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
             <Switch
               checked={questionUsesZhuyin(section, q)}
               label="這一題換成注音"
-              onChange={(zhuyin) => set({ zhuyin })}
+              onChange={(zhuyin) => withZhuyin(() => set({ zhuyin }))}
             />
           </div>
           <p className="exam-style__follow">
@@ -783,7 +788,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
               <>
                 {' '}
                 這一題已單獨設定。
-                <button type="button" className="text-btn" onClick={() => set({ zhuyin: undefined })}>
+                <button type="button" className="text-btn" onClick={() => withZhuyin(() => set({ zhuyin: undefined }))}>
                   改回跟隨大題
                 </button>
               </>

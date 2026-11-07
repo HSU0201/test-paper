@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { memo,useRef } from 'react'
 import { Group, Line, Rect, Text } from 'react-konva'
 
 import type Konva from 'konva'
@@ -15,7 +15,7 @@ export const EDITOR_ONLY_NAME = 'editor-only'
 export const HEADER_REF_PREFIX = 'hdr:'
 
 /** 版面骨架：內容區／欄位輔助底色、頁首分隔線、欄間分隔線 */
-export function PageDecorLayer({ geometry, showGuides }: { geometry: PageGeometry; showGuides: boolean }) {
+function PageDecorLayerInner({ geometry, showGuides }: { geometry: PageGeometry; showGuides: boolean }) {
   const { content, frames, rules, header } = geometry
   return (
     <Group listening={false}>
@@ -174,7 +174,7 @@ type HeaderItemsLayerProps = {
 }
 
 /** 頁首欄位：可拖曳、可左右拉寬，位置吸附到內容區邊緣、中線與其他欄位 */
-export function HeaderItemsLayer({
+function HeaderItemsLayerInner({
   header,
   box,
   vertical,
@@ -400,3 +400,9 @@ export function HeaderItemsLayer({
     </Group>
   )
 }
+
+/** 只在自己的資料變動時重畫；選取別的物件、存檔狀態改變時不必重算 */
+export const PageDecorLayer = memo(PageDecorLayerInner)
+
+/** 只在自己的資料變動時重畫；選取別的物件、存檔狀態改變時不必重算 */
+export const HeaderItemsLayer = memo(HeaderItemsLayerInner)

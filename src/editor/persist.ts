@@ -12,29 +12,58 @@ export const MAX_SNAPSHOTS = 15
 
 export type Draft = { savedAt: number; doc: unknown }
 
+/** 自動暫存很頻繁，連線開一次就重複使用；被瀏覽器關掉時下次再重開 */
+let dbPromise: Promise<IDBDatabase> | null = null
+
 function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  dbPromise ??= new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = () => {
       const db = req.result
       if (!db.objectStoreNames.contains(DRAFTS)) db.createObjectStore(DRAFTS)
       if (!db.objectStoreNames.contains(SNAPSHOTS)) db.createObjectStore(SNAPSHOTS)
     }
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => {
+      const db = req.result
+      const forget = () => {
+        if (dbPromise === opened) dbPromise = null
+      }
+      // 另一個分頁要升級資料庫時讓出連線
+      db.onversionchange = () => {
+        db.close()
+        forget()
+      }
+      db.onclose = forget
+      resolve(db)
+    }
     req.onerror = () => reject(req.error)
+  })
+  const opened = dbPromise
+  opened.catch(() => {
+    if (dbPromise === opened) dbPromise = null
+  })
+  return opened
+}
+
+/** 開交易；連線剛好失效時重開一次 */
+function transaction(store: string, mode: IDBTransactionMode): Promise<IDBTransaction> {
+  return openDb().then((db) => {
+    try {
+      return db.transaction(store, mode)
+    } catch {
+      dbPromise = null
+      return openDb().then((fresh) => fresh.transaction(store, mode))
+    }
   })
 }
 
 function request<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  return openDb().then(
-    (db) =>
+  return transaction(store, mode).then(
+    (t) =>
       new Promise<T>((resolve, reject) => {
-        const t = db.transaction(store, mode)
         const req = fn(t.objectStore(store))
         req.onsuccess = () => resolve(req.result)
         req.onerror = () => reject(req.error)
-        t.oncomplete = () => db.close()
-        t.onerror = () => db.close()
       }),
   )
 }
@@ -62,10 +91,9 @@ export function saveDraft(doc: unknown): Promise<number> {
 export function saveSnapshot(doc: unknown): Promise<number> {
   const savedAt = nextStamp()
   const frozen = structuredClone(doc)
-  return openDb().then(
-    (db) =>
+  return transaction(SNAPSHOTS, 'readwrite').then(
+    (t) =>
       new Promise<number>((resolve, reject) => {
-        const t = db.transaction(SNAPSHOTS, 'readwrite')
         const store = t.objectStore(SNAPSHOTS)
         store.put({ savedAt, doc: frozen } satisfies Draft, savedAt)
         const keysReq = store.getAllKeys()
@@ -74,15 +102,9 @@ export function saveSnapshot(doc: unknown): Promise<number> {
           const drop = keys.length - MAX_SNAPSHOTS
           for (let i = 0; i < drop; i++) store.delete(keys[i])
         }
-        t.oncomplete = () => {
-          db.close()
-          resolve(savedAt)
-        }
-        t.onerror = () => {
-          const err = t.error
-          db.close()
-          reject(err)
-        }
+        t.oncomplete = () => resolve(savedAt)
+        t.onerror = () => reject(t.error)
+        t.onabort = () => reject(t.error)
       }),
   )
 }

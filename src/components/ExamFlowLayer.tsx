@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Group, Image as KonvaImage, Line, Rect, Text } from 'react-konva'
 
 import type { FlowFrame, FlowImage, FlowRun, PlacedBlock } from '../editor/flowLayout'
@@ -413,7 +414,7 @@ function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
 }
 
 /** 大題與小題由排版自動定位。題目附圖可在卷面上拖曳，改它接在題幹的哪裡 */
-export function ExamFlowLayer({
+function ExamFlowLayerInner({
   blocks,
   frames,
   assets,
@@ -511,3 +512,6 @@ export function ExamFlowLayer({
     </Group>
   )
 }
+
+/** 只在自己的資料變動時重畫；選取別的物件、存檔狀態改變時不必重算 */
+export const ExamFlowLayer = memo(ExamFlowLayerInner)

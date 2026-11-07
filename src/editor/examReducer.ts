@@ -24,6 +24,14 @@ export type ExamAction =
   | { type: 'SELECT_BLOCK'; ref: BlockRef | null }
   | { type: 'ADD_SECTION'; afterId?: string }
   | { type: 'LOAD_EXAMPLE'; subject?: SampleSubject }
+  /** 從 Word 匯入的大題。replace 取代整份題目，append 接在最後面 */
+  | {
+      type: 'IMPORT_EXAM'
+      sections: Section[]
+      assets: Record<string, Asset>
+      mode: 'replace' | 'append'
+      title?: string
+    }
   | { type: 'UPDATE_SECTION'; id: string; patch: Partial<Omit<Section, 'id' | 'questions'>> }
   | { type: 'REMOVE_SECTION'; id: string }
   | { type: 'MOVE_SECTION'; id: string; toIndex: number }
@@ -50,6 +58,7 @@ export const EXAM_ACTION_TYPES = new Set<string>([
   'SELECT_BLOCK',
   'ADD_SECTION',
   'LOAD_EXAMPLE',
+  'IMPORT_EXAM',
   'UPDATE_SECTION',
   'REMOVE_SECTION',
   'MOVE_SECTION',
@@ -136,6 +145,20 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
       const sample = createSampleExam(action.subject ?? 'chinese')
       const first = sample.sections[0]
       return { exam: sample, selectedBlock: first ? { kind: 'section', id: first.id } : null }
+    }
+    case 'IMPORT_EXAM': {
+      const first = action.sections[0]
+      const selected: BlockRef | null = first ? { kind: 'section', id: first.id } : null
+      if (action.mode === 'replace') {
+        return {
+          exam: { ...exam, numbering: 'perSection', sections: action.sections, assets: action.assets },
+          selectedBlock: selected,
+        }
+      }
+      return {
+        exam: { ...exam, sections: [...exam.sections, ...action.sections], assets: { ...exam.assets, ...action.assets } },
+        selectedBlock: selected,
+      }
     }
     case 'ADD_SECTION': {
       const s = createSection()

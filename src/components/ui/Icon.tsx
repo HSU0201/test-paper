@@ -23,6 +23,7 @@ export type IconName =
   | 'fit'
   | 'grid'
   | 'backup'
+  | 'word'
 
 const ICON_PATHS: Record<IconName, ReactNode> = {
   outline: <path d="M4 6h2M9 6h11M6 12h2M11 12h9M6 18h2M11 18h9" />,
@@ -63,6 +64,12 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   open: <path d="M3 7h6l2 2h10v10H3z" />,
+  word: (
+    <>
+      <path d="M6 3h9l4 4v14H6z" />
+      <path d="M14 3v5h5M9 12l1.5 5 1.5-4 1.5 4 1.5-5" />
+    </>
+  ),
   save: (
     <>
       <path d="M12 4v11M7 10l5 5 5-5" />

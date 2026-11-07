@@ -9,7 +9,6 @@ import {
   type QuestionType,
   type Section,
 } from '../types/exam'
-import { readingsFor } from './hanToZhuyin'
 
 /** 範例卷頁首。國小低年級的題型，卷名用老師說的「國文」。 */
 export const CHINESE_SAMPLE_TITLE = '115學年度第一學期二年級國文第一次定期評量'
@@ -32,9 +31,11 @@ export const SAMPLE_SUBJECTS: { id: SampleSubject; label: string; ready: boolean
   { id: 'english', label: '英文', ready: true },
 ]
 
-/** 方格給學生寫國字；注音留白給學生在國字旁邊寫注音。讀音依詞庫，卷上不印出留白的注音。 */
-function withRuby(text: string, face: 'box' | 'blank'): string {
-  const readings = readingsFor(text)
+/**
+ * 方格給學生寫國字；注音留白給學生在國字旁邊寫注音。卷上不印出留白的注音。
+ * 讀音直接寫在這裡，開頁建立範例卷時不必等注音詞庫載入。
+ */
+function withRuby(text: string, face: 'box' | 'blank', readings: string[]): string {
   const mark = face === 'box' ? 'yb' : 'yn'
   return [...text]
     .map((ch, i) => {
@@ -84,8 +85,8 @@ function createChineseSample(): ExamContent {
       instruction: '第 1 題看注音，把國字寫在方格裡。第 2 題看國字，在旁邊的空位寫上注音。',
     },
     [
-      ask('fill_blank', 1, `看注音寫國字：\n${withRuby('花朵美麗', 'box')}`, { answer: '花朵美麗' }),
-      ask('fill_blank', 1, `看國字寫注音：\n${withRuby('朋友玩耍', 'blank')}`, {
+      ask('fill_blank', 1, `看注音寫國字：\n${withRuby('花朵美麗', 'box', ['ㄏㄨㄚ', 'ㄉㄨㄛˇ', 'ㄇㄟˇ', 'ㄌㄧˋ'])}`, { answer: '花朵美麗' }),
+      ask('fill_blank', 1, `看國字寫注音：\n${withRuby('朋友玩耍', 'blank', ['ㄆㄥˊ', 'ㄧㄡˇ', 'ㄨㄢˊ', 'ㄕㄨㄚˇ'])}`, {
         answer: 'ㄆㄥˊ　ㄧㄡˇ　ㄨㄢˊ　ㄕㄨㄚˇ',
       }),
     ],

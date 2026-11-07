@@ -30,7 +30,7 @@ export default defineConfig([
       ],
       'react-refresh/only-export-components': [
         'error',
-        { allowConstantExport: true, allowExportNames: ['useEditor'] },
+        { allowConstantExport: true, allowExportNames: ['useEditor', 'useEditorPersist'] },
       ],
       'simple-import-sort/imports': [
         'error',

@@ -1,16 +1,37 @@
 /**
  * 國字轉注音。詞庫用 pinyin-pro（含繁體讀音），再把拼音換成注音。
  * 少數台灣教材和詞庫不同的詞，在這裡改成國小常見讀法；轉完仍可在欄位裡直接改注音。
+ *
+ * 詞庫很大，不放進首頁的程式包：開頁後在背景載入，要換注音的操作先 await ensureZhuyin()。
  */
-import traditionalDict from '@pinyin-pro/data/traditional'
-import { addTraditionalDict, pinyin } from 'pinyin-pro'
+type PinyinFn = typeof import('pinyin-pro').pinyin
 
-let dictReady = false
+let pinyin: PinyinFn | null = null
+let loading: Promise<void> | null = null
 
-function ensureDict() {
-  if (dictReady) return
-  addTraditionalDict(traditionalDict)
-  dictReady = true
+/** 載入注音詞庫；重複呼叫共用同一次載入 */
+export function ensureZhuyin(): Promise<void> {
+  loading ??= Promise.all([import('pinyin-pro'), import('@pinyin-pro/data/traditional')]).then(
+    ([lib, dict]) => {
+      lib.addTraditionalDict(dict.default)
+      pinyin = lib.pinyin
+    },
+    (err: unknown) => {
+      loading = null
+      throw err
+    },
+  )
+  return loading
+}
+
+/** 詞庫已可同步查讀音 */
+export function zhuyinReady(): boolean {
+  return pinyin !== null
+}
+
+/** 先載入詞庫再執行；載入失敗時仍會執行（換不出注音的字維持國字） */
+export function withZhuyin(fn: () => void): void {
+  void ensureZhuyin().then(fn, fn)
 }
 
 /** 每個字一個帶聲調數字的拼音，例如 ji3、ge0。輕聲是 0。 */
@@ -194,9 +215,13 @@ type PinyinRow = { origin: string; result: string; isZh: boolean }
 
 /** 一段連續國字，每個字一個注音；沒有讀音的字是 null。 */
 export function readingsFor(text: string): (string | null)[] {
-  ensureDict()
   const chars = [...text]
   if (!chars.length) return []
+  // 詞庫還沒載入時查不到讀音，呼叫端會把字留成國字
+  if (!pinyin) {
+    void ensureZhuyin().catch(() => undefined)
+    return chars.map(() => null)
+  }
   const rows = pinyin(text, { type: 'all', toneType: 'num', traditional: true }) as PinyinRow[]
   const out: (string | null)[] = []
   if (rows.length === chars.length && rows.every((row, i) => row.origin === chars[i])) {

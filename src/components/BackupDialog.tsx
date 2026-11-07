@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
 
 import { documentBaseName, downloadJson, readDocumentFile, serializeDocument, toLoadAction } from '../editor/documentIO'
-import { useEditor } from '../editor/EditorContext'
+import { useEditor, useEditorPersist } from '../editor/EditorContext'
 import { loadSnapshot, MAX_SNAPSHOTS, SNAPSHOT_EVERY_MINUTES } from '../editor/persist'
 import { easeOut } from '../motion/presets'
 import { MotionDialog } from './MotionDialog'
@@ -24,7 +24,8 @@ function fileStamp(at: number) {
 }
 
 export function BackupDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { state, dispatch, snapshots, backupNow, reloadSnapshots } = useEditor()
+  const { state, dispatch } = useEditor()
+  const { snapshots, backupNow, reloadSnapshots } = useEditorPersist()
   const openRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const baseName = documentBaseName(state)
