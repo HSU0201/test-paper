@@ -185,6 +185,7 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
             suffix="分"
             min={0}
             max={100}
+            step={0.1}
             value={section.blankScore}
             onChange={(v) => set({ blankScore: v })}
           />
@@ -195,6 +196,7 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
               suffix="分"
               min={0}
               max={100}
+              step={0.5}
               value={section.defaultScore}
               onChange={(v) => set({ defaultScore: v })}
             />
@@ -249,11 +251,27 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
             options={[
               { value: 'flow', label: '一般' },
               { value: 'rows', label: '直式表格' },
+              { value: 'grid', label: '注音格' },
             ]}
             onChange={(layout) => set({ layout })}
           />
         </div>
-        <div className="ui-field">
+        {section.layout === 'grid' ? (
+          <>
+            <div className="exam-style__head">
+              <span className="exam-style__label">國字格畫田字格</span>
+              <Switch
+                checked={section.gridGuide === true}
+                label="國字格畫田字格"
+                onChange={(gridGuide) => set({ gridGuide })}
+              />
+            </div>
+            <p className="exam-style__follow">
+              每一小題寫一個語詞，每個字一格：左邊國字、右邊注音。在題目文字裡選取字後，按「改成方格」讓學生寫國字，按「注音留白」讓學生寫注音，按「加上注音」兩個都印出來；只打國字沒加注音的，注音欄會空著。留白的字會自動印在答案卷上。橫向試卷由右往左直排。
+            </p>
+          </>
+        ) : null}
+        <div className="ui-field" hidden={section.layout === 'grid'}>
           <span className="ui-field__label">小題並排</span>
           <Segmented<'1' | '2' | 'all'>
             label="小題並排"
@@ -266,7 +284,7 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
             onChange={(v) => set({ rowSize: v === '2' ? 2 : v === 'all' ? 'all' : 1 })}
           />
         </div>
-        <p className="exam-style__follow">
+        <p className="exam-style__follow" hidden={section.layout === 'grid'}>
           {section.rowSize === 'all'
             ? '這一大題的小題全部左右排在同一列。各題自己的「與下一題同一列」會關掉。'
             : section.rowSize === 2

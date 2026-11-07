@@ -11,6 +11,7 @@ import {
   paintText,
   plainText,
   revertAllZhuyin,
+  setNthReading,
   textDecorationFor,
 } from './richText'
 
@@ -64,5 +65,14 @@ describe('換成注音', () => {
   it('沒有國字時原樣回傳', () => {
     expect(convertAllToZhuyin('abc 123')).toBe('abc 123')
     expect(hasRubyMarkup('abc')).toBe(false)
+  })
+})
+
+describe('setNthReading', () => {
+  it('改第 n 個注音的讀音，其他不動', () => {
+    const src = '{{z:銀|ㄧㄣˊ}}{{z:行|ㄒㄧㄥˊ}}和{{y:行|ㄒㄧㄥˊ}}'
+    expect(setNthReading(src, 1, 'ㄏㄤˊ')).toBe('{{z:銀|ㄧㄣˊ}}{{z:行|ㄏㄤˊ}}和{{y:行|ㄒㄧㄥˊ}}')
+    expect(setNthReading(src, 2, 'ㄏㄤˊ')).toBe('{{z:銀|ㄧㄣˊ}}{{z:行|ㄒㄧㄥˊ}}和{{y:行|ㄏㄤˊ}}')
+    expect(setNthReading(src, 5, 'ㄏㄤˊ')).toBe(src)
   })
 })

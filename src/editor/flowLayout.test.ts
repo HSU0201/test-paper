@@ -62,3 +62,27 @@ describe('layoutExam', () => {
     expect(after).toBeGreaterThan(1)
   })
 })
+
+describe('過長的題目', () => {
+  it('比一整欄還高時，切開接到下一欄，不超出版面', () => {
+    const state = initialEditorState()
+    const sectionId = state.exam.sections[0].id
+    let slice = { exam: state.exam, selectedBlock: state.selectedBlock }
+    slice = examReducer(slice, { type: 'ADD_QUESTION', sectionId })
+    const id = slice.selectedBlock?.id ?? ''
+    const stem = Array.from({ length: 120 }, (_, i) => `第${i + 1}行的閱讀短文內容。`).join('\n')
+    slice = examReducer(slice, { type: 'UPDATE_QUESTION', id, patch: { stem } })
+    const r = layout({ ...state, exam: slice.exam })
+    const pieces = r.blocks.filter((b) => b.ref.id === id)
+    expect(pieces.length).toBeGreaterThan(1)
+    expect(r.warnings.some((w) => w.type === 'oversize' && w.ref.id === id)).toBe(false)
+    for (const b of pieces) {
+      const frame = computePageGeometry(state.layout, state.pageWidth, state.pageHeight, b.page).frames[b.frame]
+      expect(b.box.y + b.box.h).toBeLessThanOrEqual(frame.y + frame.h + 0.5)
+    }
+    // 每一行都還在，沒有因為切開而遺失
+    const lines = pieces.flatMap((b) => b.runs.map((run) => run.text)).join('\n')
+    expect(lines).toContain('第1行')
+    expect(lines).toContain('第120行')
+  })
+})

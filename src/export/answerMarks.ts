@@ -728,7 +728,8 @@ export function answerMarks(
   const marks: AnswerMark[] = []
   for (const [id, group] of byQuestion) {
     const hit = locate(exam, id)
-    if (!hit) continue
+    // 注音格的答案畫在格子裡（排版時就放好），這裡不再另外標
+    if (!hit || hit.section.layout === 'grid') continue
     for (const mark of questionMarks(hit.section, hit.question, group, fontFamily)) {
       if (mark.page === page) marks.push(mark)
     }

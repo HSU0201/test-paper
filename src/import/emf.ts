@@ -111,8 +111,20 @@ export function readEmfHeader(buf: ArrayBuffer): EmfHeader {
   }
 }
 
+/** BITMAPINFO 後面緊接像素時（WMF 的寫法），像素從哪裡開始 */
+export function dibBitsOffset(view: DataView, bmiAt: number): number {
+  const headerSize = view.getUint32(bmiAt, true)
+  const bitCount = view.getUint16(bmiAt + 14, true)
+  const compression = headerSize >= 20 ? view.getUint32(bmiAt + 16, true) : 0
+  const clrUsed = headerSize >= 36 ? view.getUint32(bmiAt + 32, true) : 0
+  let at = bmiAt + headerSize
+  if (compression === 3 && headerSize === 40) at += 12
+  if (bitCount <= 8) at += (clrUsed || 1 << bitCount) * 4
+  return at
+}
+
 /** DIB（BITMAPINFO＋像素）轉成可以畫的圖。不支援的壓縮格式回傳 null */
-async function decodeDib(view: DataView, bmiAt: number, bitsAt: number, bitsLen: number): Promise<CanvasImageSource | null> {
+export async function decodeDib(view: DataView, bmiAt: number, bitsAt: number, bitsLen: number): Promise<CanvasImageSource | null> {
   const headerSize = view.getUint32(bmiAt, true)
   const width = view.getInt32(bmiAt + 4, true)
   const rawHeight = view.getInt32(bmiAt + 8, true)

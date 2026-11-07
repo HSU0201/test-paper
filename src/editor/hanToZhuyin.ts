@@ -248,3 +248,16 @@ export function readingsFor(text: string): (string | null)[] {
   }
   return out.map((py) => (py ? pinyinSyllableToZhuyin(py) : null))
 }
+
+/** 一個字所有的讀音（注音），常用的在前。詞庫還沒載入或不是國字時回傳空陣列 */
+export function readingOptions(han: string): string[] {
+  const ch = [...han][0]
+  if (!pinyin || !ch) return []
+  const list = pinyin(ch, { multiple: true, type: 'array', toneType: 'num', traditional: true }) as string[]
+  const out: string[] = []
+  for (const py of list) {
+    const zy = pinyinSyllableToZhuyin(py.replace(/(\D)$/, '$10'))
+    if (zy && !out.includes(zy)) out.push(zy)
+  }
+  return out
+}

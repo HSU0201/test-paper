@@ -19,6 +19,7 @@ import {
 import { type DocImage, type DocLayout, readParagraphs, readRelationships } from './docxParagraphs'
 import { isEmf, renderEmf } from './emf'
 import { buildVendorExam, choiceIndexes, flattenAnswer, type ImportedQuestion, type ImportedSection, vendorBlankCount } from './vendorExam'
+import { isWmf, renderWmf } from './wmf'
 
 export type ImportProgress = { stage: 'read' | 'images' | 'build'; done: number; total: number }
 
@@ -96,13 +97,17 @@ const MIME: Record<string, string> = {
   webp: 'image/webp',
 }
 
-/** 轉一張 Word 圖片；不支援的格式（例如 WMF）回傳 null */
+/** 轉一張 Word 圖片；不支援的格式回傳 null */
 async function convertImage(zip: Unzipped, target: string): Promise<Asset | null> {
   const bytes = zip[`word/${target}`]
   if (!bytes) return null
   const ext = target.split('.').pop()?.toLowerCase() ?? ''
   if (ext === 'emf' || isEmf(bytes.slice(0, 96).buffer)) {
     const canvas = await renderEmf(bytes.slice().buffer, MAX_SIDE)
+    return canvasToAsset(canvas)
+  }
+  if (ext === 'wmf' || isWmf(bytes.slice(0, 32).buffer)) {
+    const canvas = await renderWmf(bytes.slice().buffer, MAX_SIDE)
     return canvasToAsset(canvas)
   }
   const type = MIME[ext]
@@ -210,6 +215,7 @@ export async function importWordExam(
     .map((s, si) => {
       const section = createSection(s.title, s.questions[0]?.choices ? 'single_choice' : 'fill_blank')
       section.instruction = s.instruction
+      if (s.total != null) section.expectedTotal = s.total
       if (s.blankScore != null) {
         section.scoreMode = 'blank'
         section.blankScore = s.blankScore

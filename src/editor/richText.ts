@@ -673,3 +673,14 @@ export function editRuby(input: string, start: number, end: number, mode: RubyEd
   }
   return changed ? serializeSegments(replaced) : input
 }
+
+/** 第 n 個注音（換成注音或右側注音都算）改成指定讀音 */
+export function setNthReading(input: string, n: number, reading: string): string {
+  let k = -1
+  const pieces = placeSegments(parseSegments(input)).map((piece) => {
+    if (piece.kind !== 'zy' && piece.kind !== 'ruby') return piece
+    k += 1
+    return k === n ? { ...piece, reading } : piece
+  })
+  return k >= n ? serializeSegments(pieces) : input
+}

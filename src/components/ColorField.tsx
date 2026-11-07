@@ -1,7 +1,7 @@
-import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 
-import { withZhuyin } from '../editor/hanToZhuyin'
-import { editRuby, editZhuyin, htmlToMarkup, INK_PALETTE, markupToHtml, plainText, type RubyEdit } from '../editor/richText'
+import { ensureZhuyin, readingOptions, withZhuyin } from '../editor/hanToZhuyin'
+import { editRuby, editZhuyin, htmlToMarkup, INK_PALETTE, markupToHtml, plainText, type RubyEdit, setNthReading } from '../editor/richText'
 
 type ColorFieldProps = {
   value: string
@@ -26,7 +26,60 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
   const rangeRef = useRef<Range | null>(null)
   const composing = useRef(false)
   const [msg, setMsg] = useState<string | null>(null)
+  /** 點到破音字時，列出可選的讀音 */
+  const [poly, setPoly] = useState<{ n: number; han: string; current: string; options: string[] } | null>(null)
   const empty = !plainText(value)
+
+  /** 有好幾個讀音的字加上虛線底，提示可以點來換讀音 */
+  const markPoly = () => {
+    const el = ref.current
+    if (!el) return
+    el.querySelectorAll<HTMLElement>('.zy, .ruby').forEach((span) => {
+      const han = span.dataset.han ?? ''
+      const many = readingOptions(han).length > 1
+      span.classList.toggle('is-poly', many)
+      if (many) span.title = `「${han}」有好幾個讀音，點一下可以換`
+    })
+  }
+  useEffect(() => {
+    if (!/{{(?:z|y[brn]?):/.test(value)) return
+    let alive = true
+    ensureZhuyin().then(
+      () => {
+        if (alive) markPoly()
+      },
+      () => undefined,
+    )
+    return () => {
+      alive = false
+    }
+  }, [value])
+
+  const pickPoly = (target: EventTarget | null) => {
+    const el = ref.current
+    const span = target instanceof Element ? target.closest<HTMLElement>('.zy, .ruby') : null
+    if (!el || !span || !el.contains(span)) {
+      setPoly(null)
+      return
+    }
+    const n = [...el.querySelectorAll('.zy, .ruby')].indexOf(span)
+    const han = span.dataset.han ?? ''
+    const current = span.dataset.reading ?? span.textContent ?? ''
+    withZhuyin(() => {
+      const options = readingOptions(han)
+      setPoly(options.length > 1 ? { n, han, current, options } : null)
+    })
+  }
+
+  const choosePoly = (reading: string) => {
+    const el = ref.current
+    if (!el || !poly) return
+    const next = setNthReading(htmlToMarkup(el), poly.n, reading)
+    el.innerHTML = markupToHtml(next)
+    onChange(next)
+    setPoly(null)
+    markPoly()
+  }
 
   const saveSel = () => {
     const sel = window.getSelection()
@@ -190,6 +243,7 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
         data-placeholder={placeholder}
         spellCheck={false}
         onMouseUp={saveSel}
+        onClick={(e) => pickPoly(e.target)}
         onKeyUp={saveSel}
         onCompositionStart={() => {
           composing.current = true
@@ -279,6 +333,26 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
           </button>
         </span>
       </div>
+      {poly ? (
+        <div className="color-field__poly" role="group" aria-label={`「${poly.han}」的讀音`}>
+          <span>「{poly.han}」的讀音：</span>
+          {poly.options.map((reading) => (
+            <button
+              key={reading}
+              type="button"
+              className={reading === poly.current ? 'text-btn is-current' : 'text-btn'}
+              aria-pressed={reading === poly.current}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => choosePoly(reading)}
+            >
+              {reading}
+            </button>
+          ))}
+          <button type="button" className="text-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => setPoly(null)}>
+            關閉
+          </button>
+        </div>
+      ) : null}
       {msg ? <p className="color-field__hint">{msg}</p> : null}
     </div>
   )

@@ -24,6 +24,8 @@ export type ExamAction =
   | { type: 'SELECT_BLOCK'; ref: BlockRef | null }
   | { type: 'ADD_SECTION'; afterId?: string }
   | { type: 'LOAD_EXAMPLE'; subject?: SampleSubject }
+  /** 滿分；undefined 表示用預設的 100 */
+  | { type: 'SET_FULL_SCORE'; value: number | undefined }
   /** 從 Word 匯入的大題。replace 取代整份題目，append 接在最後面 */
   | {
       type: 'IMPORT_EXAM'
@@ -59,6 +61,7 @@ export const EXAM_ACTION_TYPES = new Set<string>([
   'ADD_SECTION',
   'LOAD_EXAMPLE',
   'IMPORT_EXAM',
+  'SET_FULL_SCORE',
   'UPDATE_SECTION',
   'REMOVE_SECTION',
   'MOVE_SECTION',
@@ -145,6 +148,11 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
       const sample = createSampleExam(action.subject ?? 'chinese')
       const first = sample.sections[0]
       return { exam: sample, selectedBlock: first ? { kind: 'section', id: first.id } : null }
+    }
+    case 'SET_FULL_SCORE': {
+      const { fullScore: _old, ...rest } = exam
+      const valid = typeof action.value === 'number' && Number.isFinite(action.value) && action.value > 0
+      return { ...state, exam: valid ? { ...rest, fullScore: action.value } : rest }
     }
     case 'IMPORT_EXAM': {
       const first = action.sections[0]

@@ -69,8 +69,8 @@ export type ScoreMode = 'each' | 'blank'
 /** none：不畫框；body：只框題目；all：標題和題目一起框 */
 export type SectionFrame = 'none' | 'body' | 'all'
 
-/** flow：由上往下；rows：每一題一列，適合直式計算 */
-export type SectionLayout = 'flow' | 'rows'
+/** flow：由上往下；rows：每一題一列，適合直式計算；grid：國字注音格，每題一個語詞 */
+export type SectionLayout = 'flow' | 'rows' | 'grid'
 
 /** dot：1. ；paren：(1) */
 export type NumberStyle = 'dot' | 'paren'
@@ -198,6 +198,10 @@ export type Section = {
   rowSize: 1 | 2 | 'all'
   /** 這一題用注音出題。新的小題跟著這個設定，各題仍可單獨改 */
   zhuyin: boolean
+  /** 國字注音格的國字方格裡畫田字格虛線 */
+  gridGuide?: boolean
+  /** 原卷寫的大題總分（例如從 Word 匯入）。配分檢查時核對 */
+  expectedTotal?: number
   /**
    * 閱讀短文。印在作答說明和題目之間，並加上外框。
    * 空字串表示沒有短文。
@@ -214,6 +218,8 @@ export type ExamContent = {
   assets: Record<string, Asset>
   /** 續頁提示與作答結束。位置由排版決定，這裡只開關與文字 */
   footer: ExamFooter
+  /** 滿分。配分檢查用；未設為 100 */
+  fullScore?: number
 }
 
 /** header：頁首欄位；notice：提示框 */
@@ -459,9 +465,10 @@ export function createEmptyExam(): ExamContent {
 const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]
 const FIGURE_PLACEMENTS: FigurePlacement[] = ['below', 'middle', 'right', 'afterChoices']
 
+/** 配分可以有小數（例如每格 0.3 分），保留到小數第二位 */
 function clampScore(n: unknown, fallback: number): number {
   const v = typeof n === 'number' && Number.isFinite(n) ? n : fallback
-  return Math.min(100, Math.max(0, Math.round(v)))
+  return Math.min(100, Math.max(0, Math.round(v * 100) / 100))
 }
 
 function clampRowLines(n: unknown): number {
@@ -573,6 +580,7 @@ export function normalizeExam(raw: unknown): ExamContent {
   return {
     numbering: r.numbering === 'perSection' ? 'perSection' : 'continuous',
     assets,
+    ...(typeof r.fullScore === 'number' && Number.isFinite(r.fullScore) && r.fullScore > 0 ? { fullScore: r.fullScore } : {}),
     footer: normalizeFooter(r.footer, (r as { notices?: unknown }).notices),
     sections: sections.map((s) => {
       const base = createSection()
@@ -585,7 +593,7 @@ export function normalizeExam(raw: unknown): ExamContent {
         scoreMode: s.scoreMode === 'blank' ? 'blank' : 'each',
         blankScore: clampScore(s.blankScore, clampScore(s.defaultScore, base.defaultScore)),
         frame: s.frame === 'body' || s.frame === 'all' ? s.frame : 'none',
-        layout: s.layout === 'rows' ? 'rows' : 'flow',
+        layout: s.layout === 'rows' || s.layout === 'grid' ? s.layout : 'flow',
         rowLines: clampRowLines(s.rowLines),
         rowSize: s.rowSize === 2 || s.rowSize === 'all' ? s.rowSize : 1,
         numberStyle: s.numberStyle === 'paren' ? 'paren' : 'dot',

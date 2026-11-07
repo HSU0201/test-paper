@@ -1,10 +1,11 @@
-import { type DragEvent, type KeyboardEvent,useEffect, useState } from 'react'
+import { type DragEvent, type KeyboardEvent, useEffect, useMemo, useState } from 'react'
 
 import { motion } from 'motion/react'
 
 import { SAMPLE_SUBJECTS } from '../../editor/chineseSample'
 import { useEditor } from '../../editor/EditorContext'
 import { hasRubyMarkup, hasZhuyinMarkup, plainText } from '../../editor/richText'
+import { checkScores } from '../../editor/scoreCheck'
 import { layoutSpring } from '../../motion/presets'
 import {
   type BlockRef,
@@ -19,6 +20,8 @@ import {
   sectionRowSize,
   sectionScore,
 } from '../../types/exam'
+import { ScoreCheckDialog } from '../ScoreCheckDialog'
+import { requestReveal } from '../shell/revealBlock'
 import { Icon, Segmented, Switch } from '../ui'
 
 function SelectMark({ on }: { on: boolean }) {
@@ -42,10 +45,16 @@ export function OutlinePanel() {
   const [drop, setDrop] = useState<Drop>(null)
   const nums = questionNumbers(exam)
   const totals = examTotals(exam)
+  const scoreCheck = useMemo(() => checkScores(exam), [exam])
+  const [checkOpen, setCheckOpen] = useState(false)
+  const checkErrors = scoreCheck.issues.filter((i) => i.level === 'error').length
   const overflowIds = new Set(flow.warnings.flatMap((w) => (w.type === 'oversize' ? [w.ref.id] : [])))
   const pageOf = new Map(flow.blocks.map((b) => [b.ref.id, b.page]))
 
-  const select = (ref: BlockRef) => dispatch({ type: 'SELECT_BLOCK', ref })
+  const select = (ref: BlockRef) => {
+    dispatch({ type: 'SELECT_BLOCK', ref })
+    requestReveal(ref.id)
+  }
   const isSel = (id: string) => selectedBlock?.id === id
 
   useEffect(() => {
@@ -108,6 +117,17 @@ export function OutlinePanel() {
           <span>大題</span>
         </div>
       </div>
+      <button
+        type="button"
+        className={`outline__check${checkErrors ? ' is-error' : scoreCheck.issues.length ? ' is-warn' : ' is-ok'}`}
+        onClick={() => setCheckOpen(true)}
+      >
+        <span className="outline__check-dot" aria-hidden />
+        {scoreCheck.issues.length
+          ? `配分檢查：${scoreCheck.issues.length} 個地方要看`
+          : `配分檢查：總分 ${scoreCheck.total} 分，沒有問題`}
+      </button>
+      <ScoreCheckDialog open={checkOpen} check={scoreCheck} onClose={() => setCheckOpen(false)} />
 
       <div className="outline__numbering">
         <span className="ui-field__label">題號</span>
@@ -192,6 +212,7 @@ export function OutlinePanel() {
                 </span>
                 {(s.frame ?? 'none') !== 'none' ? <span className="outline-row__badge">框</span> : null}
                 {(s.layout ?? 'flow') === 'rows' ? <span className="outline-row__badge">表</span> : null}
+                {s.layout === 'grid' ? <span className="outline-row__badge">格</span> : null}
                 {sectionRowSize(s) === 2 ? <span className="outline-row__badge">兩題</span> : null}
                 {sectionRowSize(s) === 'all' ? <span className="outline-row__badge">同列</span> : null}
                 {s.zhuyin ? <span className="outline-row__badge">注音</span> : null}

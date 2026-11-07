@@ -8,6 +8,8 @@ import { fontStyleFor, layoutRichLines, type RubyFace,textDecorationFor } from '
 import { rubyPlace } from '../editor/rubyLayout'
 import { EDITOR_FLAG, EDITOR_SELECTION } from '../editor/theme'
 import { needsManualWrap } from '../editor/zhuyin'
+import { ANSWER_INK } from '../export/answerMarks'
+import { ANSWER_KEY_NAME } from '../export/pdfFromStage'
 import type { Asset, BlockRef } from '../types/exam'
 import { EDITOR_ONLY_NAME } from './PaperLayoutLayer'
 import { useHtmlImage } from './useHtmlImage'
@@ -453,6 +455,7 @@ function ExamFlowLayerInner({
                 points={[r.x1, r.y1, r.x2, r.y2]}
                 stroke={r.stroke ?? '#94a3b8'}
                 strokeWidth={r.strokeWidth ?? 1}
+                dash={r.dash}
                 listening={false}
               />
             ))}
@@ -461,9 +464,21 @@ function ExamFlowLayerInner({
               .map((im) => (
                 <FigureImage key={im.key} im={im} asset={assets[im.assetId]} />
               ))}
-            {b.runs.map((r) => (
-              <FlowRunText key={r.key} r={r} fontFamily={fontFamily} />
-            ))}
+            {b.runs
+              .filter((r) => !r.answer)
+              .map((r) => (
+                <FlowRunText key={r.key} r={r} fontFamily={fontFamily} />
+              ))}
+            {b.runs.some((r) => r.answer) ? (
+              // 注音格留白的字：只在匯出答案時顯示
+              <Group name={ANSWER_KEY_NAME} visible={false} listening={false}>
+                {b.runs
+                  .filter((r) => r.answer)
+                  .map((r) => (
+                    <FlowRunText key={r.key} r={{ ...r, style: { ...r.style, fill: ANSWER_INK } }} fontFamily={fontFamily} />
+                  ))}
+              </Group>
+            ) : null}
             <Rect
               name={EDITOR_ONLY_NAME}
               x={b.box.x - pad}

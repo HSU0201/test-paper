@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type Konva from 'konva'
 import { AnimatePresence, motion } from 'motion/react'
@@ -12,6 +12,7 @@ import { InsertPanel } from './panels/InsertPanel'
 import { OutlinePanel } from './panels/OutlinePanel'
 import { SheetPanel, SheetSwitch, type SheetView } from './panels/SheetPanel'
 import { PaperStage } from './PaperStage'
+import { onRevealRequest } from './shell/revealBlock'
 import { focusKeyOf, SIDE_TABS, type SideTab,tabForFocusKey, taskHint } from './shell/sideTabs'
 import { useCanvasZoom } from './shell/useCanvasZoom'
 import { useContactRoute } from './shell/useContactRoute'
@@ -24,7 +25,7 @@ import { Icon } from './ui'
 import './editor.css'
 
 function EditorShell() {
-  const { state, dispatch, pageCount, draftReady } = useEditor()
+  const { state, dispatch, pageCount, draftReady, flow } = useEditor()
   const focusKey = focusKeyOf(state.selectedBlock, state.selectedId)
   const stagesRef = useRef<(Konva.Stage | null)[]>([])
   const pageElsRef = useRef<(HTMLDivElement | null)[]>([])
@@ -65,6 +66,36 @@ function EditorShell() {
   const locatePage = useCallback((page: number) => {
     pageElsRef.current[page]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
+
+  // 側欄點題目時，卷面捲到那一題；已經看得到就不動
+  const flowRef = useRef(flow)
+  const scaleRef = useRef(scale)
+  useEffect(() => {
+    flowRef.current = flow
+    scaleRef.current = scale
+  }, [flow, scale])
+  useEffect(
+    () =>
+      onRevealRequest((id) => {
+        // 等選取後的畫面更新完再量位置
+        window.setTimeout(() => {
+          const scroller = canvasScrollRef.current
+          const block = flowRef.current.blocks.find((b) => b.ref.id === id)
+          const inner = block ? pageElsRef.current[block.page]?.querySelector<HTMLElement>('.canvas-inner') : null
+          if (!scroller || !block || !inner) return
+          const k = scaleRef.current
+          const view = scroller.getBoundingClientRect()
+          const at = inner.getBoundingClientRect()
+          const top = at.top + block.box.y * k
+          const bottom = top + Math.min(block.box.h * k, view.height * 0.8)
+          if (top >= view.top + 8 && bottom <= view.bottom - 8) return
+          const delta = top - view.top - view.height * 0.2
+          // 很遠就直接跳過去，近的才平滑捲動
+          scroller.scrollBy({ top: delta, behavior: Math.abs(delta) > view.height * 2 ? 'auto' : 'smooth' })
+        }, 30)
+      }),
+    [canvasScrollRef],
+  )
   const activeTab = SIDE_TABS.find((item) => item.id === tab)
 
   return (

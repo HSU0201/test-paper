@@ -53,3 +53,16 @@ describe('配分小數', () => {
     expect(examTotals({ numbering: 'continuous', sections: [s, s, s], assets: {}, footer: undefined as never }).score).toBe(18.9)
   })
 })
+
+describe('讀回存檔', () => {
+  it('每格 0.3 分這種小數配分不會被四捨五入成 0', async () => {
+    const { normalizeExam, createSection } = await import('../types/exam')
+    const s = createSection('選擇題')
+    s.scoreMode = 'blank'
+    s.blankScore = 0.3
+    s.defaultScore = 1.5
+    const back = normalizeExam(JSON.parse(JSON.stringify({ numbering: 'continuous', sections: [s], assets: {} })))
+    expect(back.sections[0].blankScore).toBe(0.3)
+    expect(back.sections[0].defaultScore).toBe(1.5)
+  })
+})

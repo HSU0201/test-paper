@@ -2948,3 +2948,150 @@ kbd {
   flex-direction: column;
   gap: 4px;
 }
+
+/* ============ 配分檢查 ============ */
+.outline__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: -6px 0 14px;
+  padding: 7px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-m);
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.outline__check:hover {
+  border-color: var(--c-border-hover);
+}
+
+.outline__check-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3f9b5b;
+}
+
+.outline__check.is-warn .outline__check-dot {
+  background: var(--c-accent);
+}
+
+.outline__check.is-error {
+  border-color: var(--c-warn-line);
+  background: var(--c-warn-soft);
+  color: var(--c-warn-ink);
+}
+
+.outline__check.is-error .outline__check-dot {
+  background: var(--c-danger);
+}
+
+.score-check {
+  width: min(560px, 100%);
+}
+
+.score-check__head {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.score-check__total {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 14px;
+  border-radius: var(--radius-m);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+}
+
+.score-check__total strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-accent-ink);
+}
+
+.score-check__total span {
+  font-size: 11px;
+  color: var(--c-text-3);
+}
+
+.score-check__summary,
+.score-check__ok {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--c-text-2);
+}
+
+.score-check__list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  max-height: 320px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.score-check__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.score-check__item span {
+  flex: 1;
+  min-width: 0;
+}
+
+.score-check__item.is-error {
+  border-color: var(--c-warn-line);
+  background: var(--c-warn-soft);
+  color: var(--c-warn-ink);
+}
+
+/* ============ 破音字 ============ */
+.color-field__box .is-poly {
+  text-decoration: underline dotted var(--c-accent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.color-field__box .ruby.is-poly {
+  outline: 1px dotted var(--c-accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.color-field__poly {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius-m);
+  background: var(--c-primary-soft);
+  font-size: 12px;
+  color: var(--c-accent-ink);
+}
+
+.color-field__poly .text-btn.is-current {
+  font-weight: 700;
+  text-decoration: underline;
+}

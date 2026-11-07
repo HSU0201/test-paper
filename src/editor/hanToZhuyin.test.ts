@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 
-import { ensureZhuyin, pinyinSyllableToZhuyin, readingsFor, zhuyinReady } from './hanToZhuyin'
+import { ensureZhuyin, pinyinSyllableToZhuyin, readingOptions, readingsFor, zhuyinReady } from './hanToZhuyin'
 
 describe('pinyinSyllableToZhuyin', () => {
   it('轉出聲母、韻母與聲調', () => {
@@ -39,5 +39,19 @@ describe('readingsFor', () => {
   it('非國字回傳 null', () => {
     expect(readingsFor('a花1')).toEqual([null, 'ㄏㄨㄚ', null])
     expect(readingsFor('')).toEqual([])
+  })
+})
+
+describe('readingOptions', () => {
+  beforeAll(() => ensureZhuyin())
+
+  it('破音字列出所有讀音', () => {
+    const opts = readingOptions('行')
+    expect(opts).toContain('ㄒㄧㄥˊ')
+    expect(opts).toContain('ㄏㄤˊ')
+  })
+
+  it('只有一個讀音的字只有一項', () => {
+    expect(readingOptions('花')).toEqual(['ㄏㄨㄚ'])
   })
 })

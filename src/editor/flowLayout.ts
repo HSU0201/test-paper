@@ -26,6 +26,7 @@ import {
 } from '../types/exam'
 import { type SpacingSettings,toVerticalGlyph } from '../types/layout'
 import type { Box } from './bounds'
+import { buildGridWord, type GridMetrics, gridMetrics } from './gridLayout'
 import { hasRubyMarkup, layoutRichLines, paintText, plainText, richChars } from './richText'
 import { type InkPiece, layoutRubyRun } from './rubyLayout'
 import { clusterUnits, needsManualWrap, textAtoms } from './zhuyin'
@@ -68,6 +69,8 @@ export type FlowRun = {
   /** 國字右側注音。有這欄時不再把 text 交給一般文字框 */
   ink?: InkPiece[]
   inkStep?: number
+  /** 只畫在答案圖層（例如注音格裡留白的字），平常隱藏 */
+  answer?: boolean
 }
 
 export type FlowRule = {
@@ -78,6 +81,7 @@ export type FlowRule = {
   y2: number
   stroke?: string
   strokeWidth?: number
+  dash?: number[]
 }
 
 /** 跨過好幾個題塊的外框，例如整題框線、直式表格 */
@@ -649,10 +653,112 @@ function questionChrome(section: Section, q: Question, c: Ctx): Chrome {
 
 type PaginateResult = Omit<FlowResult, 'squeeze' | 'lineHeight' | 'frames'> & { headMoves: number }
 
+/** 題塊裡每個元素佔的上下範圍。沒有記高度的文字，算到下一個元素開始為止 */
+function builtSpans(built: Built): { top: number; bottom: number }[] {
+  const tops = [
+    ...built.runs.map((r) => r.y),
+    ...built.images.map((im) => im.y),
+    ...built.rules.map((r) => Math.min(r.y1, r.y2)),
+  ]
+  const starts = [...new Set(tops)].sort((a, b) => a - b)
+  const nextStart = (y: number) => starts.find((s) => s > y + 0.5) ?? built.height
+  const runBottom = (r: FlowRun) => {
+    if (r.ink?.length && r.inkStep) return r.y + r.inkStep * (r.lineCount ?? Math.max(...r.ink.map((p) => p.line)) + 1)
+    if (typeof r.height === 'number') return r.y + r.height
+    return nextStart(r.y)
+  }
+  return [
+    ...built.runs.map((r) => ({ top: r.y, bottom: runBottom(r) })),
+    ...built.images.map((im) => ({ top: im.y, bottom: im.y + im.h })),
+    ...built.rules.map((r) => ({ top: Math.min(r.y1, r.y2), bottom: Math.max(r.y1, r.y2) })),
+  ]
+}
+
+/**
+ * 多行的文字拆成每行一段並記下高度，切開長題目時才有行與行之間的切點。
+ * 有注音排版（ink）或直排的文字維持原樣。
+ */
+function explodeLines(built: Built, m: MeasureFn): Built {
+  const runs: FlowRun[] = []
+  for (const r of built.runs) {
+    if (r.ink?.length || r.vertical || !r.text.includes('\n')) {
+      runs.push(r)
+      continue
+    }
+    const chars = [...r.text]
+    let start = 0
+    let y = r.y
+    let index = 0
+    for (let i = 0; i <= chars.length; i++) {
+      if (i < chars.length && chars[i] !== '\n') continue
+      const line = chars.slice(start, i).join('')
+      const height = m(line || ' ', r.width, r.style, r.lineHeight).height
+      runs.push({
+        ...r,
+        key: `${r.key}-L${index}`,
+        y,
+        text: line,
+        height,
+        colors: r.colors?.slice(start, i),
+        decos: r.decos?.slice(start, i),
+        lineCount: undefined,
+      })
+      y += height
+      index += 1
+      start = i + 1
+    }
+  }
+  return { ...built, runs }
+}
+
+/** 在 room 以內找一個不會切到文字或圖片的切點。找不到回傳 0 */
+function cutPoint(built: Built, room: number): number {
+  const spans = builtSpans(built)
+  const candidates = [...new Set(spans.map((s) => s.top))].filter((y) => y > 0.5 && y <= room).sort((a, b) => b - a)
+  for (const y of candidates) {
+    if (spans.every((s) => s.bottom <= y + 0.5 || s.top >= y - 0.5)) return y
+  }
+  return 0
+}
+
+/** 從 cut 切成上下兩塊，下半塊的座標往上移 */
+function splitBuilt(built: Built, cut: number): [Built, Built] {
+  const above = (y: number) => y < cut - 0.5
+  return [
+    {
+      height: cut,
+      runs: built.runs.filter((r) => above(r.y)),
+      images: built.images.filter((im) => above(im.y)),
+      rules: built.rules.filter((r) => above(Math.min(r.y1, r.y2))),
+    },
+    {
+      height: Math.max(0, built.height - cut),
+      runs: built.runs.filter((r) => !above(r.y)).map((r) => ({ ...r, y: r.y - cut })),
+      images: built.images.filter((im) => !above(im.y)).map((im) => ({ ...im, y: im.y - cut })),
+      rules: built.rules
+        .filter((r) => !above(Math.min(r.y1, r.y2)))
+        .map((r) => ({ ...r, y1: r.y1 - cut, y2: r.y2 - cut })),
+    },
+  ]
+}
+
+/** 國字注音格大題的小題：回傳格子尺寸；其他題目回傳 null */
+function gridOf(it: Item, c: Ctx): GridMetrics | null {
+  if (it.kind !== 'question' || it.section.layout !== 'grid') return null
+  return gridMetrics(resolveStyle(c.st.body, it.question.bodyStyle).fontSize)
+}
+
+function buildGridItem(it: Extract<Item, { kind: 'question' }>, c: Ctx): Built {
+  const body = resolveStyle(c.st.body, it.question.bodyStyle)
+  const built = buildGridWord(it.question.stem, questionLead(it), body, it.section.gridGuide === true)
+  return { height: built.height, runs: built.runs, rules: built.rules, images: [] }
+}
+
 function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): PaginateResult {
   const indents = questionIndents(items, c)
   const build = (it: Item, w: number): Built => {
     if (it.kind === 'notice') return buildNotice(it.text, w, c)
+    if (it.kind === 'question' && it.section.layout === 'grid') return buildGridItem(it, c)
     if (it.kind === 'section') {
       const pad = it.section.frame === 'all' ? FRAME_PAD : 0
       return insetBuilt(buildSectionHead(it.section, it.index, Math.max(40, w - pad * 2), c), pad)
@@ -689,15 +795,26 @@ function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): Pa
     if (it.kind === 'notice') return c.mt.questionGap
     if (it.kind === 'section') return c.mt.sectionGap
     if (it.section.layout === 'rows') return it.firstOfSection ? 8 : 0
+    if (it.section.layout === 'grid') return it.firstOfSection ? 4 : (gridOf(it, c)?.gap ?? 8)
     return it.firstOfSection ? 0 : c.mt.questionGap
   }
 
   /** 從這一題開始，同一列要放的題。只在每一列的第一題呼叫 */
-  const rowAt = (index: number): Item[] => {
+  const rowAt = (index: number, frameW: number): Item[] => {
     const it = items[index]
     if (!it || it.kind !== 'question') return it ? [it] : []
     const size = sectionRowSize(it.section)
-    const limit = size === 'all' ? Number.POSITIVE_INFINITY : size === 2 ? 2 : it.question.pairNext ? 2 : 1
+    const grid = gridOf(it, c)
+    // 注音格：一列放得下幾個語詞就放幾個
+    const limit = grid
+      ? Math.max(1, Math.floor((frameW + grid.gap) / (grid.cellW + grid.gap)))
+      : size === 'all'
+        ? Number.POSITIVE_INFINITY
+        : size === 2
+          ? 2
+          : it.question.pairNext
+            ? 2
+            : 1
     const group: Item[] = [it]
     for (let j = index + 1; j < items.length && group.length < limit; j++) {
       const next = items[j]
@@ -707,7 +824,9 @@ function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): Pa
     return group
   }
 
-  const columnWidths = (w: number, count: number, gutterEach: number) => {
+  const columnWidths = (w: number, count: number, gutterEach: number, first?: Item) => {
+    const grid = first ? gridOf(first, c) : null
+    if (grid) return { widths: Array.from({ length: count }, () => grid.cellW), gutter: grid.gap }
     if (count <= 1) return { widths: [w], gutter: 0 }
     const gaps = count - 1
     const gutter = Math.max(0, Math.min(gutterEach, Math.floor(w / 4 / gaps)))
@@ -719,9 +838,9 @@ function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): Pa
   }
 
   const rowMeasure = (index: number, frame: Box) => {
-    const group = rowAt(index)
+    const group = rowAt(index, frame.w)
     if (group.length <= 1) return { span: 1, height: build(items[index], frame.w).height }
-    const { widths } = columnWidths(frame.w, group.length, pairGutter(group[0]))
+    const { widths } = columnWidths(frame.w, group.length, pairGutter(group[0]), group[0])
     const height = Math.max(...group.map((it, k) => build(it, widths[k]).height))
     return { span: group.length, height }
   }
@@ -778,14 +897,14 @@ function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): Pa
 
   for (let i = 0; i < items.length; i++) {
     const it = items[i]
-    const group = it.kind === 'question' ? rowAt(i) : [it]
     let frame = frames[fi]
+    const group = it.kind === 'question' ? rowAt(i, frame.w) : [it]
     let atTop = y === frame.y
     let gap = atTop ? 0 : gapBefore(it)
 
     const measureHere = () => {
-      if (group.length > 1) {
-        const { widths, gutter } = columnWidths(frame.w, group.length, pairGutter(it))
+      if (group.length > 1 || gridOf(it, c)) {
+        const { widths, gutter } = columnWidths(frame.w, group.length, pairGutter(it), it)
         const built = group.map((g, k) => build(g, widths[k]))
         return { built, widths, gutter, height: Math.max(...built.map((b) => b.height)) }
       }
@@ -795,6 +914,44 @@ function paginate(items: Item[], getFrames: (page: number) => Box[], c: Ctx): Pa
 
     let laid = measureHere()
     const bottom = frame.y + frame.h
+
+    // 比一整欄還高的題目：在行或圖之間切開，剩下的接到下一欄，不讓它超出版面
+    if (group.length === 1 && it.kind === 'question' && !gridOf(it, c) && laid.height > frame.h) {
+      let rest = explodeLines(laid.built[0], c.m)
+      // 這一欄剩不到三行，先換欄再開始
+      const minRoom = resolveStyle(c.st.body, it.question.bodyStyle).fontSize * c.mt.lineHeight * 3
+      if (!atTop && bottom - (y + gap) < minRoom) {
+        nextFrame()
+        gap = 0
+      }
+      y += gap
+      for (let guard = 0; guard < 64; guard++) {
+        const f = frames[fi]
+        const room = f.y + f.h - y
+        if (rest.height <= room + 0.5) {
+          pushAt(it, rest, f.x, f.w, rest.height)
+          y += rest.height
+          break
+        }
+        const cut = cutPoint(rest, room)
+        if (cut <= 0) {
+          if (y > f.y + 0.5) {
+            nextFrame()
+            continue
+          }
+          // 單一行或單張圖就比整欄高，只能照放並提醒
+          warnings.push({ type: 'oversize', ref: itemRef(it), page })
+          pushAt(it, rest, f.x, f.w, rest.height)
+          y += rest.height
+          break
+        }
+        const [head, tail] = splitBuilt(rest, cut)
+        pushAt(it, head, f.x, f.w, head.height)
+        rest = tail
+        nextFrame()
+      }
+      continue
+    }
 
     if (!atTop) {
       const keep = it.kind === 'section' ? keepHeight(i, frame) : 0
@@ -1215,8 +1372,9 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
     const heading = it.kind === 'section' ? resolveStyle(st.heading, it.section.headingStyle) : st.heading
     const instruction = it.kind === 'section' ? resolveStyle(st.instruction, it.section.instructionStyle) : st.instruction
     const body = it.kind === 'question' ? resolveStyle(st.body, it.question.bodyStyle) : st.body
+    const gridItem = gridOf(it, c)
     applyGap(
-      it.kind === 'section' ? mt.sectionGap : it.firstOfSection ? 0 : mt.questionGap,
+      it.kind === 'section' ? mt.sectionGap : it.firstOfSection ? 0 : gridItem ? gridItem.gap : mt.questionGap,
       it.kind === 'question' ? body.fontSize : heading.fontSize,
     )
 
@@ -1272,6 +1430,25 @@ function paginateVertical(items: Item[], getFrames: (page: number) => Box[], c: 
 
     pendingSkip = 0
     const q = it.question
+    if (gridItem) {
+      // 注音格：一個語詞是一直行，由右往左排
+      const built = buildGridItem(it, c)
+      const w = gridItem.cellW
+      reserve(w)
+      const host = frame()
+      let gx = x - w
+      if (gx < host.x) {
+        gx = host.x
+        markOversize()
+      }
+      if (built.height > host.h + 0.5) markOversize()
+      const gy = host.y
+      acc.runs.push(...built.runs.map((r) => ({ ...r, x: r.x + gx, y: r.y + gy })))
+      acc.rules.push(...built.rules.map((r) => ({ ...r, x1: r.x1 + gx, x2: r.x2 + gx, y1: r.y1 + gy, y2: r.y2 + gy })))
+      track(gx, gx + w, gy + built.height)
+      x = gx
+      continue
+    }
     const rowsLayout = it.section.layout === 'rows'
     if (rowsLayout && !atStart()) {
       const minW = questionRowLines(it.section, q) * colPitchOf(body.fontSize)
