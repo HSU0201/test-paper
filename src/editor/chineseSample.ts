@@ -1,34 +1,32 @@
-import {
-  type Choice,
-  createChoice,
-  createDefaultFooter,
-  createQuestion,
-  createSection,
-  type ExamContent,
-  type Question,
-  type QuestionType,
-  type Section,
-} from '../types/exam'
+import { type Asset, createDefaultFooter, type ExamContent } from '../types/exam'
+import { clockSvg, numberLineSvg } from './mathFigures'
+import { ask, CELL, choices, MARK, orderRight, pairs, sec, SUB, svgAsset, withFigure } from './sampleKit'
+import { createScienceSample, createSocialSample } from './socialScienceSample'
 
 /** 範例卷頁首。國小低年級的題型，卷名用老師說的「國文」。 */
 export const CHINESE_SAMPLE_TITLE = '115學年度第一學期二年級國文第一次定期評量'
 
-export type SampleSubject = 'chinese' | 'math' | 'english'
+export type SampleSubject = 'chinese' | 'english' | 'math' | 'social' | 'science'
 
 const SAMPLE_TITLE: Record<SampleSubject, string> = {
   chinese: CHINESE_SAMPLE_TITLE,
   math: '115學年度第一學期三年級數學第一次定期評量',
   english: '115學年度第一學期三年級英文第一次定期評量',
+  social: '115學年度第一學期三年級社會第一次定期評量',
+  science: '115學年度第一學期三年級自然第一次定期評量',
 }
 
 export function sampleTitle(subject: SampleSubject = 'chinese'): string {
   return SAMPLE_TITLE[subject]
 }
 
-export const SAMPLE_SUBJECTS: { id: SampleSubject; label: string; ready: boolean }[] = [
-  { id: 'chinese', label: '國文', ready: true },
-  { id: 'math', label: '數學', ready: true },
-  { id: 'english', label: '英文', ready: true },
+/** 國、英、數、社、自。每一份都把常用題型各示範一次，配分加總 100 */
+export const SAMPLE_SUBJECTS: { id: SampleSubject; label: string; ready: boolean; note: string }[] = [
+  { id: 'chinese', label: '國文', ready: true, note: '注音方格、改錯字、成語、連連看、是非、閱讀題組' },
+  { id: 'english', label: '英文', ready: true, note: '單字、反義詞連連看、是非、文法、閱讀' },
+  { id: 'math', label: '數學', ready: true, note: '分數、時鐘、數線、多選、直式計算、應用題' },
+  { id: 'social', label: '社會', ready: true, note: '地圖方位、節日連連看、閱讀題組、雙向細目' },
+  { id: 'science', label: '自然', ready: true, note: '植物構造圖、動物連連看、實驗題組、雙向細目' },
 ]
 
 /**
@@ -45,30 +43,6 @@ function withRuby(text: string, face: 'box' | 'blank', readings: string[]): stri
     .join('')
 }
 
-function choices(texts: string[]): Choice[] {
-  return texts.map((text) => ({ ...createChoice(), text }))
-}
-
-function ask(
-  type: QuestionType,
-  score: number,
-  stem: string,
-  extra: Partial<Omit<Question, 'id' | 'type' | 'score' | 'stem'>> = {},
-): Question {
-  return { ...createQuestion(type, score), stem, ...extra }
-}
-
-function sec(
-  title: string,
-  type: QuestionType,
-  patch: Partial<Omit<Section, 'id' | 'questions'>>,
-  questions: Question[],
-): Section {
-  return { ...createSection(title, type), ...patch, questions }
-}
-
-const CELL = '（　　）'
-const MARK = '（　）'
 
 /**
  * 國文範例：圖片裡的十四種題型各成一個大題，讓老師打開就能看出卷面長什麼樣子。
@@ -170,19 +144,25 @@ function createChineseSample(): ExamContent {
     ],
   )
 
+  const synonymPairs = pairs([
+    ['快樂', '高興'],
+    ['美麗', '漂亮'],
+    ['立刻', '馬上'],
+    ['喜歡', '喜愛'],
+    ['', '安靜'],
+  ])
   const synonym = sec(
-    '寫出近義詞',
-    'fill_blank',
+    '近義詞連連看',
+    'matching',
     {
-      defaultScore: 2,
-      rowSize: 2,
-      instruction: '寫出意思相近的詞。',
+      defaultScore: 8,
+      instruction: '把意思相近的詞語用線連起來。右邊有一個用不到。',
     },
     [
-      ask('fill_blank', 2, `快樂${CELL}`, { answer: '高興' }),
-      ask('fill_blank', 2, `美麗${CELL}`, { answer: '漂亮' }),
-      ask('fill_blank', 2, `立刻${CELL}`, { answer: '馬上' }),
-      ask('fill_blank', 2, `喜歡${CELL}`, { answer: '喜愛' }),
+      ask('matching', 8, '', {
+        pairs: synonymPairs,
+        matchOrder: orderRight(synonymPairs, ['馬上', '安靜', '高興', '喜愛', '漂亮']),
+      }),
     ],
   )
 
@@ -270,23 +250,16 @@ function createChineseSample(): ExamContent {
   )
 
   const choice = sec(
-    '選擇題',
-    'single_choice',
+    '是非題',
+    'true_false',
     {
-      defaultScore: 3,
-      instruction: '選出正確的答案。',
+      defaultScore: 2,
+      instruction: '對的打○，錯的打×。',
     },
     [
-      ask('single_choice', 3, '下列哪一句的用字完全正確？', {
-        choices: choices(['小華在公園玩要。', '小華再公園玩耍。', '小華在公園玩耍。', '小華再公園玩要。']),
-        choiceLayout: 1,
-        answer: 'C',
-      }),
-      ask('single_choice', 3, '「美麗」的意思最接近哪一個詞？', {
-        choices: choices(['難看', '漂亮', '巨大', '安靜']),
-        choiceLayout: 4,
-        answer: 'B',
-      }),
+      ask('true_false', 2, '「小華在公園玩耍。」這一句的用字完全正確。', { answer: '○' }),
+      ask('true_false', 2, '問句的最後要加上句號「。」。', { answer: '×' }),
+      ask('true_false', 2, '「美麗」和「漂亮」的意思相近。', { answer: '○' }),
     ],
   )
 
@@ -310,10 +283,9 @@ function createChineseSample(): ExamContent {
         choiceLayout: 4,
         answer: 'B',
       }),
-      ask('single_choice', 3, '他們什麼時候回家？', {
-        choices: choices(['吃完午餐', '下雨的時候', '太陽快下山時', '天還沒亮']),
-        choiceLayout: 2,
-        answer: 'C',
+      ask('short_answer', 3, `根據短文回答：\n${SUB}他們什麼時候回家？\n${SUB}如果你是小明，你會在公園做什麼？`, {
+        answerLines: 3,
+        answer: '①太陽快下山的時候。②（言之成理即可）',
       }),
     ],
   )
@@ -327,9 +299,13 @@ function createChineseSample(): ExamContent {
 }
 
 /**
- * 數學範例：國小三年級。填空、比大小、選擇、直式計算、應用題。配分加總 100。
+ * 數學範例：國小三年級。填空（含分數）、比大小、是非、選擇（含多選、看時鐘）、
+ * 連連看、看圖作答（數線、畫時鐘）、直式計算、應用題（含子題號）。配分加總 100。
  */
 function createMathSample(): ExamContent {
+  const assets: Record<string, Asset> = {}
+  const f = (num: number, den: number) => `{{f:${num}|${den}}}`
+
   const fill = sec(
     '填空',
     'fill_blank',
@@ -346,9 +322,7 @@ function createMathSample(): ExamContent {
       ask('fill_blank', 2, `7 × 8 = ${CELL}`, { answer: '56' }),
       ask('fill_blank', 2, `36 ÷ 6 = ${CELL}`, { answer: '6' }),
       ask('fill_blank', 2, `1 公尺 = ${CELL}公分`, { answer: '100' }),
-      ask('fill_blank', 2, `1 小時 = ${CELL}分鐘`, { answer: '60' }),
-      ask('fill_blank', 2, `300 + 50 = ${CELL}`, { answer: '350' }),
-      ask('fill_blank', 2, `8 ÷ 2 = ${CELL}`, { answer: '4' }),
+      ask('fill_blank', 2, `${f(1, 5)} ＋ ${f(2, 5)} = ${CELL}`, { answer: '3/5' }),
     ],
   )
 
@@ -366,39 +340,97 @@ function createMathSample(): ExamContent {
       ask('fill_blank', 2, `356 ${CELL} 365`, { answer: '＜' }),
       ask('fill_blank', 2, `8 × 7 ${CELL} 54`, { answer: '＞' }),
       ask('fill_blank', 2, `2 公尺 ${CELL} 180 公分`, { answer: '＞' }),
-      ask('fill_blank', 2, `半小時 ${CELL} 25 分鐘`, { answer: '＞' }),
+      ask('fill_blank', 2, `${f(3, 8)} ${CELL} ${f(5, 8)}`, { answer: '＜' }),
     ],
   )
 
+  const trueFalse = sec(
+    '是非題',
+    'true_false',
+    {
+      defaultScore: 2,
+      instruction: '對的打○，錯的打×。',
+    },
+    [
+      ask('true_false', 2, '三角形有 3 個角。', { answer: '○' }),
+      ask('true_false', 2, '1 公斤 = 100 公克。', { answer: '×' }),
+      ask('true_false', 2, '任何數乘以 0，答案都是 0。', { answer: '○' }),
+      ask('true_false', 2, `${f(1, 2)} 比 ${f(1, 3)} 小。`, { answer: '×' }),
+    ],
+  )
+
+  const clockAsk = withFigure(
+    ask('single_choice', 4, '鐘面上是幾時幾分？', {
+      choices: choices(['3 時 15 分', '3 時 45 分', '9 時 15 分', '4 時 15 分']),
+      choiceLayout: 2,
+      answer: 'A',
+    }),
+    assets,
+    svgAsset(clockSvg({ hour: 3, minute: 15, hands: true, numbers: true })),
+    'below',
+    0.5,
+  )
   const choice = sec(
     '選擇題',
     'single_choice',
     {
       defaultScore: 4,
-      instruction: '選出正確的答案。',
+      instruction: '選出正確的答案。第 3 題可以選不只一個。',
     },
     [
-      ask('single_choice', 4, '下面哪一個數最大？', {
-        choices: choices(['498', '489', '948', '894']),
-        choiceLayout: 4,
-        answer: 'C',
-      }),
       ask('single_choice', 4, '一打是 12 枝。3 打鉛筆一共有幾枝？', {
         choices: choices(['15 枝', '24 枝', '36 枝', '48 枝']),
         choiceLayout: 4,
         answer: 'C',
       }),
-      ask('single_choice', 4, '下午 3 時，用 24 時制怎麼寫？', {
-        choices: choices(['3 時', '13 時', '15 時', '21 時']),
+      clockAsk,
+      ask('multi_choice', 4, '下面哪些是雙數？（多選）', {
+        choices: choices(['12', '15', '28', '33']),
         choiceLayout: 4,
-        answer: 'C',
-      }),
-      ask('single_choice', 4, '一個正方形有幾條邊？', {
-        choices: choices(['3 條', '4 條', '5 條', '6 條']),
-        choiceLayout: 4,
-        answer: 'B',
+        answer: 'A、C',
       }),
     ],
+  )
+
+  const calcPairs = pairs([
+    ['6 × 4', '24'],
+    ['35 ÷ 5', '7'],
+    ['18 + 9', '27'],
+    ['50 − 12', '38'],
+    ['', '42'],
+  ])
+  const matching = sec(
+    '連連看',
+    'matching',
+    {
+      defaultScore: 8,
+      instruction: '把算式和答案用線連起來。右邊有一個用不到。',
+    },
+    [ask('matching', 8, '', { pairs: calcPairs, matchOrder: orderRight(calcPairs, ['27', '42', '24', '38', '7']) })],
+  )
+
+  const lineAsk = withFigure(
+    ask('fill_blank', 4, `看數線，把空格代表的數寫出來。\n左邊的空格是 ${CELL}，右邊的空格是 ${CELL}`, { answer: '30、70' }),
+    assets,
+    svgAsset(numberLineSvg({ start: 0, end: 100, step: 10, labelEvery: 1, blanks: [30, 70] })!),
+    'below',
+    0.9,
+  )
+  const drawAsk = withFigure(
+    ask('short_answer', 4, '在鐘面上畫出 4 時 30 分的長針和短針。', { answerLines: 0, answer: '短針在 4 和 5 中間，長針指著 6。' }),
+    assets,
+    svgAsset(clockSvg({ hour: 0, minute: 0, hands: false, numbers: true })),
+    'below',
+    0.5,
+  )
+  const picture = sec(
+    '看圖作答',
+    'fill_blank',
+    {
+      defaultScore: 4,
+      instruction: '看圖回答問題。',
+    },
+    [lineAsk, drawAsk],
   )
 
   const vertical = sec(
@@ -416,8 +448,6 @@ function createMathSample(): ExamContent {
       ask('short_answer', 5, '500 − 267 =', { answerLines: 0, aside: '驗算：', answer: '233' }),
       ask('short_answer', 5, '46 × 7 =', { answerLines: 0, aside: '驗算：', answer: '322' }),
       ask('short_answer', 5, '84 ÷ 4 =', { answerLines: 0, aside: '驗算：', answer: '21' }),
-      ask('short_answer', 5, '639 + 285 =', { answerLines: 0, aside: '驗算：', answer: '924' }),
-      ask('short_answer', 5, '403 − 158 =', { answerLines: 0, aside: '驗算：', answer: '245' }),
     ],
   )
 
@@ -433,10 +463,6 @@ function createMathSample(): ExamContent {
         answerLines: 3,
         answer: '8 × 5 = 40，一共 40 顆。',
       }),
-      ask('short_answer', 6, '小華有 36 元，買一本 15 元的筆記本，還剩幾元？', {
-        answerLines: 3,
-        answer: '36 − 15 = 21，還剩 21 元。',
-      }),
       ask('short_answer', 6, '公園有 24 人，平均分成 4 組，一組有幾人？', {
         answerLines: 3,
         answer: '24 ÷ 4 = 6，一組 6 人。',
@@ -445,17 +471,17 @@ function createMathSample(): ExamContent {
         answerLines: 3,
         answer: '3 公尺 = 300 公分，300 − 120 = 180，還剩 180 公分。',
       }),
-      ask('short_answer', 6, '電影 2 時 10 分開始，看了 90 分鐘。幾點結束？', {
-        answerLines: 3,
-        answer: '2 時 10 分再過 90 分鐘是 3 時 40 分。',
+      ask('short_answer', 6, `小明有 50 元。\n${SUB}買一枝 12 元的筆，還剩幾元？\n${SUB}剩下的錢夠不夠再買 3 枝同樣的筆？`, {
+        answerLines: 4,
+        answer: '①50 − 12 = 38，還剩 38 元。②12 × 3 = 36，36 ＜ 38，夠。',
       }),
     ],
   )
 
   return {
     numbering: 'perSection',
-    sections: [fill, compare, choice, vertical, word],
-    assets: {},
+    sections: [fill, compare, trueFalse, choice, matching, picture, vertical, word],
+    assets,
     footer: { ...createDefaultFooter(), continueOn: true, endOn: true },
   }
 }
@@ -483,8 +509,43 @@ function createEnglishSample(): ExamContent {
       ask('fill_blank', 2, `老師 ${CELL}`, { answer: 'teacher' }),
       ask('fill_blank', 2, `學校 ${CELL}`, { answer: 'school' }),
       ask('fill_blank', 2, `快樂 ${CELL}`, { answer: 'happy' }),
-      ask('fill_blank', 2, `水 ${CELL}`, { answer: 'water' }),
-      ask('fill_blank', 2, `朋友 ${CELL}`, { answer: 'friend' }),
+    ],
+  )
+
+  const oppositePairs = pairs([
+    ['big', 'small'],
+    ['hot', 'cold'],
+    ['happy', 'sad'],
+    ['up', 'down'],
+    ['', 'fast'],
+  ])
+  const opposite = sec(
+    '反義詞連連看',
+    'matching',
+    {
+      defaultScore: 8,
+      instruction: 'Match the opposites. 把意思相反的字連起來。',
+    },
+    [
+      ask('matching', 8, '', {
+        pairs: oppositePairs,
+        matchOrder: orderRight(oppositePairs, ['cold', 'down', 'fast', 'small', 'sad']),
+      }),
+    ],
+  )
+
+  const trueFalse = sec(
+    '是非題',
+    'true_false',
+    {
+      defaultScore: 2,
+      instruction: 'Read and check. 對的打○，錯的打×。',
+    },
+    [
+      ask('true_false', 2, 'A cat can fly.', { answer: '×' }),
+      ask('true_false', 2, 'There are seven days in a week.', { answer: '○' }),
+      ask('true_false', 2, 'We eat breakfast in the morning.', { answer: '○' }),
+      ask('true_false', 2, 'Snow is hot.', { answer: '×' }),
     ],
   )
 
@@ -516,11 +577,7 @@ function createEnglishSample(): ExamContent {
         choiceLayout: 2,
         answer: 'B',
       }),
-      ask('single_choice', 4, 'The dog is ___ the box.\n（狗在箱子裡面）', {
-        choices: choices(['on', 'under', 'in', 'to']),
-        choiceLayout: 2,
-        answer: 'C',
-      }),
+
     ],
   )
 
@@ -553,7 +610,7 @@ function createEnglishSample(): ExamContent {
     [
       ask('short_answer', 6, '用 "I like..." 造句。', { answerLines: 2, answer: 'I like apples.' }),
       ask('short_answer', 6, '用 "This is..." 造句。', { answerLines: 2, answer: 'This is my book.' }),
-      ask('short_answer', 6, '用 "I can..." 造句。', { answerLines: 2, answer: 'I can swim.' }),
+
     ],
   )
 
@@ -561,33 +618,29 @@ function createEnglishSample(): ExamContent {
     '閱讀測驗',
     'single_choice',
     {
-      defaultScore: 6,
+      defaultScore: 7,
       instruction: '閱讀短文，選出正確的答案。',
       passage:
         "Tom is nine years old.\nHe is a student.\nHe has a brown dog.\nThe dog's name is Lucky.\nOn Sunday, Tom and Lucky\nplay in the park.",
     },
     [
-      ask('single_choice', 6, 'How old is Tom?', {
+      ask('single_choice', 7, 'How old is Tom?', {
         choices: choices(['seven', 'eight', 'nine', 'ten']),
         choiceLayout: 2,
         answer: 'C',
       }),
-      ask('single_choice', 6, 'What does Tom have?', {
+      ask('single_choice', 7, 'What does Tom have?', {
         choices: choices(['a cat', 'a dog', 'a bird', 'a fish']),
         choiceLayout: 2,
         answer: 'B',
       }),
-      ask('single_choice', 6, 'What color is the dog?', {
+      ask('single_choice', 7, 'What color is the dog?', {
         choices: choices(['black', 'white', 'brown', 'yellow']),
         choiceLayout: 2,
         answer: 'C',
       }),
-      ask('single_choice', 6, "What is the dog's name?", {
-        choices: choices(['Tom', 'Lucky', 'Sunday', 'Park']),
-        choiceLayout: 2,
-        answer: 'B',
-      }),
-      ask('single_choice', 6, 'Where do they play on Sunday?', {
+
+      ask('single_choice', 7, 'Where do they play on Sunday?', {
         choices: choices(['at school', 'at home', 'in the park', 'in the zoo']),
         choiceLayout: 2,
         answer: 'C',
@@ -597,7 +650,7 @@ function createEnglishSample(): ExamContent {
 
   return {
     numbering: 'perSection',
-    sections: [words, choice, grammar, sentence, reading],
+    sections: [words, opposite, choice, trueFalse, grammar, sentence, reading],
     assets: {},
     footer: { ...createDefaultFooter(), continueOn: true, endOn: true },
   }
@@ -606,5 +659,7 @@ function createEnglishSample(): ExamContent {
 export function createSampleExam(subject: SampleSubject = 'chinese'): ExamContent {
   if (subject === 'math') return createMathSample()
   if (subject === 'english') return createEnglishSample()
+  if (subject === 'social') return createSocialSample()
+  if (subject === 'science') return createScienceSample()
   return createChineseSample()
 }

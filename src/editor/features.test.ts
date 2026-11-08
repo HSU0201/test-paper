@@ -195,3 +195,24 @@ describe('範本與字級', () => {
     expect(next.layout.spacing.lineHeight.nominal).toBe(1.9)
   })
 })
+
+describe('範例考卷', () => {
+  it('國英數社自五科都是 100 分，沒有配分錯誤，而且示範多種題型', async () => {
+    const { createSampleExam, SAMPLE_SUBJECTS } = await import('./chineseSample')
+    const { checkScores } = await import('./scoreCheck')
+    const { examTotals } = await import('../types/exam')
+    expect(SAMPLE_SUBJECTS.map((s) => s.label)).toEqual(['國文', '英文', '數學', '社會', '自然'])
+    for (const { id } of SAMPLE_SUBJECTS) {
+      const exam = createSampleExam(id)
+      expect(examTotals(exam).score, id).toBe(100)
+      const check = checkScores(exam)
+      expect(check.issues.filter((i) => i.level === 'error'), id).toEqual([])
+      expect(check.issues.filter((i) => i.text.includes('沒有填答案')), id).toEqual([])
+      const types = new Set(exam.sections.flatMap((s) => s.questions.map((q) => q.type)))
+      expect(types.has('true_false'), id).toBe(true)
+      expect(types.has('matching'), id).toBe(true)
+      expect(types.has('single_choice'), id).toBe(true)
+      expect(types.size, id).toBeGreaterThanOrEqual(4)
+    }
+  })
+})

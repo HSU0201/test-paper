@@ -37,7 +37,7 @@ export function clockSvg(o: ClockOptions): { svg: string; width: number; height:
       const a = (n / 12) * Math.PI * 2
       const rr = r - 32
       parts.push(
-        `<text x="${(c + Math.sin(a) * rr).toFixed(2)}" y="${(c - Math.cos(a) * rr).toFixed(2)}" font-size="22" font-family='${FONT}' text-anchor="middle" dominant-baseline="central" fill="${INK}">${n}</text>`,
+        `<text x="${(c + Math.sin(a) * rr).toFixed(2)}" y="${(c - Math.cos(a) * rr).toFixed(2)}" font-size="26" font-family='${FONT}' text-anchor="middle" dominant-baseline="central" fill="${INK}">${n}</text>`,
       )
     }
   }
@@ -73,9 +73,10 @@ export function numberLineSvg(o: NumberLineOptions): { svg: string; width: numbe
   if (!step || !Number.isFinite(o.start) || !Number.isFinite(o.end) || o.end <= o.start) return null
   const count = Math.round((o.end - o.start) / step)
   if (count < 1 || count > 60) return null
-  const width = 640
-  const height = 92
-  const left = 28
+  // 印在卷上常縮到半欄寬，字和線要畫粗一點才看得清楚
+  const width = 480
+  const height = 100
+  const left = 26
   const right = width - 40
   const y = 34
   const unit = (right - left) / count
@@ -91,9 +92,9 @@ export function numberLineSvg(o: NumberLineOptions): { svg: string; width: numbe
     const major = i % every === 0
     parts.push(`<line x1="${x.toFixed(2)}" y1="${y - (major ? 11 : 7)}" x2="${x.toFixed(2)}" y2="${y + (major ? 11 : 7)}" stroke="${INK}" stroke-width="2"/>`)
     if (blanks.has(fmt(v))) {
-      parts.push(`<text x="${x.toFixed(2)}" y="${y + 32}" font-size="20" font-family='${FONT}' text-anchor="middle" fill="${INK}">（　）</text>`)
+      parts.push(`<text x="${x.toFixed(2)}" y="${y + 40}" font-size="26" font-family='${FONT}' text-anchor="middle" fill="${INK}">（　）</text>`)
     } else if (major) {
-      parts.push(`<text x="${x.toFixed(2)}" y="${y + 32}" font-size="18" font-family='${FONT}' text-anchor="middle" fill="${INK}">${fmt(v)}</text>`)
+      parts.push(`<text x="${x.toFixed(2)}" y="${y + 40}" font-size="24" font-family='${FONT}' text-anchor="middle" fill="${INK}">${fmt(v)}</text>`)
     }
   }
   return { svg: wrapSvg(width, height, parts), width, height }

@@ -570,7 +570,8 @@ function buildQuestion(
     const before = anchored ? middle.filter((f) => (f.afterLine ?? 1) <= 0) : []
     const rest = anchored ? middle.filter((f) => (f.afterLine ?? 1) > 0) : middle
     if (before.length) h = pushFigures(before, h, 'middle')
-    h += pushStem(EMPTY_STEM, 'stem', h, true)
+    // 連連看填好配對時，題目可以留白（說明寫在大題上），不必空一行
+    if (!(q.type === 'matching' && matchLeftItems(q).length)) h += pushStem(EMPTY_STEM, 'stem', h, true)
     h = pushFigures(rest, h, 'middle')
     if (scoreMark) h += pushStem(scoreMark, 'score', h)
   } else if (anchored && !hasInkMarkup(q.stem)) {
@@ -692,7 +693,7 @@ function layoutMatching(q: Question, top: number, indent: number, innerW: number
   const dotW = Math.ceil(body.fontSize * 1.1)
   const textW = Math.max(24, colW - dotW - 4)
   const rightX = indent + colW + gap
-  let h = top + 6
+  let h = top > 0 ? top + 6 : top
   for (let i = 0; i < rows; i++) {
     const l = left[i]
     const r = right[i]
