@@ -47,12 +47,35 @@ export type ColorFieldHandle = {
   focus: () => void
 }
 
-/** 考卷文字欄位。先選取字，再點色盤，只改那些字的顏色；其餘維持黑色。 */
+const ZHUYIN_OPEN_KEY = 'color-field:zhuyin-open'
+
+function readZhuyinOpen(): boolean {
+  try {
+    return localStorage.getItem(ZHUYIN_OPEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function rememberZhuyinOpen(open: boolean) {
+  try {
+    localStorage.setItem(ZHUYIN_OPEN_KEY, open ? '1' : '0')
+  } catch {
+    // 存不了就下次不記得
+  }
+}
+
+/**
+ * 考卷文字欄位。先選取字，再點色盤，只改那些字的顏色；其餘維持黑色。
+ * 工具列只在編輯這一格時出現，免得一整排工具列把畫面塞滿。
+ */
 export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function ColorField(
   { value, onChange, multiline, placeholder, ariaLabel, rows = 4, subStyle, mathTools },
   handle,
 ) {
   const ref = useRef<HTMLDivElement>(null)
+  /** 注音工具平常收起來；國語老師打開後會記住 */
+  const [zyOpen, setZyOpen] = useState(readZhuyinOpen)
   /** 分數輸入框：null 表示收起來 */
   const [frac, setFrac] = useState<{ num: string; den: string } | null>(null)
   const rangeRef = useRef<Range | null>(null)
@@ -396,6 +419,7 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
           document.execCommand('insertText', false, e.clipboardData.getData('text/plain'))
         }}
       />
+      <div className="color-field__tools">
       <div className="color-field__palette" role="group" aria-label="文字色盤" onPointerDown={saveSel}>
         {INK_PALETTE.map((sw) => (
           <button
@@ -414,20 +438,43 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
           <input type="color" defaultValue="#d92d20" onChange={(e) => apply(e.target.value)} />
         </label>
         <span className="color-field__format" role="group" aria-label="文字樣式">
-          <button type="button" className="text-btn is-bold" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('bold')}>
-            粗體
-          </button>
-          <button type="button" className="text-btn is-italic" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('italic')}>
-            斜體
-          </button>
-          <button type="button" className="text-btn is-underline" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('underline')}>
-            底線
-          </button>
-          <button type="button" className="text-btn is-strike" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('strikeThrough')}>
-            刪除線
-          </button>
+          {(
+            [
+              ['is-bold', 'bold', '粗體', 'B'],
+              ['is-italic', 'italic', '斜體', 'I'],
+              ['is-underline', 'underline', '底線', 'U'],
+              ['is-strike', 'strikeThrough', '刪除線', 'S'],
+            ] as const
+          ).map(([cls, cmd, name, short]) => (
+            <button
+              key={cmd}
+              type="button"
+              className={`text-btn ${cls}`}
+              title={`${name}（先選取字）`}
+              aria-label={name}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => applyFormat(cmd)}
+            >
+              {short}
+            </button>
+          ))}
         </span>
-        <span className="color-field__actions">
+        <button
+          type="button"
+          className={zyOpen ? 'text-btn is-current' : 'text-btn'}
+          aria-expanded={zyOpen}
+          title="轉成注音、加上右側注音、改成方格等"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            setZyOpen(!zyOpen)
+            rememberZhuyinOpen(!zyOpen)
+          }}
+        >
+          注音 {zyOpen ? '▴' : '▾'}
+        </button>
+      </div>
+      {zyOpen ? (
+        <div className="color-field__actions" role="group" aria-label="注音工具" onPointerDown={saveSel}>
           <button
             type="button"
             className="text-btn"
@@ -459,8 +506,8 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
           <button type="button" className="text-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyRuby('plain')}>
             去掉注音
           </button>
-        </span>
-      </div>
+        </div>
+      ) : null}
       {poly ? (
         <div className="color-field__poly" role="group" aria-label={`「${poly.han}」的讀音`}>
           <span>「{poly.han}」的讀音：</span>
@@ -554,6 +601,7 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
           ) : null}
         </div>
       ) : null}
+      </div>
       {msg ? <p className="color-field__hint">{msg}</p> : null}
     </div>
   )

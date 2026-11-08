@@ -9,6 +9,7 @@ import type { CanvasObject } from '../types/document'
 import { FOOTER_END_ID, questionNumbers } from '../types/exam'
 import { HEADER_ROLE_LABEL, resolveSplit } from '../types/layout'
 import { BlockInspector } from './BlockInspector'
+import { ExamChecklist } from './ExamChecklist'
 import { HeaderItemInspector } from './HeaderItemInspector'
 import { PropertiesPanel } from './PropertiesPanel'
 import { Icon } from './ui'
@@ -136,10 +137,8 @@ export function Inspector() {
     }, {})
     body = (
       <div className="inspector__empty">
-        <h2 className="inspector__title">題目內容</h2>
-        <p className="inspector__hint">
-          點左側「出題」的一題，或直接點卷上的題目，這裡就會變成那一題的題幹、選項與配分。學校、紙張與字級在「卷面」；線條、方框與自由文字在「物件」。
-        </p>
+        <ExamChecklist />
+        <h3 className="inspector__subtitle">卷面</h3>
         <dl className="inspector__stats">
           <div>
             <dt>頁數</dt>

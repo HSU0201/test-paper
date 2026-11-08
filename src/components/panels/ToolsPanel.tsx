@@ -84,6 +84,8 @@ function LibraryTools() {
   return (
     <PanelSection
       title="我的題庫"
+      collapsible
+      storeKey="tools-library"
       description="在大題右側按「存到題庫」，就能在任何一份試卷插入同樣的大題。題庫存在這台電腦的這個瀏覽器裡。"
     >
       {items == null ? <p className="panel-section__desc">讀取中…</p> : null}
@@ -130,6 +132,8 @@ function TemplateTools() {
   return (
     <PanelSection
       title="頁首範本"
+      collapsible
+      storeKey="tools-template"
       description="把學校名稱、班級座號欄、家長簽名欄的位置，連同紙張、分欄和字級存起來。新試卷套用後只要改試卷名稱。"
       actions={
         <button
@@ -209,6 +213,9 @@ function ReportTools() {
   return (
     <PanelSection
       title="答案表與雙向細目表"
+      collapsible
+      storeKey="tools-report"
+      defaultOpen
       description="答案表把所有題號和答案列在一頁，改考卷時對照用。細目表依每題填的單元、能力、難易度統計。"
     >
       <div className="tools-actions">
@@ -343,6 +350,8 @@ function VariantTools() {
     <>
       <PanelSection
         title="A／B 卷"
+        collapsible
+        storeKey="tools-ab"
         description="把每個大題裡的題目順序、選項順序打亂，另存一份 B 卷。選項用代號寫的答案會跟著改；「以上皆是」這類選項留在原位，「承上題」跟著上一題。"
       >
         <div className="ui-row">
@@ -373,6 +382,8 @@ function VariantTools() {
 
       <PanelSection
         title="補考卷"
+        collapsible
+        storeKey="tools-retake"
         description="勾選要留下的題目，另存成一份新的試卷，再改數字或換題目。原卷不受影響。"
         actions={
           <button
@@ -463,6 +474,9 @@ function PrintTools() {
   return (
     <PanelSection
       title="字級與列印"
+      collapsible
+      storeKey="tools-print"
+      defaultOpen
       description="低年級用「大字」或「特大」：大題標題、說明、題目一起放大，行距也加寬。黑白列印時卷面會直接變成印出來的樣子。"
     >
       <div className="ui-field">
@@ -518,11 +532,11 @@ function PrintTools() {
 export function ToolsPanel() {
   return (
     <div className="side-panel__scroll">
+      <ReportTools />
+      <PrintTools />
       <LibraryTools />
       <TemplateTools />
-      <ReportTools />
       <VariantTools />
-      <PrintTools />
     </div>
   )
 }

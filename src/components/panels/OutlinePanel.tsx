@@ -22,7 +22,8 @@ import {
 } from '../../types/exam'
 import { ScoreCheckDialog } from '../ScoreCheckDialog'
 import { requestReveal } from '../shell/revealBlock'
-import { Icon, Segmented, Switch } from '../ui'
+import { Icon, PanelSection, Segmented, Switch } from '../ui'
+import { AddSectionPicker, StartCard } from './QuickStart'
 
 function SelectMark({ on }: { on: boolean }) {
   if (!on) return null
@@ -103,6 +104,9 @@ export function OutlinePanel() {
 
   return (
     <div className="side-panel__scroll outline">
+      {exam.sections.length === 0 ? <StartCard /> : null}
+      {exam.sections.length > 0 ? (
+      <>
       <div className="outline__summary">
         <div>
           <strong>{totals.score}</strong>
@@ -127,50 +131,9 @@ export function OutlinePanel() {
           ? `配分檢查：${scoreCheck.issues.length} 個地方要看`
           : `配分檢查：總分 ${scoreCheck.total} 分，沒有問題`}
       </button>
+      </>
+      ) : null}
       <ScoreCheckDialog open={checkOpen} check={scoreCheck} onClose={() => setCheckOpen(false)} />
-
-      <div className="outline__numbering">
-        <span className="ui-field__label">題號</span>
-        <Segmented
-          label="題號方式"
-          value={exam.numbering}
-          options={[
-            { value: 'continuous', label: '全卷連號' },
-            { value: 'perSection', label: '各大題重編' },
-          ]}
-          onChange={(v) => dispatch({ type: 'SET_NUMBERING', numbering: v })}
-        />
-      </div>
-
-      <div className="outline__examples">
-        <span className="ui-field__label">範例考卷</span>
-        <div className="outline__example-row">
-          {SAMPLE_SUBJECTS.map((sample) => (
-            <button
-              key={sample.id}
-              type="button"
-              className={`btn btn--ghost${sample.ready ? '' : ' is-disabled'}`}
-              disabled={!sample.ready}
-              title={sample.ready ? `放入${sample.label}範例，取代目前的題目` : `${sample.label}範例接著做`}
-              onClick={() => {
-                if (!sample.ready) return
-                if (
-                  exam.sections.length > 0 &&
-                  !window.confirm(`放入${sample.label}範例會取代目前的題目，頁首評量名稱也會改成這科。要繼續嗎？`)
-                ) {
-                  return
-                }
-                dispatch({ type: 'LOAD_EXAMPLE', subject: sample.id })
-              }}
-            >
-              {sample.label}
-            </button>
-          ))}
-        </div>
-        <p className="outline__example-hint">
-          國文、數學、英文都是國小範例。國文有十四種題型，數學含直式計算，英文含單字、文法與閱讀。
-        </p>
-      </div>
 
       <ol className="outline__sections">
         {exam.sections.map((s, si) => {
@@ -316,52 +279,96 @@ export function OutlinePanel() {
         })}
       </ol>
 
-      <div className="outline__footer">
-        <p className="outline__footer-hint">有下一頁時顯示「下一頁還有題目」；左右兩欄時只印在右欄，不橫跨整頁。「作答結束」接在最後一題下面。</p>
-        <div className={`outline__footer-row${isSel(FOOTER_CONTINUE_ID) ? ' is-selected' : ''}`} data-block-id={FOOTER_CONTINUE_ID}>
-          <button
-            type="button"
-            className="outline__footer-label"
-            onClick={() => footer.continueOn && select({ kind: 'notice', id: FOOTER_CONTINUE_ID })}
-          >
-            下一頁還有題目
-          </button>
-          <Switch
-            label="下一頁還有題目"
-            checked={footer.continueOn}
-            onChange={(continueOn) => dispatch({ type: 'SET_FOOTER', patch: { continueOn } })}
+      {exam.sections.length > 0 ? <AddSectionPicker afterId={exam.sections.at(-1)?.id} /> : null}
+
+      {exam.sections.length > 0 ? (
+        <p className="outline__tip">
+          拖曳可調整順序；選取後按 <kbd>Enter</kbd> 在下方新增小題、<kbd>Delete</kbd> 刪除。
+        </p>
+      ) : null}
+
+      <PanelSection title="試卷設定" collapsible storeKey="outline-settings" summary={exam.numbering === 'continuous' ? '全卷連號' : '各大題重編'}>
+        <div className="outline__numbering">
+          <span className="ui-field__label">題號</span>
+          <Segmented
+            label="題號方式"
+            value={exam.numbering}
+            options={[
+              { value: 'continuous', label: '全卷連號' },
+              { value: 'perSection', label: '各大題重編' },
+            ]}
+            onChange={(v) => dispatch({ type: 'SET_NUMBERING', numbering: v })}
           />
         </div>
-        <div className={`outline__footer-row${isSel(FOOTER_END_ID) ? ' is-selected' : ''}`} data-block-id={FOOTER_END_ID}>
-          <button
-            type="button"
-            className="outline__footer-label"
-            onClick={() => footer.endOn && select({ kind: 'notice', id: FOOTER_END_ID })}
-          >
-            作答結束，請仔細檢查
-          </button>
-          <Switch
-            label="作答結束，請仔細檢查"
-            checked={footer.endOn}
-            onChange={(endOn) => dispatch({ type: 'SET_FOOTER', patch: { endOn } })}
-          />
+  
+        <div className="outline__footer">
+          <p className="outline__footer-hint">有下一頁時顯示「下一頁還有題目」；左右兩欄時只印在右欄，不橫跨整頁。「作答結束」接在最後一題下面。</p>
+          <div className={`outline__footer-row${isSel(FOOTER_CONTINUE_ID) ? ' is-selected' : ''}`} data-block-id={FOOTER_CONTINUE_ID}>
+            <button
+              type="button"
+              className="outline__footer-label"
+              onClick={() => footer.continueOn && select({ kind: 'notice', id: FOOTER_CONTINUE_ID })}
+            >
+              下一頁還有題目
+            </button>
+            <Switch
+              label="下一頁還有題目"
+              checked={footer.continueOn}
+              onChange={(continueOn) => dispatch({ type: 'SET_FOOTER', patch: { continueOn } })}
+            />
+          </div>
+          <div className={`outline__footer-row${isSel(FOOTER_END_ID) ? ' is-selected' : ''}`} data-block-id={FOOTER_END_ID}>
+            <button
+              type="button"
+              className="outline__footer-label"
+              onClick={() => footer.endOn && select({ kind: 'notice', id: FOOTER_END_ID })}
+            >
+              作答結束，請仔細檢查
+            </button>
+            <Switch
+              label="作答結束，請仔細檢查"
+              checked={footer.endOn}
+              onChange={(endOn) => dispatch({ type: 'SET_FOOTER', patch: { endOn } })}
+            />
+          </div>
         </div>
-      </div>
+  
+      </PanelSection>
 
-      <div className="outline__adds">
-        <button
-          type="button"
-          className="outline__add-section"
-          onClick={() => dispatch({ type: 'ADD_SECTION', afterId: exam.sections.at(-1)?.id })}
-        >
-          <Icon name="plus" />
-          新增大題
-        </button>
-      </div>
-
-      <p className="outline__tip">
-        拖曳可調整順序；選取後按 <kbd>Enter</kbd> 在下方新增小題、<kbd>Delete</kbd> 刪除。
-      </p>
+      {exam.sections.length > 0 ? (
+        <PanelSection title="範例考卷" collapsible storeKey="outline-examples">
+          <div className="outline__examples">
+            <span className="ui-field__label">範例考卷</span>
+            <div className="outline__example-row">
+              {SAMPLE_SUBJECTS.map((sample) => (
+                <button
+                  key={sample.id}
+                  type="button"
+                  className={`btn btn--ghost${sample.ready ? '' : ' is-disabled'}`}
+                  disabled={!sample.ready}
+                  title={sample.ready ? `放入${sample.label}範例，取代目前的題目` : `${sample.label}範例接著做`}
+                  onClick={() => {
+                    if (!sample.ready) return
+                    if (
+                      exam.sections.length > 0 &&
+                      !window.confirm(`放入${sample.label}範例會取代目前的題目，頁首評量名稱也會改成這科。要繼續嗎？`)
+                    ) {
+                      return
+                    }
+                    dispatch({ type: 'LOAD_EXAMPLE', subject: sample.id })
+                  }}
+                >
+                  {sample.label}
+                </button>
+              ))}
+            </div>
+            <p className="outline__example-hint">
+              國文、數學、英文都是國小範例。國文有十四種題型，數學含直式計算，英文含單字、文法與閱讀。
+            </p>
+          </div>
+    
+        </PanelSection>
+      ) : null}
     </div>
   )
 }

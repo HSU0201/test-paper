@@ -2357,14 +2357,13 @@ kbd {
 }
 
 .color-field__format {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-  width: 100%;
+  display: inline-flex;
+  gap: 4px;
 }
 
 .color-field__format .text-btn {
-  padding: 4px 4px;
+  min-width: 26px;
+  padding: 2px 6px;
   border: 1px solid var(--c-primary-line);
   border-radius: var(--radius-s);
   background: var(--c-primary-soft);
@@ -3539,4 +3538,255 @@ kbd {
 .tools-actions .btn {
   justify-content: flex-start;
   width: 100%;
+}
+
+/* 可收合的設定區塊 */
+.panel-section__toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.panel-section__toggle:hover .panel-section__title {
+  color: var(--c-text);
+}
+
+.panel-section__chevron {
+  flex: none;
+  color: var(--c-text-3);
+  transition: transform 0.15s ease;
+}
+
+.panel-section--fold.is-open .panel-section__chevron {
+  transform: rotate(90deg);
+}
+
+.panel-section__summary {
+  overflow: hidden;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--c-text-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 文字欄位的工具列：只在編輯這一格時出現 */
+.color-field__tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.color-field:not(:focus-within) .color-field__tools {
+  display: none;
+}
+
+.color-field__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding: 6px;
+  border-radius: 6px;
+  background: var(--c-surface-2);
+}
+
+/* 選項旁的正確答案：點一下打勾 */
+.choice-row__correct {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 6px;
+  padding: 0;
+  border: 1.5px solid var(--c-border-strong);
+  border-radius: 50%;
+  background: var(--c-surface);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.choice-row__correct:hover {
+  border-color: #1f7a45;
+}
+
+.choice-row__correct.is-on {
+  border-color: #1f7a45;
+  background: #1f7a45;
+}
+
+/* 新增大題：先選題型 */
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.preset-grid__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-m);
+  background: var(--c-surface);
+  color: var(--c-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.preset-grid__item:hover {
+  border-color: var(--c-border-hover);
+  background: var(--c-primary-soft);
+}
+
+.preset-grid__item strong {
+  font-size: 13px;
+}
+
+.preset-grid__item span {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 11px;
+  color: var(--c-text-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 空白試卷的開始說明 */
+.start-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid var(--c-primary-line);
+  border-radius: var(--radius-m);
+  background: var(--c-primary-soft);
+}
+
+.start-card__title {
+  margin: 0;
+  font-size: 15px;
+  color: var(--c-text);
+}
+
+.start-card__steps {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--c-text-2);
+}
+
+.start-card__label {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--c-text-2);
+}
+
+.start-card .preset-grid {
+  margin-top: 0;
+}
+
+.start-card__or {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+
+.start-card__or::before,
+.start-card__or::after {
+  flex: 1;
+  height: 1px;
+  background: var(--c-border);
+  content: '';
+}
+
+.start-card__samples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 12px;
+  color: var(--c-text-2);
+}
+
+/* 右側：出卷進度 */
+.checklist__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.checklist__steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.checklist__mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 1.5px solid var(--c-border-strong);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.checklist__steps li.is-done .checklist__mark {
+  border-color: #1f7a45;
+  background: #1f7a45;
+}
+
+.checklist__steps li.is-ready .checklist__mark {
+  border-color: var(--c-primary);
+  background: var(--c-primary);
+}
+
+.checklist__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--c-text-2);
+}
+
+.checklist__label {
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--c-text);
+  text-align: left;
+}
+
+.checklist__steps li.is-done .checklist__label {
+  color: var(--c-text-2);
 }

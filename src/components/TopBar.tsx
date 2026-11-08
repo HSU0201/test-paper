@@ -1,4 +1,4 @@
-import { type RefObject,useRef, useState } from 'react'
+import { type RefObject, useEffect, useRef, useState } from 'react'
 
 import type Konva from 'konva'
 import { motion } from 'motion/react'
@@ -9,6 +9,7 @@ import { exportStagesToPdf } from '../export/pdfFromStage'
 import { easeOut } from '../motion/presets'
 import { BackupDialog } from './BackupDialog'
 import { ImportWordDialog } from './ImportWordDialog'
+import { OPEN_IMPORT_WORD } from './panels/QuickStart'
 import { Icon } from './ui'
 
 export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null)[]> }) {
@@ -18,6 +19,11 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
   const [importOpen, setImportOpen] = useState(false)
   const [exporting, setExporting] = useState<{ answers: boolean; done: number; total: number } | null>(null)
   const baseName = documentBaseName(state)
+  useEffect(() => {
+    const open = () => setImportOpen(true)
+    window.addEventListener(OPEN_IMPORT_WORD, open)
+    return () => window.removeEventListener(OPEN_IMPORT_WORD, open)
+  }, [])
 
   const runExport = (answers: boolean) => {
     const stages = (stagesRef.current ?? []).slice(0, pageCount).filter((s): s is Konva.Stage => !!s)

@@ -7,6 +7,7 @@ import { withZhuyin } from '../editor/hanToZhuyin'
 import { clockSvg, gridSvg, numberLineSvg, svgToAsset } from '../editor/mathFigures'
 import { plainText } from '../editor/richText'
 import { adoptTypedSubItems, hasSubItems, SUB_STYLE_LABEL, SUB_STYLES, type SubStyle, subStyleOf } from '../editor/subItems'
+import { choiceHits } from '../export/answerMarks'
 import { mergeTextLevelPreset } from '../types/document'
 import {
   ASIDE_WIDTH_DEFAULT,
@@ -167,7 +168,13 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
         </div>
       </PanelSection>
 
-      <PanelSection title="文字樣式" description="只影響這一大題。全卷預設在左側「卷面」的「字級」。">
+      <PanelSection
+        title="這一大題的字級"
+        description="只影響這一大題。全卷字級在左側「卷面 → 字級」。"
+        collapsible
+        storeKey="s-font"
+        summary={section.headingStyle || section.instructionStyle ? '已單獨設定' : '跟全卷一樣'}
+      >
         <FontOverrideField
           role="section_heading"
           label="大題標題"
@@ -242,8 +249,18 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
       </PanelSection>
 
       <PanelSection
-        title="卷面格式"
+        title="排列與外框"
         description="外框把這一題圍起來。直式表格是每一題一列，右側可以再拆一欄寫驗算。小題並排一次套到這一大題底下的每一題。"
+        collapsible
+        storeKey="s-layout"
+        summary={[
+          section.layout === 'rows' ? '直式表格' : section.layout === 'grid' ? '注音格' : '一般',
+          (section.frame ?? 'none') !== 'none' ? '有外框' : '',
+          sectionRowSize(section) === 2 ? '兩題一列' : sectionRowSize(section) === 'all' ? '全部同列' : '',
+          section.zhuyin ? '注音' : '',
+        ]
+          .filter(Boolean)
+          .join('・')}
       >
         <div className="ui-field">
           <span className="ui-field__label">外框</span>
@@ -346,7 +363,13 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
         </div>
       </PanelSection>
 
-      <PanelSection title="跨欄保護" description="標題不會單獨留在欄位底部。">
+      <PanelSection
+        title="跨欄保護"
+        description="標題不會單獨留在欄位底部。"
+        collapsible
+        storeKey="s-keep"
+        summary={section.keepTogether === 'whole' ? '整個大題不拆' : '標題＋第一題'}
+      >
         <Segmented
           label="跨欄保護"
           value={section.keepTogether}
@@ -502,8 +525,11 @@ function FiguresEditor({ questionId }: { questionId: string }) {
 
   return (
     <PanelSection
-      title="題目附圖"
-      description="圖片跟著題目排版。題目裡若有［圖］，圖片就接在那個位置；沒有的話，在卷面上拖曳圖片。左右仍用拉霸。"
+      title="附圖與數學圖形"
+      description="圖片跟著題目走。要換位置，直接在卷面上拖曳圖片。"
+      collapsible
+      storeKey="q-figures"
+      summary={q.figures.length ? `${q.figures.length} 張圖` : '沒有圖'}
       actions={
         <button type="button" className="text-btn" onClick={() => fileRef.current?.click()}>
           ＋ 插入圖片
@@ -639,6 +665,21 @@ function ChoiceRow({
   const [error, setError] = useState<string | null>(null)
   const asset = choice.image ? state.exam.assets[choice.image.assetId] : undefined
   const label = choiceLabel(index)
+  const question = findQuestion(state.exam, questionId)?.question
+  const hits = question ? choiceHits(question) : []
+  const correct = hits.includes(index)
+  const toggleCorrect = () => {
+    if (!question) return
+    const letter = (i: number) => String.fromCharCode(65 + i)
+    let next: number[]
+    if (question.type === 'multi_choice') next = correct ? hits.filter((i) => i !== index) : [...hits, index]
+    else next = correct ? [] : [index]
+    dispatch({
+      type: 'UPDATE_QUESTION',
+      id: questionId,
+      patch: { answer: next.sort((a, b) => a - b).map(letter).join(question.type === 'multi_choice' ? '、' : '') },
+    })
+  }
 
   const onFile = async (file?: File) => {
     if (!file) return
@@ -654,6 +695,15 @@ function ChoiceRow({
   return (
     <div className="choice-block">
       <div className="choice-row">
+        <button
+          type="button"
+          className={`choice-row__correct${correct ? ' is-on' : ''}`}
+          aria-pressed={correct}
+          title={correct ? `${label} 是正確答案，再按一次取消` : `設成正確答案`}
+          onClick={toggleCorrect}
+        >
+          {correct ? '✓' : ''}
+        </button>
         <span className="choice-row__label">{label}</span>
         <ColorField
           ariaLabel={`選項 ${label}`}
@@ -792,6 +842,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
               <button
                 type="button"
                 className="text-btn"
+                title="附圖要插在句子中間時，先把游標點在那裡再按。也可以直接在卷面上拖曳圖片"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => stemRef.current?.insert(FIGURE_MARK)}
               >
@@ -825,10 +876,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
                 options={SUB_STYLES.map((value) => ({ value, label: SUB_STYLE_LABEL[value] }))}
                 onChange={(subStyle) => set({ subStyle })}
               />
-              <p className="exam-style__follow">
-                在子題那一行按 Enter，下一行會接著編號；子題號後面還沒打字時再按一次 Enter，就結束子題、回到題目本文。
-                子題太長自動換行時，第二行會對齊在號碼後面。刪掉或插入子題，號碼會自動重排。
-              </p>
+              <p className="exam-style__follow">按 Enter 自動接下一號；空的子題再按一次 Enter 就結束。</p>
             </div>
           ) : adopt ? (
             <p className="exam-style__follow">
@@ -839,12 +887,9 @@ function QuestionEditor({ questionId }: { questionId: string }) {
               {' '}之後刪掉或插入子題，號碼會自動重排，換行也會對齊。
             </p>
           ) : null}
-          <p className="exam-style__follow">
-            {hasFigureMark(q.stem)
-              ? '題目裡的［圖］不會印在卷上，只代表圖片要插在這裡。可以剪到別的句子後面，半形的 [圖] 也有效。'
-              : '圖片要出現在句子中間時，把游標點在那個位置，再按「插入圖片位置」。出現的［圖］不會印出來。'}
-            不想用這個標記，就直接在卷面上拖曳圖片。選取國字後可加上右側注音，再改成方格、注音留白或只留注音。注音留白會印出國字，旁邊空出位置讓學生寫注音。
-          </p>
+          {hasFigureMark(q.stem) ? (
+            <p className="exam-style__follow">［圖］不會印出來，只表示附圖插在這裡。</p>
+          ) : null}
         </div>
       </PanelSection>
 
@@ -879,6 +924,41 @@ function QuestionEditor({ questionId }: { questionId: string }) {
       ) : null}
 
       {q.type === 'matching' ? <MatchingEditor questionId={q.id} /> : null}
+
+      <PanelSection
+        title="答案"
+        description={
+          isChoiceType(q.type)
+            ? '點選項旁的「✓」就是正確答案。只印在答案卷上。'
+            : '只印在「匯出答案」的答案卷上，學生的卷子看不到。'
+        }
+      >
+        {q.type === 'true_false' ? (
+          <Segmented<string>
+            label="是非題答案"
+            value={trueFalseAnswer(q.answer)}
+            options={[
+              { value: TRUE_MARK, label: `${TRUE_MARK} 對` },
+              { value: FALSE_MARK, label: `${FALSE_MARK} 錯` },
+            ]}
+            onChange={(answer) => set({ answer })}
+          />
+        ) : q.type === 'matching' ? (
+          <p className="exam-style__follow">
+            {matchLeftItems(q).length
+              ? `依上面的配對自動產生：${matchAnswerText(q)}。答案卷會用紅線連起來。`
+              : '先在「配對」填好左右兩邊。'}
+          </p>
+        ) : (
+          <input
+            className="ui-input"
+            value={q.answer}
+            aria-label="答案"
+            placeholder={isChoiceType(q.type) ? '也可以直接打代號，例：C' : '輸入參考答案'}
+            onChange={(e) => set({ answer: e.target.value })}
+          />
+        )}
+      </PanelSection>
 
       <FiguresEditor questionId={q.id} />
 
@@ -950,7 +1030,12 @@ function QuestionEditor({ questionId }: { questionId: string }) {
         </PanelSection>
       ) : null}
 
-      <PanelSection title="注音與並排" description="不影響怎麼寫題目。需要注音卷或兩題並排時再改。">
+      <PanelSection
+        title="注音與並排"
+        collapsible
+        storeKey="q-zhuyin"
+        summary={[questionUsesZhuyin(section, q) ? '注音' : '', q.pairNext ? '與下一題同列' : ''].filter(Boolean).join('・') || '未使用'}
+      >
         <div className="exam-style">
           <div className="exam-style__head">
             <span className="exam-style__label">這一題換成注音</span>
@@ -1000,7 +1085,13 @@ function QuestionEditor({ questionId }: { questionId: string }) {
         )}
       </PanelSection>
 
-      <PanelSection title="文字樣式" description="題號、題幹與選項一起套用，只影響這一題。全卷預設在左側「卷面」的「字級」。">
+      <PanelSection
+        title="這一題的字級"
+        description="只影響這一題。全卷字級在左側「卷面 → 字級」或「工具 → 字級與列印」。"
+        collapsible
+        storeKey="q-font"
+        summary={q.bodyStyle ? '已單獨設定' : '跟全卷一樣'}
+      >
         <FontOverrideField
           role="question_body"
           label="題文"
@@ -1009,36 +1100,13 @@ function QuestionEditor({ questionId }: { questionId: string }) {
         />
       </PanelSection>
 
-      <PanelSection title="答案" description="編輯時不印在卷面上。「匯出試卷」不含答案；「匯出答案」會另外存一份印上答案的 PDF。">
-        {q.type === 'true_false' ? (
-          <Segmented<string>
-            label="是非題答案"
-            value={trueFalseAnswer(q.answer)}
-            options={[
-              { value: TRUE_MARK, label: `${TRUE_MARK} 對` },
-              { value: FALSE_MARK, label: `${FALSE_MARK} 錯` },
-            ]}
-            onChange={(answer) => set({ answer })}
-          />
-        ) : q.type === 'matching' ? (
-          <p className="exam-style__follow">
-            {matchLeftItems(q).length
-              ? `依上面的配對自動產生：${matchAnswerText(q)}。答案卷會用紅線連起來。`
-              : '先在「配對」填好左右兩邊。'}
-          </p>
-        ) : (
-          <input
-            className="ui-input"
-            value={q.answer}
-            placeholder={isChoiceType(q.type) ? '例：C' : '輸入參考答案'}
-            onChange={(e) => set({ answer: e.target.value })}
-          />
-        )}
-      </PanelSection>
 
       <PanelSection
         title="雙向細目表"
-        description="可以不填。填了之後，「出題」側欄的「雙向細目表」會依單元、能力與難易度統計題數和配分比例。"
+        description="可以不填。填了之後，「工具 → 答案表與雙向細目表」會統計題數和配分比例。"
+        collapsible
+        storeKey="q-blueprint"
+        summary={[q.unit, q.skill, q.level ? QUESTION_LEVEL_LABEL[q.level] : ''].filter(Boolean).join('・') || '未填'}
       >
         <div className="ui-grid-2">
           <label className="ui-field">

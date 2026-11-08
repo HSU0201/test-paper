@@ -4,6 +4,7 @@ import {
   type ExamContent,
   examTotals,
   isChoiceType,
+  matchLeftItems,
   type Question,
   questionBlankCount,
   questionNumbers,
@@ -11,6 +12,7 @@ import {
   type Section,
   sectionScore,
   toChineseNumeral,
+  trueFalseAnswer,
 } from '../types/exam'
 import { plainText } from './richText'
 
@@ -66,12 +68,14 @@ export function checkScores(exam: ExamContent): ScoreCheck {
   const total = examTotals(exam).score
   const fullScore = exam.fullScore ?? DEFAULT_FULL_SCORE
 
+  // 還在出題時總分不到滿分很正常，只提醒；超過滿分才是錯
   if (Math.abs(total - fullScore) > 0.001) {
     const diff = round(total - fullScore)
-    issues.push({
-      level: 'error',
-      text: `全卷總分 ${total} 分，滿分設定是 ${fullScore} 分，${diff > 0 ? `多了 ${diff}` : `少了 ${-diff}`} 分。`,
-    })
+    issues.push(
+      diff > 0
+        ? { level: 'error', text: `全卷總分 ${total} 分，超過滿分 ${fullScore} 分，多了 ${diff} 分。` }
+        : { level: 'warn', text: `全卷目前 ${total} 分，還差 ${-diff} 分才到滿分 ${fullScore} 分。` },
+    )
   }
 
   exam.sections.forEach((s, si) => {
@@ -104,7 +108,16 @@ export function checkScores(exam: ExamContent): ScoreCheck {
       }
       // 注音格的答案就是格子裡留白的字，不用另外填
       if (s.layout === 'grid') return
+      // 連連看的答案由配對產生
+      if (q.type === 'matching') {
+        if (matchLeftItems(q).length < 2) issues.push({ level: 'warn', text: `${where}的連連看還沒填好配對。`, ref: qref })
+        return
+      }
       const answer = q.answer.trim()
+      if (q.type === 'true_false' && answer && !trueFalseAnswer(answer)) {
+        issues.push({ level: 'warn', text: `${where}是是非題，答案要選 ○ 或 ×。`, ref: qref })
+        return
+      }
       if (!answer) {
         issues.push({ level: 'warn', text: `${where}沒有填答案，答案卷上會空著。`, ref: qref })
         return

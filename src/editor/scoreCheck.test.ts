@@ -27,8 +27,11 @@ describe('checkScores', () => {
     s.questions = [choice(2, 'A')]
     const r = checkScores(exam([s], 10))
     expect(r.total).toBe(2)
-    expect(r.issues[0]).toMatchObject({ level: 'error' })
-    expect(r.issues[0].text).toContain('少了 8 分')
+    expect(r.issues[0]).toMatchObject({ level: 'warn' })
+    expect(r.issues[0].text).toContain('還差 8 分')
+    const over = checkScores(exam([s], 1))
+    expect(over.issues[0]).toMatchObject({ level: 'error' })
+    expect(over.issues[0].text).toContain('多了 1 分')
   })
 
   it('找出不計分、沒答案、答案對不到選項的題目', () => {

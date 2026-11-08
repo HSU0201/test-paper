@@ -20,10 +20,12 @@ import {
 } from '../types/exam'
 import { createSampleExam, type SampleSubject } from './chineseSample'
 import { convertAllToZhuyin, revertAllZhuyin } from './richText'
+import type { SectionPreset } from './sectionPresets'
 
 export type ExamAction =
   | { type: 'SELECT_BLOCK'; ref: BlockRef | null }
-  | { type: 'ADD_SECTION'; afterId?: string }
+  /** preset：依題型建好名稱、說明，並附上第一題 */
+  | { type: 'ADD_SECTION'; afterId?: string; preset?: SectionPreset }
   | { type: 'LOAD_EXAMPLE'; subject?: SampleSubject }
   /** 滿分；undefined 表示用預設的 100 */
   | { type: 'SET_FULL_SCORE'; value: number | undefined }
@@ -194,11 +196,19 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
       }
     }
     case 'ADD_SECTION': {
-      const s = createSection()
+      const p = action.preset
+      let s = createSection()
+      let selected: BlockRef = { kind: 'section', id: s.id }
+      if (p) {
+        s = { ...createSection(p.title, p.type), ...p.patch }
+        const first = { ...createQuestion(p.type, s.defaultScore), ...p.question }
+        s = { ...s, questions: [first] }
+        selected = { kind: 'question', id: first.id }
+      }
       const at = action.afterId ? exam.sections.findIndex((x) => x.id === action.afterId) + 1 : exam.sections.length
       const sections = [...exam.sections]
       sections.splice(at <= 0 ? sections.length : at, 0, s)
-      return { exam: { ...exam, sections }, selectedBlock: { kind: 'section', id: s.id } }
+      return { exam: { ...exam, sections }, selectedBlock: selected }
     }
     case 'UPDATE_SECTION':
       return {
