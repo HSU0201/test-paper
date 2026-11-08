@@ -50,6 +50,7 @@ export function gridCells(stem: string): GridCell[] {
       cells.push({ han: atom.han, reading: atom.reading, face: atom.face })
       continue
     }
+    if (atom.kind === 'frac') continue
     for (const ch of atom.text) {
       if (!SKIP.test(ch)) cells.push({ han: ch, reading: '', face: 'blank' })
     }

@@ -3,7 +3,9 @@ const DB_NAME = 'testpaper-editor'
 const DRAFTS = 'drafts'
 const SNAPSHOTS = 'snapshots'
 const DRAFT_KEY = 'current'
-const DB_VERSION = 2
+const DB_VERSION = 3
+/** 我的題庫與頁首範本 */
+const LIBRARY = 'library'
 
 /** 內容有變動時，每隔這段時間多留一份不會被下一筆暫存蓋掉的備份 */
 export const SNAPSHOT_EVERY_MINUTES = 3
@@ -22,6 +24,7 @@ function openDb(): Promise<IDBDatabase> {
       const db = req.result
       if (!db.objectStoreNames.contains(DRAFTS)) db.createObjectStore(DRAFTS)
       if (!db.objectStoreNames.contains(SNAPSHOTS)) db.createObjectStore(SNAPSHOTS)
+      if (!db.objectStoreNames.contains(LIBRARY)) db.createObjectStore(LIBRARY, { keyPath: 'id' })
     }
     req.onsuccess = () => {
       const db = req.result
@@ -124,4 +127,49 @@ export function loadSnapshot(savedAt: number): Promise<Draft | null> {
 /** 請瀏覽器不要在空間不足時清掉這個網站的暫存（不一定會同意） */
 export function requestPersistentStorage(): void {
   void navigator.storage?.persist?.().catch(() => undefined)
+}
+
+/** section：存起來的大題；template：頁首、紙張與字級範本 */
+export type LibraryKind = 'section' | 'template'
+
+export type LibraryItem<T = unknown> = {
+  id: string
+  kind: LibraryKind
+  name: string
+  savedAt: number
+  /** 清單上的簡短說明，例如題數 */
+  note: string
+  data: T
+}
+
+export function listLibrary<T = unknown>(kind: LibraryKind): Promise<LibraryItem<T>[]> {
+  return request<LibraryItem<T>[]>(LIBRARY, 'readonly', (s) => s.getAll() as IDBRequest<LibraryItem<T>[]>).then((all) =>
+    all.filter((item) => item.kind === kind).sort((a, b) => b.savedAt - a.savedAt),
+  )
+}
+
+export function saveLibraryItem<T>(item: Omit<LibraryItem<T>, 'id' | 'savedAt'> & { id?: string }): Promise<LibraryItem<T>> {
+  const full: LibraryItem<T> = { ...item, id: item.id ?? crypto.randomUUID(), savedAt: nextStamp(), data: structuredClone(item.data) }
+  return request(LIBRARY, 'readwrite', (s) => s.put(full)).then(() => {
+    notifyLibrary()
+    return full
+  })
+}
+
+export function deleteLibraryItem(id: string): Promise<void> {
+  return request(LIBRARY, 'readwrite', (s) => s.delete(id)).then(() => notifyLibrary())
+}
+
+/** 題庫有變動時通知畫面重新讀取 */
+const libraryListeners = new Set<() => void>()
+
+export function onLibraryChange(fn: () => void): () => void {
+  libraryListeners.add(fn)
+  return () => {
+    libraryListeners.delete(fn)
+  }
+}
+
+function notifyLibrary() {
+  libraryListeners.forEach((fn) => fn())
 }

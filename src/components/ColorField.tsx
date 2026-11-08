@@ -1,7 +1,21 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 
 import { ensureZhuyin, readingOptions, withZhuyin } from '../editor/hanToZhuyin'
-import { editRuby, editZhuyin, htmlToMarkup, INK_PALETTE, markupToHtml, plainText, type RubyEdit, setNthReading } from '../editor/richText'
+import {
+  editRuby,
+  editZhuyin,
+  fracInsertHtml,
+  htmlToMarkup,
+  INK_PALETTE,
+  markupToHtml,
+  plainText,
+  type RubyEdit,
+  setNthReading,
+  stripLeadingSub,
+  SUB_HTML,
+  SUB_TOKEN,
+} from '../editor/richText'
+import type { SubStyle } from '../editor/subItems'
 
 type ColorFieldProps = {
   value: string
@@ -10,25 +24,43 @@ type ColorFieldProps = {
   placeholder?: string
   ariaLabel: string
   rows?: number
+  /** 子題號在編輯框裡的樣式，跟卷面一致 */
+  subStyle?: SubStyle
+  /** 顯示數學工具：分數、單位與符號 */
+  mathTools?: boolean
 }
+
+/** 數學常用的單位與符號 */
+const MATH_SYMBOLS: { group: string; items: string[] }[] = [
+  { group: '運算', items: ['＋', '－', '×', '÷', '＝', '≠', '＞', '＜', '≧', '≦', '≒', '…'] },
+  { group: '長度', items: ['mm', 'cm', 'm', 'km', '公分', '公尺', '公里'] },
+  { group: '面積體積', items: ['cm²', 'm²', 'km²', 'cm³', 'm³', '平方公分', '立方公分'] },
+  { group: '重量容量', items: ['g', 'kg', '公克', '公斤', 'mL', 'L', '毫公升', '公升'] },
+  { group: '時間金錢', items: ['時', '分', '秒', '日', '元', '角'] },
+  { group: '其他', items: ['°', '°C', '％', '□', '○', '△', '∠', '⊥', '∥', '√', 'π'] },
+]
 
 export type ColorFieldHandle = {
   insert: (token: string) => void
+  /** 在游標處插入子題號。游標不在行首時，先換到下一行 */
+  insertSub: () => void
   focus: () => void
 }
 
 /** 考卷文字欄位。先選取字，再點色盤，只改那些字的顏色；其餘維持黑色。 */
 export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function ColorField(
-  { value, onChange, multiline, placeholder, ariaLabel, rows = 4 },
+  { value, onChange, multiline, placeholder, ariaLabel, rows = 4, subStyle, mathTools },
   handle,
 ) {
   const ref = useRef<HTMLDivElement>(null)
+  /** 分數輸入框：null 表示收起來 */
+  const [frac, setFrac] = useState<{ num: string; den: string } | null>(null)
   const rangeRef = useRef<Range | null>(null)
   const composing = useRef(false)
   const [msg, setMsg] = useState<string | null>(null)
   /** 點到破音字時，列出可選的讀音 */
   const [poly, setPoly] = useState<{ n: number; han: string; current: string; options: string[] } | null>(null)
-  const empty = !plainText(value)
+  const empty = !plainText(value) && !value.includes(SUB_TOKEN)
 
   /** 有好幾個讀音的字加上虛線底，提示可以點來換讀音 */
   const markPoly = () => {
@@ -95,24 +127,109 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
     if (next !== value) onChange(next)
   }
 
+  /** 把游標放回上次的位置；沒有記錄時放在最後面 */
+  const restoreCaret = (el: HTMLDivElement) => {
+    el.focus()
+    const sel = window.getSelection()
+    const range = rangeRef.current
+    if (sel && range && el.contains(range.startContainer)) {
+      sel.removeAllRanges()
+      sel.addRange(range)
+    } else {
+      const end = document.createRange()
+      end.selectNodeContents(el)
+      end.collapse(false)
+      sel?.removeAllRanges()
+      sel?.addRange(end)
+    }
+  }
+
+  /** 游標前（或後）的內容，存成標記 */
+  const markupAround = (range: Range, side: 'before' | 'after') => {
+    const el = ref.current!
+    const r = document.createRange()
+    if (side === 'before') {
+      r.setStart(el, 0)
+      r.setEnd(range.startContainer, range.startOffset)
+    } else {
+      r.setStart(range.endContainer, range.endOffset)
+      r.setEnd(el, el.childNodes.length)
+    }
+    const holder = document.createElement('div')
+    holder.appendChild(r.cloneContents())
+    return htmlToMarkup(holder)
+  }
+
+  const liveRange = () => {
+    const el = ref.current
+    const sel = window.getSelection()
+    if (!el || !sel || sel.rangeCount === 0) return null
+    const range = sel.getRangeAt(0)
+    return el.contains(range.startContainer) && el.contains(range.endContainer) ? range : null
+  }
+
+  /**
+   * 在子題那一行按 Enter：下一行自動接下一個子題號。
+   * 子題號後面還沒打字就按 Enter，拿掉這個子題號，像 Word 的清單一樣結束。
+   */
+  const continueSub = (): boolean => {
+    const el = ref.current
+    const range = liveRange()
+    if (!el || !range) return false
+    const before = markupAround(range, 'before')
+    const line = before.slice(before.lastIndexOf('\n') + 1)
+    const rest = stripLeadingSub(line)
+    if (rest == null) return false
+    const after = markupAround(range, 'after').split('\n')[0]
+    if (!plainText(rest).trim() && !plainText(after).trim() && !after.includes(SUB_TOKEN)) {
+      const index = before.split(SUB_TOKEN).length - 2
+      const chip = el.querySelectorAll('[data-sub]')[index]
+      if (chip?.parentNode) {
+        // 游標留在原本這一行。行尾沒有東西時補一個 br，空行才看得到、點得到
+        const parent = chip.parentNode
+        const next = chip.nextSibling
+        chip.remove()
+        let anchor = next
+        if (!next || (next.nodeType === Node.ELEMENT_NODE && (next as HTMLElement).tagName !== 'BR' && !next.textContent)) {
+          anchor = document.createElement('br')
+          parent.insertBefore(anchor, next)
+        }
+        const caret = document.createRange()
+        if (anchor) caret.setStartBefore(anchor)
+        caret.collapse(true)
+        const sel = window.getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(caret)
+      }
+      emit()
+      saveSel()
+      return true
+    }
+    document.execCommand('insertHTML', false, `<br>${SUB_HTML}`)
+    emit()
+    saveSel()
+    return true
+  }
+
   useImperativeHandle(handle, () => ({
     insert(token: string) {
       const el = ref.current
       if (!el || !token) return
-      el.focus()
-      const sel = window.getSelection()
-      const range = rangeRef.current
-      if (sel && range && el.contains(range.startContainer)) {
-        sel.removeAllRanges()
-        sel.addRange(range)
-      } else {
-        const end = document.createRange()
-        end.selectNodeContents(el)
-        end.collapse(false)
-        sel?.removeAllRanges()
-        sel?.addRange(end)
-      }
+      restoreCaret(el)
       document.execCommand('insertText', false, token)
+      emit()
+      saveSel()
+    },
+    insertSub() {
+      const el = ref.current
+      if (!el) return
+      restoreCaret(el)
+      const range = liveRange()
+      if (!range) return
+      const before = markupAround(range, 'before')
+      const line = before.slice(before.lastIndexOf('\n') + 1)
+      const midLine = plainText(line).trim() !== '' || line.includes(SUB_TOKEN)
+      document.execCommand('insertHTML', false, `${midLine ? '<br>' : ''}${SUB_HTML}`)
       emit()
       saveSel()
     },
@@ -241,6 +358,7 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
         aria-label={ariaLabel}
         aria-multiline={multiline || undefined}
         data-placeholder={placeholder}
+        data-sub-style={subStyle}
         spellCheck={false}
         onMouseUp={saveSel}
         onClick={(e) => pickPoly(e.target)}
@@ -258,6 +376,16 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
         onKeyDown={(e) => {
           e.stopPropagation()
           if (!multiline && e.key === 'Enter') e.preventDefault()
+          if (
+            multiline &&
+            e.key === 'Enter' &&
+            !e.shiftKey &&
+            !e.nativeEvent.isComposing &&
+            !composing.current &&
+            continueSub()
+          ) {
+            e.preventDefault()
+          }
         }}
         onBlur={() => {
           saveSel()
@@ -351,6 +479,79 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
           <button type="button" className="text-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => setPoly(null)}>
             關閉
           </button>
+        </div>
+      ) : null}
+      {mathTools ? (
+        <div className="color-field__math" role="group" aria-label="數學工具" onPointerDown={saveSel}>
+          <button
+            type="button"
+            className={frac ? 'text-btn is-current' : 'text-btn'}
+            aria-expanded={frac != null}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setFrac(frac ? null : { num: '', den: '' })}
+          >
+            分數
+          </button>
+          <select
+            className="ui-input color-field__symbols"
+            aria-label="插入單位或符號"
+            value=""
+            onChange={(e) => {
+              const el = ref.current
+              const sym = e.target.value
+              if (!el || !sym) return
+              restoreCaret(el)
+              document.execCommand('insertText', false, sym)
+              emit()
+              saveSel()
+            }}
+          >
+            <option value="">單位、符號…</option>
+            {MATH_SYMBOLS.map((g) => (
+              <optgroup key={g.group} label={g.group}>
+                {g.items.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {frac ? (
+            <form
+              className="color-field__frac"
+              onSubmit={(e) => {
+                e.preventDefault()
+                const el = ref.current
+                if (!el || (!frac.num.trim() && !frac.den.trim())) return
+                restoreCaret(el)
+                document.execCommand('insertHTML', false, fracInsertHtml(frac.num, frac.den))
+                emit()
+                saveSel()
+                setFrac({ num: '', den: '' })
+              }}
+            >
+              <input
+                className="ui-input"
+                aria-label="分子"
+                placeholder="分子"
+                value={frac.num}
+                autoFocus
+                onChange={(e) => setFrac({ ...frac, num: e.target.value })}
+              />
+              <span aria-hidden>／</span>
+              <input
+                className="ui-input"
+                aria-label="分母"
+                placeholder="分母"
+                value={frac.den}
+                onChange={(e) => setFrac({ ...frac, den: e.target.value })}
+              />
+              <button type="submit" className="text-btn">
+                插入
+              </button>
+            </form>
+          ) : null}
         </div>
       ) : null}
       {msg ? <p className="color-field__hint">{msg}</p> : null}

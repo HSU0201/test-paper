@@ -8,6 +8,10 @@ const STYLE_OPEN = /^\{\{\*([bius]*)\}\}/
 const STYLE_CLOSE = '{{/*}}'
 const ZY = /^\{\{z:([^|}]+)\|([^}]*)\}\}/
 const RUBY = /^\{\{y([brn])?:([^|}]+)\|([^}]*)\}\}/
+/** 上下疊的分數：{{f:分子|分母}} */
+const FRAC = /^\{\{f:([^|}]*)\|([^}]*)\}\}/
+/** 子題號。印出時依順序編成 ①②③、(1)(2)(3) 等，見 subItems.ts */
+export const SUB_TOKEN = '{{n}}'
 const TONE_MARK = new Set(['\u02c7', '\u02c9', '\u02ca', '\u02cb', '\u02d9'])
 
 /** b 粗體、i 斜體、u 底線、s 刪除線，可同時存在。 */
@@ -43,6 +47,26 @@ type Seg =
   | { kind: 'ch'; ch: string; color?: string; deco?: string }
   | { kind: 'zy'; han: string; reading: string; color?: string; deco?: string }
   | { kind: 'ruby'; face: RubyFace; han: string; reading: string; color?: string; deco?: string }
+  | { kind: 'sub' }
+  | { kind: 'frac'; num: string; den: string; color?: string; deco?: string }
+
+/** 分數在純文字裡寫成 3/4 */
+function fracShown(num: string, den: string): string {
+  return `${num}/${den}`
+}
+
+export function fracMarkup(num: string, den: string): string {
+  const clean = (s: string) => s.replace(/[|{}]/g, '').trim()
+  return `{{f:${clean(num)}|${clean(den)}}}`
+}
+
+function fracHtml(num: string, den: string): string {
+  return `<span class="frac" contenteditable="false" data-num="${escapeAttr(num)}" data-den="${escapeAttr(den)}"><span class="frac__num">${escapeHtml(num)}</span><span class="frac__den">${escapeHtml(den)}</span></span>`
+}
+
+export function fracInsertHtml(num: string, den: string): string {
+  return fracHtml(num.replace(/[|{}]/g, '').trim(), den.replace(/[|{}]/g, '').trim())
+}
 
 function rubyFace(mark: string | undefined): RubyFace {
   if (mark === 'b') return 'box'
@@ -85,6 +109,11 @@ function parseSegments(input: string): Seg[] {
       i += CLOSE.length
       continue
     }
+    if (input.startsWith(SUB_TOKEN, i)) {
+      out.push({ kind: 'sub' })
+      i += SUB_TOKEN.length
+      continue
+    }
     const style = STYLE_OPEN.exec(input.slice(i))
     if (style) {
       deco = style[1]
@@ -96,6 +125,12 @@ function parseSegments(input: string): Seg[] {
       const hex = `#${open[1].toLowerCase()}`
       color = hex === '#000000' ? undefined : hex
       i += open[0].length
+      continue
+    }
+    const frac = FRAC.exec(input.slice(i))
+    if (frac) {
+      out.push({ kind: 'frac', num: frac[1], den: frac[2], ...withInk(color, deco) })
+      i += frac[0].length
       continue
     }
     const ruby = RUBY.exec(input.slice(i))
@@ -126,8 +161,14 @@ export function hasRubyMarkup(input: string): boolean {
   return /\{\{y[brn]?:/.test(input)
 }
 
+/** 要逐格排版的文字：右側注音或上下疊的分數 */
+export function hasInkMarkup(input: string): boolean {
+  return /\{\{(?:y[brn]?|f):/.test(input)
+}
+
 export type InkAtom =
   | { kind: 'text'; text: string; color?: string; deco?: string }
+  | { kind: 'frac'; num: string; den: string; color?: string; deco?: string }
   | { kind: 'ruby'; face: RubyFace; han: string; reading: string; color?: string; deco?: string }
 
 /** 一般字連成一段；右側注音每一格單獨一段，給排版量寬度。 */
@@ -152,6 +193,13 @@ export function inkAtoms(input: string): InkAtom[] {
     buf += text
   }
   for (const seg of parseSegments(input)) {
+    if (seg.kind === 'sub') continue
+    if (seg.kind === 'frac') {
+      flush()
+      out.push({ kind: 'frac', num: seg.num, den: seg.den, ...withInk(seg.color, seg.deco) })
+      prevZy = false
+      continue
+    }
     if (seg.kind === 'ruby') {
       flush()
       out.push({
@@ -194,6 +242,12 @@ export function richChars(input: string): RichChar[] {
   const out: RichChar[] = []
   let prevZy = false
   for (const seg of parseSegments(input)) {
+    if (seg.kind === 'sub') continue
+    if (seg.kind === 'frac') {
+      prevZy = false
+      for (const ch of fracShown(seg.num, seg.den)) out.push({ ch, ...withInk(seg.color, seg.deco) })
+      continue
+    }
     if (seg.kind === 'ruby') {
       prevZy = false
       for (const ch of rubyShown(seg.face, seg.han, seg.reading)) {
@@ -321,6 +375,9 @@ function wrapInk(body: string, color: string, deco: string): string {
   return html
 }
 
+/** 編輯框裡的子題號。數字由 CSS counter 依順序顯示，刪掉或插入時會自動重編。 */
+export const SUB_HTML = '<span class="subnum" contenteditable="false" data-sub="1"></span>'
+
 export function markupToHtml(input: string): string {
   let html = ''
   let buf = ''
@@ -334,6 +391,22 @@ export function markupToHtml(input: string): string {
     buf = ''
   }
   for (const seg of parseSegments(input)) {
+    if (seg.kind === 'sub') {
+      flush()
+      html += SUB_HTML
+      prevZy = false
+      color = ''
+      deco = ''
+      continue
+    }
+    if (seg.kind === 'frac') {
+      flush()
+      html += wrapInk(fracHtml(seg.num, seg.den), seg.color ?? '', seg.deco ?? '')
+      prevZy = false
+      color = ''
+      deco = ''
+      continue
+    }
     if (seg.kind === 'ruby') {
       flush()
       const span = rubyHtml(seg.face, seg.han, seg.reading)
@@ -447,6 +520,14 @@ export function htmlToMarkup(root: HTMLElement): string {
       lines.push('')
       return
     }
+    if (el.dataset.sub) {
+      pushText(SUB_TOKEN, null, '')
+      return
+    }
+    if (el.dataset.num != null && el.dataset.den != null) {
+      pushText(fracMarkup(el.dataset.num, el.dataset.den), color, deco)
+      return
+    }
     if (el.classList.contains('ruby')) {
       const face = el.dataset.face === 'box' ? 'b' : el.dataset.face === 'reading' ? 'r' : el.dataset.face === 'blank' ? 'n' : ''
       const han = (el.dataset.han ?? '').replace(/[|}]/g, '')
@@ -488,6 +569,18 @@ function placeSegments(segs: Seg[]): Placed[] {
   let n = 0
   let prevZy = false
   for (const seg of segs) {
+    if (seg.kind === 'sub') {
+      out.push({ ...seg, start: n, len: 0 })
+      prevZy = false
+      continue
+    }
+    if (seg.kind === 'frac') {
+      const len = [...fracShown(seg.num, seg.den)].length
+      out.push({ ...seg, start: n, len })
+      n += len
+      prevZy = false
+      continue
+    }
     if (seg.kind === 'ruby') {
       const len = Math.max(1, [...rubyShown(seg.face, seg.han, seg.reading)].length)
       out.push({ ...seg, start: n, len })
@@ -529,8 +622,13 @@ function serializeSegments(pieces: Placed[]): string {
   }
   for (const piece of pieces) {
     if (piece.gap) continue
+    if (piece.kind === 'sub') {
+      out += SUB_TOKEN
+      continue
+    }
     setInk(piece.color, piece.deco ?? '')
-    if (piece.kind === 'zy') out += `{{z:${piece.han}|${piece.reading}}}`
+    if (piece.kind === 'frac') out += `{{f:${piece.num}|${piece.den}}}`
+    else if (piece.kind === 'zy') out += `{{z:${piece.han}|${piece.reading}}}`
     else if (piece.kind === 'ruby') out += `{{${rubyMark(piece.face)}:${piece.han}|${piece.reading}}}`
     else out += piece.ch
   }
@@ -683,4 +781,45 @@ export function setNthReading(input: string, n: number, reading: string): string
     return k === n ? { ...piece, reading } : piece
   })
   return k >= n ? serializeSegments(pieces) : input
+}
+
+/** 黑白列印：彩色字改成黑色粗體，印出來仍然看得出強調 */
+export function monoMarkup(input: string): string {
+  if (!input.includes('{{#')) return input
+  const pieces = placeSegments(parseSegments(input)).map((piece) => {
+    if (piece.kind === 'sub' || !piece.color) return piece
+    const deco = decoKey({
+      bold: true,
+      italic: piece.deco?.includes('i'),
+      underline: piece.deco?.includes('u'),
+      strike: piece.deco?.includes('s'),
+    })
+    return { ...piece, color: undefined, deco }
+  })
+  return serializeSegments(pieces)
+}
+
+/** 拆成每一行的標記。每行各自開關顏色與樣式，可以單獨排版。 */
+export function splitMarkupLines(input: string): string[] {
+  const lines: Placed[][] = [[]]
+  for (const piece of placeSegments(parseSegments(input))) {
+    if (piece.kind === 'ch' && piece.ch === '\n') lines.push([])
+    else lines[lines.length - 1].push(piece)
+  }
+  return lines.map(serializeSegments)
+}
+
+/** 這一行最前面（略過空白）是子題號時，回傳拿掉子題號後的內容；否則回傳 null */
+export function stripLeadingSub(line: string): string | null {
+  const pieces = placeSegments(parseSegments(line))
+  const at = pieces.findIndex((p) => !(p.kind === 'ch' && /^[ 　\t]$/.test(p.ch)))
+  if (at < 0 || pieces[at].kind !== 'sub') return null
+  return serializeSegments(pieces.slice(at + 1))
+}
+
+/** 拿掉這一行最前面 count 個印出來的字（只拿一般字），前面補上 token */
+export function replaceLeadingChars(line: string, count: number, token: string): string {
+  const pieces = placeSegments(parseSegments(line))
+  const rest = pieces.filter((p) => !(p.kind === 'ch' && !p.gap && p.start < count))
+  return token + serializeSegments(rest)
 }

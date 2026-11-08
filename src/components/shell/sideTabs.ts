@@ -4,12 +4,13 @@ import type { IconName } from '../ui'
 
 type SheetView = 'header' | 'paper' | 'type'
 
-export type SideTab = 'questions' | 'sheet' | 'decorate'
+export type SideTab = 'questions' | 'sheet' | 'decorate' | 'tools'
 
 export const SIDE_TABS: { id: SideTab; label: string; icon: IconName; title: string }[] = [
   { id: 'questions', label: '出題', icon: 'outline', title: '題目順序' },
   { id: 'sheet', label: '卷面', icon: 'page', title: '頁首、紙張、字級' },
   { id: 'decorate', label: '物件', icon: 'insert', title: '線條、方框、圖片與自由文字' },
+  { id: 'tools', label: '工具', icon: 'tools', title: '題庫、範本、答案表、細目表、A/B 卷、列印' },
 ]
 
 export function focusKeyOf(block: BlockRef | null, selectedId: string | null) {
@@ -31,6 +32,7 @@ export function taskHint(tab: SideTab, sheetView: SheetView, state: EditorState)
     return '全卷的字型與字級。某一題要不同，回到「出題」點那一題，在右側打開「單獨設定」。'
   }
   if (tab === 'decorate') return '固定在某一頁的文字、線條、方框、圖片。題目請在「出題」新增。'
+  if (tab === 'tools') return '題庫、頁首範本、答案表與細目表、A/B 卷與補考卷，以及大字和黑白列印。'
   const block = state.selectedBlock
   if (block?.kind === 'question') {
     const num = questionNumbers(state.exam).get(block.id)

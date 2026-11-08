@@ -23,9 +23,13 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
     const stages = (stagesRef.current ?? []).slice(0, pageCount).filter((s): s is Konva.Stage => !!s)
     if (!stages.length) return
     setExporting({ answers, done: 0, total: stages.length })
-    exportStagesToPdf(stages, `${baseName}${answers ? '-答案' : ''}.pdf`, answers, (done, total) =>
-      setExporting({ answers, done, total }),
-    )
+    const { mono, perSheet } = state.layout.print
+    exportStagesToPdf(stages, `${baseName}${answers ? '-答案' : ''}.pdf`, {
+      includeAnswers: answers,
+      mono,
+      perSheet,
+      onProgress: (done, total) => setExporting({ answers, done, total }),
+    })
       .catch(() => window.alert('匯出 PDF 失敗，請重新整理頁面後再試一次。'))
       .finally(() => setExporting(null))
   }

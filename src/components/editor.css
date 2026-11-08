@@ -439,6 +439,13 @@ kbd {
   gap: 8px;
 }
 
+.ui-field__actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 10px;
+}
+
 .ui-field__label strong {
   margin-left: 6px;
   color: var(--c-accent-ink);
@@ -2431,6 +2438,50 @@ kbd {
   border-radius: 3px;
 }
 
+/* 子題號：數字由 counter 依順序排，刪掉或插入時自動重編 */
+@counter-style sub-circled {
+  system: fixed;
+  symbols: '①' '②' '③' '④' '⑤' '⑥' '⑦' '⑧' '⑨' '⑩' '⑪' '⑫' '⑬' '⑭' '⑮' '⑯' '⑰' '⑱' '⑲' '⑳';
+  fallback: decimal;
+}
+
+@counter-style sub-bopomofo {
+  system: fixed;
+  symbols: 'ㄅ' 'ㄆ' 'ㄇ' 'ㄈ' 'ㄉ' 'ㄊ' 'ㄋ' 'ㄌ' 'ㄍ' 'ㄎ' 'ㄏ' 'ㄐ' 'ㄑ' 'ㄒ' 'ㄓ' 'ㄔ' 'ㄕ' 'ㄖ' 'ㄗ' 'ㄘ' 'ㄙ' 'ㄚ' 'ㄛ' 'ㄜ' 'ㄝ' 'ㄞ' 'ㄟ' 'ㄠ' 'ㄡ' 'ㄢ' 'ㄣ' 'ㄤ' 'ㄥ' 'ㄦ' 'ㄧ' 'ㄨ' 'ㄩ';
+  fallback: decimal;
+}
+
+.color-field__box {
+  counter-reset: sub;
+}
+
+.color-field__box .subnum {
+  display: inline-block;
+  margin-right: 0.2em;
+  padding: 0 0.2em;
+  border-radius: 3px;
+  background: rgba(29, 78, 216, 0.1);
+  color: #1d4ed8;
+  user-select: all;
+  counter-increment: sub;
+}
+
+.color-field__box .subnum::before {
+  content: counter(sub, sub-circled);
+}
+
+.color-field__box[data-sub-style='paren'] .subnum::before {
+  content: '(' counter(sub) ')';
+}
+
+.color-field__box[data-sub-style='stem'] .subnum::before {
+  content: counter(sub, cjk-heavenly-stem) '、';
+}
+
+.color-field__box[data-sub-style='bopomofo'] .subnum::before {
+  content: counter(sub, sub-bopomofo) '、';
+}
+
 .color-field__box .ruby {
   display: inline-flex;
   align-items: center;
@@ -3265,4 +3316,227 @@ kbd {
 .color-field__poly .text-btn.is-current {
   font-weight: 700;
   text-decoration: underline;
+}
+
+/* 黑白列印預覽：卷面直接顯示灰階 */
+.paper-stage-wrap--mono canvas {
+  filter: grayscale(1);
+}
+
+/* 工具面板 */
+.tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tools-list__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface);
+}
+
+.tools-list__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tools-list__text strong {
+  overflow: hidden;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tools-list__text span {
+  color: var(--c-text-2);
+  font-size: 12px;
+}
+
+.tools-empty,
+.tools-warn {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--c-text-2);
+}
+
+.tools-warn {
+  color: var(--c-danger);
+}
+
+.tools-scale {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tools-scale > :first-child {
+  flex: 1;
+}
+
+.tools-table-wrap {
+  overflow-x: auto;
+}
+
+.tools-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.tools-table th,
+.tools-table td {
+  padding: 4px 6px;
+  border: 1px solid var(--c-border);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tools-table thead th,
+.tools-table tbody th {
+  background: var(--c-surface-2);
+  font-weight: 600;
+}
+
+.tools-table tbody th {
+  text-align: left;
+}
+
+.retake-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface);
+}
+
+.retake-list__head,
+.retake-list__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.retake-list__head {
+  font-weight: 600;
+}
+
+.retake-list__item {
+  padding-left: 18px;
+  color: var(--c-text-2);
+}
+
+.retake-list__item span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 連連看配對 */
+.match-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.match-editor__head,
+.match-editor__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 32px;
+  align-items: center;
+  gap: 6px;
+}
+
+.match-editor__head {
+  font-size: 12px;
+  color: var(--c-text-2);
+}
+
+/* 編輯框裡的分數 */
+.color-field__box .frac {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 0.15em;
+  vertical-align: middle;
+  font-size: 0.8em;
+  line-height: 1.1;
+  user-select: all;
+}
+
+.color-field__box .frac__num {
+  padding: 0 0.2em;
+  border-bottom: 1px solid currentColor;
+}
+
+.color-field__box .frac__den {
+  padding: 0 0.2em;
+}
+
+.color-field__math {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.color-field__symbols {
+  width: auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.color-field__frac {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.color-field__frac .ui-input {
+  width: 64px;
+  height: 28px;
+}
+
+.math-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px dashed var(--c-border-strong);
+  border-radius: 8px;
+}
+
+.math-figure__pick {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tools-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tools-actions .btn {
+  justify-content: flex-start;
+  width: 100%;
 }

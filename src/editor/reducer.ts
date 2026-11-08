@@ -28,6 +28,8 @@ import {
   type HeaderLayout,
   normalizeLayout,
   type PageMargin,
+  type PaperLayout,
+  type PrintSettings,
   refitHeaderHeight,
   type SpacingSettings,
   withDefaultHeaderPlacement,
@@ -141,6 +143,30 @@ export type EditorAction =
   | { type: 'COMMIT_TEXT_TIER_CATALOG'; overridesPatch: TextLevelOverrides; userTiers: UserTextTier[] }
   | { type: 'RESET' }
   | { type: 'SET_PAGE_SIZE'; pageWidth: number; pageHeight: number }
+  | { type: 'SET_PRINT'; patch: Partial<PrintSettings> }
+  /** 字級與行距一起改，復原時一步回來 */
+  | { type: 'SET_TEXT_SCALE'; overrides: TextLevelOverrides; lineHeight: SpacingSettings['lineHeight'] }
+  /** 套用頁首範本：頁首、紙張、分欄、字級與字型。題目和試卷名稱不動 */
+  | { type: 'APPLY_TEMPLATE'; template: PaperTemplate }
+
+/** 存在題庫裡的頁首範本 */
+export type PaperTemplate = {
+  layout: PaperLayout
+  pageWidth: number
+  pageHeight: number
+  textLevelOverrides: TextLevelOverrides
+  paperFontFamily: string
+}
+
+export function templateOf(state: EditorState): PaperTemplate {
+  return {
+    layout: state.layout,
+    pageWidth: state.pageWidth,
+    pageHeight: state.pageHeight,
+    textLevelOverrides: state.textLevelOverrides,
+    paperFontFamily: state.paperFontFamily,
+  }
+}
 
 function findIndex(objects: CanvasObject[], id: string): number {
   return objects.findIndex((o) => o.id === id)
@@ -635,6 +661,31 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     }
     case 'RESET':
       return { ...initialEditorState(), exam: createEmptyExam() }
+    case 'SET_PRINT':
+      return { ...state, layout: { ...state.layout, print: { ...state.layout.print, ...action.patch } } }
+    case 'SET_TEXT_SCALE': {
+      const sized = editorReducer(state, { type: 'UPDATE_TEXT_LEVEL_OVERRIDES', patch: action.overrides })
+      return editorReducer(sized, { type: 'SET_SPACING', patch: { lineHeight: action.lineHeight } })
+    }
+    case 'APPLY_TEMPLATE': {
+      const t = action.template
+      const layout = normalizeLayout(t.layout)
+      const titleOf = (h: HeaderLayout) => h.items.find((it) => it.role === 'examTitle')
+      const keepTitle = titleOf(state.layout.header)
+      const items = layout.header.items.map((it) =>
+        it.role === 'examTitle' && keepTitle ? { ...it, value: keepTitle.value } : it,
+      )
+      const next: EditorState = {
+        ...state,
+        layout: { ...layout, header: { ...layout.header, items } },
+        pageWidth: Math.max(120, Math.round(t.pageWidth || state.pageWidth)),
+        pageHeight: Math.max(120, Math.round(t.pageHeight || state.pageHeight)),
+        selectedBlock: state.selectedBlock?.kind === 'header' ? null : state.selectedBlock,
+        textLevelOverrides: {},
+      }
+      const sized = editorReducer(next, { type: 'UPDATE_TEXT_LEVEL_OVERRIDES', patch: t.textLevelOverrides ?? {} })
+      return editorReducer(sized, { type: 'SET_PAPER_FONT', fontFamily: t.paperFontFamily })
+    }
     case 'SET_PAGE_SIZE': {
       const w = Math.max(120, Math.round(action.pageWidth))
       const h = Math.max(120, Math.round(action.pageHeight))

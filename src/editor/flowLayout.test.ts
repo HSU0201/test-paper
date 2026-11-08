@@ -86,3 +86,28 @@ describe('過長的題目', () => {
     expect(lines).toContain('第120行')
   })
 })
+
+describe('子題號', () => {
+  it('子題號靠左，內容懸掛縮排，換行也對齊在號碼後面', () => {
+    const state = initialEditorState()
+    expect(state.pageWidth > state.pageHeight).toBe(false)
+    const sectionId = state.exam.sections[0].id
+    let slice = { exam: state.exam, selectedBlock: state.selectedBlock }
+    slice = examReducer(slice, { type: 'ADD_QUESTION', sectionId })
+    const id = slice.selectedBlock?.id ?? ''
+    const long = '很長的子題內容'.repeat(20)
+    const stem = `讀完回答：\n{{n}}${long}\n{{n}}第二題`
+    slice = examReducer(slice, { type: 'UPDATE_QUESTION', id, patch: { stem } })
+    const runs = layout({ ...state, exam: slice.exam }).blocks.filter((b) => b.ref.id === id).flatMap((b) => b.runs)
+    const labels = runs.filter((r) => r.key.startsWith('sub-'))
+    expect(labels.map((r) => r.text)).toEqual(['①', '②'])
+    const body = runs.find((r) => r.key === 'stem')!
+    const first = runs.find((r) => r.text.startsWith('很長'))!
+    const second = runs.find((r) => r.text === '第二題')!
+    expect(labels[0].x).toBe(body.x)
+    expect(first.x).toBeGreaterThan(labels[0].x)
+    expect(second.x).toBe(first.x)
+    expect(first.width).toBeLessThan(body.width)
+    expect(runs.some((r) => r.text.includes('{{n}}'))).toBe(false)
+  })
+})

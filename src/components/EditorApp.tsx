@@ -11,6 +11,7 @@ import { Inspector } from './Inspector'
 import { InsertPanel } from './panels/InsertPanel'
 import { OutlinePanel } from './panels/OutlinePanel'
 import { SheetPanel, SheetSwitch, type SheetView } from './panels/SheetPanel'
+import { ToolsPanel } from './panels/ToolsPanel'
 import { PaperStage } from './PaperStage'
 import { onRevealRequest } from './shell/revealBlock'
 import { focusKeyOf, SIDE_TABS, type SideTab,tabForFocusKey, taskHint } from './shell/sideTabs'
@@ -151,7 +152,15 @@ function EditorShell() {
                   <h2 className="side-panel__title">{activeTab?.label}</h2>
                   {tab === 'sheet' ? <SheetSwitch view={sheetView} onView={setSheetView} /> : null}
                   <p className="side-panel__hint">{taskHint(tab, sheetView, state)}</p>
-                  {tab === 'questions' ? <OutlinePanel /> : tab === 'sheet' ? <SheetPanel view={sheetView} /> : <InsertPanel />}
+                  {tab === 'questions' ? (
+                    <OutlinePanel />
+                  ) : tab === 'sheet' ? (
+                    <SheetPanel view={sheetView} />
+                  ) : tab === 'tools' ? (
+                    <ToolsPanel />
+                  ) : (
+                    <InsertPanel />
+                  )}
                 </motion.div>
               </AnimatePresence>
             </div>

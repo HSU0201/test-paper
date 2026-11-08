@@ -1,4 +1,4 @@
-import type { FlowRule, FlowRun, PlacedBlock } from '../editor/flowLayout'
+import { type FlowRule, type FlowRun, MATCH_DOT_LEFT, MATCH_DOT_RIGHT, type PlacedBlock } from '../editor/flowLayout'
 import { lineInkCenter, measureText } from '../editor/konvaMeasure'
 import { layoutRichLines, plainText } from '../editor/richText'
 import { rubyPlace, splitRubyReading } from '../editor/rubyLayout'
@@ -11,6 +11,7 @@ import {
   type Question,
   questionAsideWidth,
   type Section,
+  trueFalseAnswer,
 } from '../types/exam'
 import { toVerticalGlyph } from '../types/layout'
 
@@ -35,7 +36,33 @@ export type AnswerTextMark = {
   mask?: boolean
 }
 
-export type AnswerMark = { kind: 'ring'; page: number; x: number; y: number; rx: number; ry: number } | AnswerTextMark
+export type AnswerMark =
+  | { kind: 'ring'; page: number; x: number; y: number; rx: number; ry: number }
+  | { kind: 'line'; page: number; x1: number; y1: number; x2: number; y2: number }
+  | AnswerTextMark
+
+/** 連連看：左右兩個點同一頁時連一條線 */
+function matchingLines(question: Question, blocks: PlacedBlock[]): AnswerMark[] {
+  const dots = new Map<string, { page: number; x: number; y: number }>()
+  for (const block of blocks) {
+    for (const run of block.runs) {
+      if (!run.key.startsWith(MATCH_DOT_LEFT) && !run.key.startsWith(MATCH_DOT_RIGHT)) continue
+      dots.set(run.key, {
+        page: block.page,
+        x: run.x + run.width / 2,
+        y: run.y + (run.style.fontSize * run.lineHeight) / 2,
+      })
+    }
+  }
+  const marks: AnswerMark[] = []
+  for (const pair of question.pairs ?? []) {
+    const a = dots.get(`${MATCH_DOT_LEFT}${pair.id}`)
+    const b = dots.get(`${MATCH_DOT_RIGHT}${pair.id}`)
+    if (!a || !b || a.page !== b.page) continue
+    marks.push({ kind: 'line', page: a.page, x1: a.x, y1: a.y, x2: b.x, y2: b.y })
+  }
+  return marks
+}
 
 function foldLetter(ch: string): string {
   const c = ch.codePointAt(0) ?? 0
@@ -45,7 +72,7 @@ function foldLetter(ch: string): string {
 }
 
 /** 「C」「(C)」「Ａ、Ｃ」這類作答，轉成選項索引。說明句不當成選項。 */
-function choiceHits(q: Question): number[] {
+export function choiceHits(q: Pick<Question, 'choices' | 'answer'>): number[] {
   const count = q.choices.length
   if (!count) return []
   const parts = q.answer
@@ -664,7 +691,8 @@ function questionMarks(
   blocks: PlacedBlock[],
   fontFamily: string,
 ): AnswerMark[] {
-  const answer = question.answer.trim()
+  if (question.type === 'matching') return matchingLines(question, blocks)
+  const answer = question.type === 'true_false' ? trueFalseAnswer(question.answer) || question.answer.trim() : question.answer.trim()
   if (!answer || !blocks.length) return []
   const ordered = [...blocks].sort(byReadingOrder)
   const { fontSize, lineHeight } = textStyleOf(ordered)

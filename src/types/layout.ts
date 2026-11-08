@@ -86,11 +86,18 @@ export type SpacingSettings = {
 
 export type PageMargin = { top: number; right: number; bottom: number; left: number }
 
+/**
+ * 列印設定。mono：黑白列印，彩色字改成黑色粗體、圖片轉灰階（卷面也跟著顯示，等於預覽）。
+ * perSheet：匯出 PDF 時一張紙放幾頁；2 是兩頁並排在兩倍寬的紙上（A4 → A3、B5 → B4）。
+ */
+export type PrintSettings = { mono: boolean; perSheet: 1 | 2 }
+
 export type PaperLayout = {
   margin: PageMargin
   header: HeaderLayout
   columns: ColumnLayout
   spacing: SpacingSettings
+  print: PrintSettings
 }
 
 export const HEADER_ROLE_LABEL: Record<HeaderRole, string> = {
@@ -327,6 +334,7 @@ export function createDefaultLayout(): PaperLayout {
       sectionGap: { nominal: 20, min: 8 },
       allowSqueeze: true,
     },
+    print: { mono: false, perSheet: 1 },
   }
 }
 
@@ -450,6 +458,10 @@ export function normalizeLayout(raw: unknown): PaperLayout {
       questionGap: normalizeRange(s.questionGap, base.spacing.questionGap, 0, 80),
       sectionGap: normalizeRange(s.sectionGap, base.spacing.sectionGap, 0, 120),
       allowSqueeze: s.allowSqueeze ?? true,
+    },
+    print: {
+      mono: r.print?.mono === true,
+      perSheet: r.print?.perSheet === 2 ? 2 : 1,
     },
   }
 }

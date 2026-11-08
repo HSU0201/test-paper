@@ -5,7 +5,7 @@ import type { FlowFrame, FlowImage, FlowRun, PlacedBlock } from '../editor/flowL
 import { FLOW_WRAP, measureText } from '../editor/konvaMeasure'
 import type { EditorAction } from '../editor/reducer'
 import { fontStyleFor, layoutRichLines, type RubyFace,textDecorationFor } from '../editor/richText'
-import { rubyPlace } from '../editor/rubyLayout'
+import { FRAC_SCALE, rubyPlace } from '../editor/rubyLayout'
 import { EDITOR_FLAG, EDITOR_SELECTION } from '../editor/theme'
 import { needsManualWrap } from '../editor/zhuyin'
 import { ANSWER_INK } from '../export/answerMarks'
@@ -272,6 +272,41 @@ function FlowRunText({ r, fontFamily }: { r: FlowRun; fontFamily: string }) {
           const x = r.x + p.x + shift(p.line)
           const y = r.y + p.line * step
           const fill = p.color || base
+          if (p.frac) {
+            const fs = r.style.fontSize
+            const size = fs * FRAC_SCALE
+            const top = y + Math.max(0, (step - (size * 2 + fs * 0.3)) / 2)
+            const barY = top + size + fs * 0.15
+            const fracStyle = fontStyleFor(!!r.style.bold, p.deco || '')
+            const inset = fs * 0.12
+            const part = (text: string, ty: number) => (
+              <Text
+                x={x}
+                y={ty}
+                width={p.width}
+                text={text}
+                fontSize={size}
+                fontFamily={fontFamily}
+                fontStyle={fracStyle}
+                fill={fill}
+                align="center"
+                wrap="none"
+                listening={false}
+              />
+            )
+            return (
+              <Group key={i} listening={false}>
+                {part(p.frac.num, top)}
+                <Line
+                  points={[x + inset, barY, x + p.width - inset, barY]}
+                  stroke={fill}
+                  strokeWidth={Math.max(1, fs * 0.06)}
+                  listening={false}
+                />
+                {part(p.frac.den, barY + fs * 0.15)}
+              </Group>
+            )
+          }
           if (p.ruby) {
             return (
               <RubyCluster

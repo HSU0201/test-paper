@@ -3,6 +3,7 @@ import {
   type BlockRef,
   type Choice,
   createChoice,
+  createMatchPair,
   createQuestion,
   createSection,
   type ExamContent,
@@ -38,6 +39,12 @@ export type ExamAction =
   | { type: 'REMOVE_SECTION'; id: string }
   | { type: 'MOVE_SECTION'; id: string; toIndex: number }
   | { type: 'ADD_QUESTION'; sectionId: string; afterId?: string }
+  /** 複製一題，接在原題下面 */
+  | { type: 'DUPLICATE_QUESTION'; id: string }
+  /** 複製整個大題，接在原大題後面 */
+  | { type: 'DUPLICATE_SECTION'; id: string }
+  /** 插入整個大題（題庫、補考卷用）。afterId 未設時接在最後 */
+  | { type: 'INSERT_SECTIONS'; sections: Section[]; assets: Record<string, Asset>; afterId?: string }
   | { type: 'UPDATE_QUESTION'; id: string; patch: Partial<Omit<Question, 'id'>> }
   | { type: 'REMOVE_QUESTION'; id: string }
   | { type: 'MOVE_QUESTION'; id: string; toSectionId: string; toIndex: number }
@@ -66,6 +73,9 @@ export const EXAM_ACTION_TYPES = new Set<string>([
   'REMOVE_SECTION',
   'MOVE_SECTION',
   'ADD_QUESTION',
+  'DUPLICATE_QUESTION',
+  'DUPLICATE_SECTION',
+  'INSERT_SECTIONS',
   'UPDATE_QUESTION',
   'REMOVE_QUESTION',
   'MOVE_QUESTION',
@@ -136,6 +146,21 @@ function moveItem<T>(list: T[], from: number, to: number): T[] {
   const [item] = next.splice(from, 1)
   next.splice(Math.max(0, Math.min(to, next.length)), 0, item)
   return next
+}
+
+/** 換上新的 id；圖檔共用，不另外複製 */
+export function cloneQuestion(q: Question): Question {
+  return {
+    ...q,
+    id: crypto.randomUUID(),
+    choices: q.choices.map((c) => ({ ...c, id: crypto.randomUUID() })),
+    figures: q.figures.map((f) => ({ ...f, id: crypto.randomUUID() })),
+    ...(q.pairs ? { pairs: q.pairs.map((p) => ({ ...p, id: crypto.randomUUID() })) } : {}),
+  }
+}
+
+export function cloneSection(s: Section): Section {
+  return { ...s, id: crypto.randomUUID(), questions: s.questions.map(cloneQuestion) }
 }
 
 export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
@@ -233,6 +258,36 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
         selectedBlock: { kind: 'question', id: nq.id },
       }
     }
+    case 'DUPLICATE_QUESTION': {
+      const hit = findQuestion(exam, action.id)
+      if (!hit) return state
+      const copy = cloneQuestion(hit.question)
+      const next = mapSection(exam, hit.section.id, (s) => {
+        const questions = [...s.questions]
+        questions.splice(hit.index + 1, 0, copy)
+        return { ...s, questions }
+      })
+      return { exam: next, selectedBlock: { kind: 'question', id: copy.id } }
+    }
+    case 'DUPLICATE_SECTION': {
+      const at = exam.sections.findIndex((s) => s.id === action.id)
+      if (at < 0) return state
+      const copy = cloneSection(exam.sections[at])
+      const sections = [...exam.sections]
+      sections.splice(at + 1, 0, copy)
+      return { exam: { ...exam, sections }, selectedBlock: { kind: 'section', id: copy.id } }
+    }
+    case 'INSERT_SECTIONS': {
+      if (!action.sections.length) return state
+      const copies = action.sections.map(cloneSection)
+      const after = action.afterId ? exam.sections.findIndex((s) => s.id === action.afterId) : -1
+      const sections = [...exam.sections]
+      sections.splice(after >= 0 ? after + 1 : sections.length, 0, ...copies)
+      return {
+        exam: { ...exam, sections, assets: { ...exam.assets, ...action.assets } },
+        selectedBlock: { kind: 'section', id: copies[0].id },
+      }
+    }
     case 'UPDATE_QUESTION': {
       let nextExam = mapQuestion(exam, action.id, (q) => {
         const next = { ...q, ...action.patch }
@@ -247,6 +302,9 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
           next.choices = [createChoice(), createChoice(), createChoice(), createChoice()]
         }
         if (action.patch.type === 'short_answer' && next.answerLines === 0) next.answerLines = 3
+        if (action.patch.type === 'matching' && !next.pairs?.length) {
+          next.pairs = [createMatchPair(), createMatchPair(), createMatchPair()]
+        }
         if (typeof action.patch.stem === 'string' && hasFigureMark(action.patch.stem)) {
           next.figures = next.figures.map((f) => {
             if (typeof f.afterLine !== 'number') return f

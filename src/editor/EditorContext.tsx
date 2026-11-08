@@ -12,6 +12,7 @@ import {
 
 import { BOPOMOFO_FAMILY, withBopomofoFont } from '../fonts/paperFont'
 import { type EditorState,mergeTextLevelPreset } from '../types/document'
+import { mapExamText } from '../types/exam'
 import { computePageGeometry, type PageGeometry } from '../types/layout'
 import { documentSignature, serializeDocument, toLoadAction } from './documentIO'
 import { type FlowResult,layoutExam } from './flowLayout'
@@ -27,6 +28,7 @@ import {
   SNAPSHOT_INTERVAL_MS,
 } from './persist'
 import type { EditorAction } from './reducer'
+import { monoMarkup } from './richText'
 
 export type SaveStatus = { state: 'loading' | 'idle' | 'saving' | 'saved' | 'error'; at?: number }
 
@@ -122,7 +124,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     const instruction = mergeTextLevelPreset('instruction', o)
     const body = mergeTextLevelPreset('question_body', o)
     return layoutExam(
-      state.exam,
+      state.layout.print.mono ? mapExamText(state.exam, monoMarkup) : state.exam,
       (page) => pageGeometry(page).frames,
       {
         heading: { fontSize: heading.fontSize, fill: '#000000', bold: heading.bold },
@@ -133,7 +135,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       measure,
       state.pageWidth > state.pageHeight,
     )
-  }, [state.exam, state.textLevelOverrides, state.layout.spacing, state.pageWidth, state.pageHeight, pageGeometry, measure])
+  }, [state.exam, state.layout.print.mono, state.textLevelOverrides, state.layout.spacing, state.pageWidth, state.pageHeight, pageGeometry, measure])
 
   const pageCount = useMemo(() => {
     const objMax = state.objects.reduce((m, o) => Math.max(m, (o.page ?? 0) + 1), 0)

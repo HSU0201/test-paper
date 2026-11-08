@@ -1,5 +1,5 @@
 /** 國字右側直排注音的寬度與換行。沒有這種標記的句子不走這裡。 */
-import { hasRubyMarkup, inkAtoms, type RubyFace } from './richText'
+import { hasInkMarkup, inkAtoms, type RubyFace } from './richText'
 import { textAtoms } from './zhuyin'
 
 const TONE_MARK = new Set(['\u02c7', '\u02c9', '\u02ca', '\u02cb', '\u02d9'])
@@ -12,6 +12,19 @@ export type InkPiece = {
   line: number
   width: number
   ruby?: { face: RubyFace; han: string; reading: string }
+  /** 上下疊的分數 */
+  frac?: { num: string; den: string }
+}
+
+/** 分數的分子、分母字級（相對正文） */
+export const FRAC_SCALE = 0.78
+
+/** 分數佔的寬與高。高度是分子＋分數線＋分母 */
+export function fracMetrics(fontSize: number, num: string, den: string, measure: (sample: string) => number) {
+  const size = fontSize * FRAC_SCALE
+  const w = Math.max(measure(num), measure(den)) * FRAC_SCALE
+  const pad = fontSize * 0.18
+  return { size, width: Math.max(size * 0.8, w) + pad * 2, height: size * 2 + fontSize * 0.3, pad }
 }
 
 export type RubyMetrics = {
@@ -99,6 +112,7 @@ export function rubyPlace(fontSize: number, lineStep: number, face: RubyFace, re
 
 type Unit =
   | { kind: 'text'; text: string; color: string; deco: string; width: number }
+  | { kind: 'frac'; num: string; den: string; color: string; deco: string; width: number }
   | { kind: 'ruby'; face: RubyFace; han: string; reading: string; color: string; deco: string; width: number }
 
 export function layoutRubyRun(
@@ -108,12 +122,18 @@ export function layoutRubyRun(
   lineHeight: number,
   measure: (sample: string, deco?: string) => number,
 ): { pieces: InkPiece[]; height: number; lineCount: number; step: number } {
-  if (!hasRubyMarkup(input)) {
+  if (!hasInkMarkup(input)) {
     return { pieces: [], height: 0, lineCount: 0, step: fontSize * lineHeight }
   }
   const units: Unit[] = []
   let tallest = fontSize
   for (const atom of inkAtoms(input)) {
+    if (atom.kind === 'frac') {
+      const fm = fracMetrics(fontSize, atom.num, atom.den, (s) => measure(s, atom.deco))
+      tallest = Math.max(tallest, fm.height)
+      units.push({ kind: 'frac', num: atom.num, den: atom.den, color: atom.color ?? '', deco: atom.deco ?? '', width: fm.width })
+      continue
+    }
     if (atom.kind === 'ruby') {
       const adv = rubyAdvance(fontSize, atom.face, atom.reading)
       tallest = Math.max(tallest, adv.stack, adv.base, adv.slotH, fontSize)
@@ -164,6 +184,12 @@ export function layoutRubyRun(
       continue
     }
     if (x > 0 && x + unit.width > width + 0.5) breakLine()
+    if (unit.kind === 'frac') {
+      flush()
+      pieces.push({ text: '', color: unit.color, deco: unit.deco, x, line, width: unit.width, frac: { num: unit.num, den: unit.den } })
+      x += unit.width
+      continue
+    }
     if (unit.kind === 'ruby') {
       flush()
       pieces.push({

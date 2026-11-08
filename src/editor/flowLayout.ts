@@ -11,6 +11,10 @@ import {
   footerOf,
   hasFigureMark,
   isChoiceType,
+  matchLeftItems,
+  matchLeftLabel,
+  matchRightItems,
+  matchRightLabel,
   type NumberStyle,
   planStemFigures,
   type Question,
@@ -23,12 +27,14 @@ import {
   sectionRowSize,
   sectionScoreNote,
   toChineseNumeral,
+  TRUE_FALSE_BLANK,
 } from '../types/exam'
 import { type SpacingSettings,toVerticalGlyph } from '../types/layout'
 import type { Box } from './bounds'
 import { buildGridWord, type GridMetrics, gridMetrics } from './gridLayout'
-import { hasRubyMarkup, layoutRichLines, paintText, plainText, richChars } from './richText'
+import { hasInkMarkup, layoutRichLines, paintText, plainText, richChars } from './richText'
 import { type InkPiece, layoutRubyRun } from './rubyLayout'
+import { countSubItems, hasSubItems, resolveSubItems, subChunks, subLabel, subStyleOf } from './subItems'
 import { clusterUnits, needsManualWrap, textAtoms } from './zhuyin'
 
 export type TextStyle = { fontSize: number; fill: string; bold?: boolean; italic?: boolean }
@@ -231,7 +237,7 @@ function pushFlowText(
   lineHeight: number,
   m: MeasureFn,
 ): number {
-  if (hasRubyMarkup(text)) {
+  if (hasInkMarkup(text)) {
     const laid = layoutRubyRun(text, width, style.fontSize, lineHeight, (sample, deco = '') =>
       m(sample, 10000, { ...style, bold: !!style.bold || deco.includes('b'), italic: deco.includes('i') }, lineHeight).naturalWidth,
     )
@@ -409,16 +415,36 @@ function buildQuestion(
     }
   }
 
-  const pushStem = (text: string, key: string, y: number, placeholder = false, colors?: string[], singleLine = false, decos?: string[]) => {
-    if (!placeholder && !colors && !decos && hasRubyMarkup(text)) {
-      const laid = layoutRubyRun(text, stemW, body.fontSize, mt.lineHeight, (sample, deco = '') =>
+  const subStyle = subStyleOf(q)
+  const subCount = countSubItems(q.stem)
+  /** 子題號佔的寬度。同一題的子題內容對齊在最寬的子題號後面 */
+  let subW = 0
+  for (let n = 1; n <= subCount; n++) {
+    subW = Math.max(subW, m(subLabel(n, subStyle), 10000, body, mt.lineHeight).naturalWidth)
+  }
+  if (subW) subW = Math.ceil(subW + body.fontSize * 0.25)
+
+  const pushStem = (
+    text: string,
+    key: string,
+    y: number,
+    placeholder = false,
+    colors?: string[],
+    singleLine = false,
+    decos?: string[],
+    dx = 0,
+  ) => {
+    const x = indent + dx
+    const width = Math.max(24, stemW - dx)
+    if (!placeholder && !colors && !decos && hasInkMarkup(text)) {
+      const laid = layoutRubyRun(text, width, body.fontSize, mt.lineHeight, (sample, deco = '') =>
         m(sample, 10000, { ...body, bold: !!body.bold || deco.includes('b'), italic: deco.includes('i') }, mt.lineHeight).naturalWidth,
       )
       runs.push({
         key,
-        x: indent,
+        x,
         y,
-        width: stemW,
+        width,
         height: laid.height,
         text: plainText(text),
         style: body,
@@ -431,12 +457,12 @@ function buildQuestion(
     }
     const painted = placeholder ? { text, colors: undefined as string[] | undefined, decos: undefined as string[] | undefined } : paintText(text)
     const usedDecos = decos ?? painted.decos
-    const height = paintedHeight(colors || decos ? text : painted.text, usedDecos, stemW, body, mt.lineHeight, m)
+    const height = paintedHeight(colors || decos ? text : painted.text, usedDecos, width, body, mt.lineHeight, m)
     runs.push({
       key,
-      x: indent,
+      x,
       y,
-      width: stemW,
+      width,
       height,
       text: colors || decos ? text : painted.text,
       colors: colors ?? painted.colors,
@@ -473,29 +499,70 @@ function buildQuestion(
   }
 
   let h = 0
+  /** 子題號靠左印在這一行，回傳子題內容要往右移多少 */
+  const pushSubLabel = (label: string | undefined, y: number) => {
+    if (!label) return 0
+    runs.push({ key: `sub-${runs.length}`, x: indent, y, width: subW, text: label, style: body, lineHeight: mt.lineHeight })
+    return subW
+  }
+
   const layoutAnchored = (list: Figure[]) => {
     const raw = stripMarks(scoredStem)
-    const painted = paintText(raw)
-    const pieces = wrapLines(painted.text, stemW, body, mt.lineHeight, m)
-    const atOf = (f: Figure) => Math.max(0, Math.min(pieces.length, f.afterLine ?? 1))
+    const wrapped = subChunks(raw, subStyle).chunks.map((chunk) => {
+      const painted = paintText(chunk.text)
+      const dx = chunk.label ? subW : 0
+      return { chunk, painted, dx, pieces: wrapLines(painted.text, Math.max(24, stemW - dx), body, mt.lineHeight, m) }
+    })
+    const total = wrapped.reduce((sum, w) => sum + w.pieces.length, 0)
+    const atOf = (f: Figure) => Math.max(0, Math.min(total, f.afterLine ?? 1))
     const placeAt = (index: number) => {
       const batch = list.filter((f) => atOf(f) === index)
       if (batch.length) h = pushFigures(batch, h, 'middle')
     }
-    let char = 0
     let lineNo = 0
     placeAt(0)
-    for (const line of pieces) {
-      while (painted.text[char] === '\n') char += 1
-      const start = char
-      char += line.length
-      if (!line) continue
-      const colors = painted.colors?.slice(start, char)
-      const decos = painted.decos?.slice(start, char)
-      h += pushStem(line, lineNo === 0 ? 'stem' : `stem-${lineNo}`, h, false, colors, true, decos)
-      lineNo += 1
-      placeAt(lineNo)
+    for (const { chunk, painted, dx, pieces } of wrapped) {
+      let char = 0
+      let label = chunk.label
+      if (label && !pieces.some(Boolean)) {
+        pushSubLabel(label, h)
+        h += lh
+        continue
+      }
+      for (const line of pieces) {
+        while (painted.text[char] === '\n') char += 1
+        const start = char
+        char += line.length
+        if (!line) continue
+        pushSubLabel(label, h)
+        label = undefined
+        const colors = painted.colors?.slice(start, char)
+        const decos = painted.decos?.slice(start, char)
+        h += pushStem(line, lineNo === 0 ? 'stem' : `stem-${lineNo}`, h, false, colors, true, decos, dx)
+        lineNo += 1
+        placeAt(lineNo)
+      }
     }
+  }
+
+  /** 一段題幹（被文中的圖切開的一段）。有子題號時逐子題排，內容懸掛縮排 */
+  let subNext = 1
+  const pushStemPart = (part: string, key: string) => {
+    if (!hasSubItems(part)) {
+      h += pushStem(part, key, h)
+      return
+    }
+    const { chunks, next } = subChunks(part, subStyle, subNext)
+    subNext = next
+    chunks.forEach((chunk, k) => {
+      const chunkKey = k === 0 ? key : `${key}-s${k}`
+      const dx = pushSubLabel(chunk.label, h)
+      if (!plainText(chunk.text) && !hasInkMarkup(chunk.text)) {
+        if (chunk.label || chunks.length > 1) h += lh * Math.max(1, chunk.text.split('\n').length)
+        return
+      }
+      h += pushStem(chunk.text, chunkKey, h, false, undefined, false, undefined, dx)
+    })
   }
 
   const anchored = !hasFigureMark(q.stem) && middle.some((f) => typeof f.afterLine === 'number')
@@ -506,13 +573,13 @@ function buildQuestion(
     h += pushStem(EMPTY_STEM, 'stem', h, true)
     h = pushFigures(rest, h, 'middle')
     if (scoreMark) h += pushStem(scoreMark, 'score', h)
-  } else if (anchored && !hasRubyMarkup(q.stem)) {
+  } else if (anchored && !hasInkMarkup(q.stem)) {
     layoutAnchored(middle)
   } else {
     const plan = planStemFigures(scoredStem, middle.length)
     let figAt = 0
     plan.parts.forEach((part, i) => {
-      if (part) h += pushStem(part, i === 0 ? 'stem' : `stem-${i}`, h)
+      if (part) pushStemPart(part, i === 0 ? 'stem' : `stem-${i}`)
       const batch = middle.slice(figAt, figAt + plan.slots[i])
       figAt += plan.slots[i]
       if (batch.length) h = pushFigures(batch, h, 'middle')
@@ -547,18 +614,24 @@ function buildQuestion(
         const ch = q.choices[i]
         const x = indent + k * cellW
         const textW = cellW - 6
-        runs.push({
-          key: `ch-${i}`,
-          x,
-          y: h,
-          width: textW,
-          text: labels[i].text,
-          colors: labels[i].colors,
-          decos: labels[i].decos,
-          style: body,
-          lineHeight: mt.lineHeight,
-        })
-        let cellH = paintedHeight(labels[i].text, labels[i].decos, textW, body, mt.lineHeight, m)
+        let cellH: number
+        if (hasInkMarkup(ch.text)) {
+          // 選項裡有分數或右側注音，逐格排
+          cellH = pushFlowText(runs, `ch-${i}`, `${choiceLabel(i)} ${ch.text.trim()}`, x, h, textW, body, mt.lineHeight, m)
+        } else {
+          runs.push({
+            key: `ch-${i}`,
+            x,
+            y: h,
+            width: textW,
+            text: labels[i].text,
+            colors: labels[i].colors,
+            decos: labels[i].decos,
+            style: body,
+            lineHeight: mt.lineHeight,
+          })
+          cellH = paintedHeight(labels[i].text, labels[i].decos, textW, body, mt.lineHeight, m)
+        }
         if (ch.image && hasImage(ch)) {
           const inline = !plainText(ch.text).trim()
           const labelW = m(`${choiceLabel(i)} `, 10000, body, mt.lineHeight).naturalWidth
@@ -582,6 +655,8 @@ function buildQuestion(
       h += rowH
     }
   }
+  if (q.type === 'matching') h = layoutMatching(q, h, indent, innerW, body, c, runs)
+
   h = pushFigures(after, h, 'after')
 
   if (reserveAnswers && q.type === 'short_answer' && q.answerLines > 0) {
@@ -594,6 +669,68 @@ function buildQuestion(
   }
 
   return { height: h, runs, rules, images }
+}
+
+/** 連連看的點。key 以這個開頭，答案卷用來畫連線 */
+export const MATCH_DOT_LEFT = 'mdot-l-'
+export const MATCH_DOT_RIGHT = 'mdot-r-'
+const MATCH_DOT = '●'
+
+/**
+ * 連連看：左欄文字靠左、點在右邊；右欄點在左邊、文字接在後面。
+ * 中間留空讓學生畫線。回傳排完後的高度。
+ */
+function layoutMatching(q: Question, top: number, indent: number, innerW: number, body: TextStyle, c: Ctx, runs: FlowRun[]): number {
+  const left = matchLeftItems(q)
+  const right = matchRightItems(q)
+  const rows = Math.max(left.length, right.length)
+  if (!rows) return top
+  const { m, mt } = c
+  const lh = body.fontSize * mt.lineHeight
+  const gap = Math.max(body.fontSize * 3, innerW * 0.18)
+  const colW = Math.max(40, (innerW - gap) / 2)
+  const dotW = Math.ceil(body.fontSize * 1.1)
+  const textW = Math.max(24, colW - dotW - 4)
+  const rightX = indent + colW + gap
+  let h = top + 6
+  for (let i = 0; i < rows; i++) {
+    const l = left[i]
+    const r = right[i]
+    const lt = l ? paintText(`${matchLeftLabel(i)} ${l.left.trim()}`) : null
+    const rt = r ? paintText(`${matchRightLabel(i)}、${r.right.trim()}`) : null
+    const hl = lt ? paintedHeight(lt.text, lt.decos, textW, body, mt.lineHeight, m) : 0
+    const hr = rt ? paintedHeight(rt.text, rt.decos, textW, body, mt.lineHeight, m) : 0
+    const dot = { text: MATCH_DOT, style: body, lineHeight: mt.lineHeight, width: dotW, align: 'center' as const }
+    if (lt) {
+      runs.push({ key: `ml-${i}`, x: indent, y: h, width: textW, text: lt.text, colors: lt.colors, decos: lt.decos, style: body, lineHeight: mt.lineHeight })
+      runs.push({ key: `${MATCH_DOT_LEFT}${l!.id}`, x: indent + colW - dotW, y: h, ...dot })
+    }
+    if (rt) {
+      runs.push({ key: `${MATCH_DOT_RIGHT}${r!.id}`, x: rightX, y: h, ...dot })
+      runs.push({ key: `mr-${i}`, x: rightX + dotW + 4, y: h, width: textW, text: rt.text, colors: rt.colors, decos: rt.decos, style: body, lineHeight: mt.lineHeight })
+    }
+    h += Math.max(lh, hl, hr) + body.fontSize * 0.5
+  }
+  return h
+}
+
+/** 是非題在題幹前面加上作答括號；直排時連連看改成文字列出 */
+function stemForLayout(q: Question, vertical: boolean): string {
+  const stem = q.stem.trim()
+  if (q.type === 'true_false') return stem ? `${TRUE_FALSE_BLANK}${stem}` : stem
+  if (q.type === 'matching' && vertical) {
+    const left = matchLeftItems(q).map((p, i) => `${matchLeftLabel(i)}${p.left.trim()}`)
+    const right = matchRightItems(q).map((p, i) => `${matchRightLabel(i)}、${p.right.trim()}`)
+    return [stem, left.join('　'), right.join('　')].filter(Boolean).join('\n')
+  }
+  return q.stem
+}
+
+/** 排版時用的題目：是非題補上括號；直排與注音格不做懸掛縮排，子題號直接換成文字 */
+function layoutQuestion(question: Question, section: Section, vertical: boolean): Question {
+  let stem = stemForLayout(question, vertical)
+  if ((vertical || section.layout === 'grid') && hasSubItems(stem)) stem = resolveSubItems(stem, subStyleOf(question))
+  return stem === question.stem ? question : { ...question, stem }
 }
 
 type Item =
@@ -1767,7 +1904,7 @@ export function layoutExam(
     section.questions.forEach((question, qi) =>
       items.push({
         kind: 'question',
-        question,
+        question: layoutQuestion(question, section, vertical),
         section,
         num: nums.get(question.id) ?? 0,
         firstOfSection: qi === 0,

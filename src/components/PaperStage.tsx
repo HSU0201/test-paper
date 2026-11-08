@@ -271,7 +271,7 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
 
     return (
       <div
-        className={`paper-stage-wrap${state.textPlacementMode ? ' paper-stage-wrap--place-text' : ''}`}
+        className={`paper-stage-wrap${state.textPlacementMode ? ' paper-stage-wrap--place-text' : ''}${state.layout.print.mono ? ' paper-stage-wrap--mono' : ''}`}
         style={{
           width: pageW * scale,
           height: pageH * scale,

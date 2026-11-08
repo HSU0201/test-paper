@@ -4,15 +4,20 @@ import { readImageFile } from '../editor/documentIO'
 import { useEditor } from '../editor/EditorContext'
 import { findQuestion } from '../editor/examReducer'
 import { withZhuyin } from '../editor/hanToZhuyin'
+import { clockSvg, gridSvg, numberLineSvg, svgToAsset } from '../editor/mathFigures'
 import { plainText } from '../editor/richText'
+import { adoptTypedSubItems, hasSubItems, SUB_STYLE_LABEL, SUB_STYLES, type SubStyle, subStyleOf } from '../editor/subItems'
 import { mergeTextLevelPreset } from '../types/document'
 import {
   ASIDE_WIDTH_DEFAULT,
   ASIDE_WIDTH_MAX,
   ASIDE_WIDTH_MIN,
+  type Asset,
   type Choice,
   choiceLabel,
   type ChoiceLayout,
+  createMatchPair,
+  FALSE_MARK,
   type Figure,
   FIGURE_MARK,
   type FigurePlacement,
@@ -21,12 +26,18 @@ import {
   FOOTER_END_ID,
   hasFigureMark,
   isChoiceType,
+  matchAnswerText,
+  matchLeftItems,
+  type MatchPair,
+  matchRightItems,
   NOTICE_CONTINUE,
   NOTICE_END,
   type NumberStyle,
+  QUESTION_LEVEL_LABEL,
   QUESTION_TYPE_LABEL,
   questionAsideWidth,
   questionBlankCount,
+  type QuestionLevel,
   questionNumbers,
   questionPoints,
   questionRowGroup,
@@ -41,10 +52,14 @@ import {
   type SectionLayout,
   sectionRowSize,
   sectionScore,
+  shuffled,
+  TRUE_MARK,
+  trueFalseAnswer,
   uniformQuestionScore,
 } from '../types/exam'
 import { ColorField, type ColorFieldHandle } from './ColorField'
 import type { ExamTextRole } from './exam/ExamTextStyle'
+import { SaveToLibraryButton } from './panels/ToolsPanel'
 import { Icon, NumberField, PanelSection, Segmented, Switch } from './ui'
 
 const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]
@@ -351,6 +366,13 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
         <Icon name="plus" />
         在此大題新增小題
       </button>
+      <div className="ui-grid-2">
+        <button type="button" className="btn btn--ghost" onClick={() => dispatch({ type: 'DUPLICATE_SECTION', id: section.id })}>
+          <Icon name="copy" />
+          複製大題
+        </button>
+        <SaveToLibraryButton section={section} />
+      </div>
     </div>
   )
 }
@@ -361,6 +383,100 @@ const PLACEMENT_OPTIONS: { value: FigurePlacement; label: string }[] = [
   { value: 'right', label: '右側' },
   { value: 'afterChoices', label: '選後' },
 ]
+
+type MathFigureKind = 'clock' | 'line' | 'grid'
+
+/** 時鐘、數線、方格。填好數字後產生圖片，加到這一題 */
+function MathFigureMaker({ onAdd, onError }: { onAdd: (asset: Asset) => void; onError: () => void }) {
+  const [kind, setKind] = useState<MathFigureKind | null>(null)
+  const [clock, setClock] = useState({ hour: 3, minute: 0, hands: true, numbers: true })
+  const [line, setLine] = useState({ start: 0, end: 10, step: 1, labelEvery: 1, blanks: '' })
+  const [grid, setGrid] = useState({ rows: 4, cols: 5 })
+  const make = () => {
+    let fig: { svg: string; width: number; height: number } | null = null
+    if (kind === 'clock') fig = clockSvg(clock)
+    if (kind === 'line') {
+      const blanks = line.blanks
+        .split(/[,，、\s]+/)
+        .map((s) => Number(s))
+        .filter((n) => Number.isFinite(n))
+      fig = numberLineSvg({ ...line, blanks })
+      if (!fig) {
+        window.alert('數線的範圍不對：結束要大於開始，而且刻度不能超過 60 格。')
+        return
+      }
+    }
+    if (kind === 'grid') fig = gridSvg(grid)
+    if (fig) svgToAsset(fig).then(onAdd, onError)
+  }
+  const num = (label: string, value: number, set: (n: number) => void, min = -999, max = 999) => (
+    <NumberField label={label} min={min} max={max} value={value} onChange={(v) => set(v)} />
+  )
+  return (
+    <div className="math-figure">
+      <div className="math-figure__pick">
+        <span className="ui-field__label">數學圖形</span>
+        <Segmented<MathFigureKind | ''>
+          label="數學圖形"
+          value={kind ?? ''}
+          options={[
+            { value: 'clock', label: '時鐘' },
+            { value: 'line', label: '數線' },
+            { value: 'grid', label: '方格' },
+          ]}
+          onChange={(v) => setKind(v === kind ? null : v || null)}
+        />
+      </div>
+      {kind === 'clock' ? (
+        <>
+          <div className="ui-grid-2">
+            {num('時', clock.hour, (hour) => setClock({ ...clock, hour: Math.round(hour) }), 0, 12)}
+            {num('分', clock.minute, (minute) => setClock({ ...clock, minute: Math.round(minute) }), 0, 59)}
+          </div>
+          <div className="ui-row">
+            <span className="ui-row__label">畫出指針（關掉讓學生自己畫）</span>
+            <Switch checked={clock.hands} label="畫出指針" onChange={(hands) => setClock({ ...clock, hands })} />
+          </div>
+          <div className="ui-row">
+            <span className="ui-row__label">寫上 1–12</span>
+            <Switch checked={clock.numbers} label="寫上數字" onChange={(numbers) => setClock({ ...clock, numbers })} />
+          </div>
+        </>
+      ) : null}
+      {kind === 'line' ? (
+        <>
+          <div className="ui-grid-2">
+            {num('開始', line.start, (start) => setLine({ ...line, start }))}
+            {num('結束', line.end, (end) => setLine({ ...line, end }))}
+            {num('每格', line.step, (step) => setLine({ ...line, step }), 0.01)}
+            {num('每幾格寫數字', line.labelEvery, (labelEvery) => setLine({ ...line, labelEvery }), 1, 20)}
+          </div>
+          <label className="ui-field">
+            <span className="ui-field__label">要學生填的刻度</span>
+            <input
+              className="ui-input"
+              value={line.blanks}
+              placeholder="例：3, 7（印成（　））"
+              onChange={(e) => setLine({ ...line, blanks: e.target.value })}
+            />
+          </label>
+        </>
+      ) : null}
+      {kind === 'grid' ? (
+        <div className="ui-grid-2">
+          {num('列數', grid.rows, (rows) => setGrid({ ...grid, rows }), 1, 20)}
+          {num('行數', grid.cols, (cols) => setGrid({ ...grid, cols }), 1, 20)}
+        </div>
+      ) : null}
+      {kind ? (
+        <button type="button" className="btn btn--ghost btn--block" onClick={make}>
+          <Icon name="plus" />
+          加到這一題
+        </button>
+      ) : null}
+    </div>
+  )
+}
 
 function FiguresEditor({ questionId }: { questionId: string }) {
   const { state, dispatch } = useEditor()
@@ -403,6 +519,10 @@ function FiguresEditor({ questionId }: { questionId: string }) {
         onChange={(e) => void onFiles(e.target.files)}
       />
       {error ? <p className="inspector__warn">{error}</p> : null}
+      <MathFigureMaker
+        onAdd={(asset) => dispatch({ type: 'ADD_FIGURE', questionId, asset })}
+        onError={() => setError('圖形產生失敗，請再試一次')}
+      />
       {!q.figures.length ? (
         <button
           type="button"
@@ -537,6 +657,7 @@ function ChoiceRow({
         <span className="choice-row__label">{label}</span>
         <ColorField
           ariaLabel={`選項 ${label}`}
+          mathTools
           value={choice.text}
           placeholder={asset ? '圖片說明，可留白' : undefined}
           onChange={(text) => dispatch({ type: 'UPDATE_CHOICE', questionId, choiceId: choice.id, text })}
@@ -608,6 +729,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
   const { question: q, section, index } = hit
   const num = questionNumbers(state.exam).get(q.id)
   const set = (patch: Partial<typeof q>) => dispatch({ type: 'UPDATE_QUESTION', id: q.id, patch })
+  const adopt = adoptTypedSubItems(q.stem)
 
   return (
     <div className="inspector__body">
@@ -657,18 +779,30 @@ function QuestionEditor({ questionId }: { questionId: string }) {
         <div className="ui-field">
           <span className="ui-field__label ui-field__label--split">
             <span>題目</span>
-            <button
-              type="button"
-              className="text-btn"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => stemRef.current?.insert(FIGURE_MARK)}
-            >
-              插入圖片位置
-            </button>
+            <span className="ui-field__actions">
+              <button
+                type="button"
+                className="text-btn"
+                title="在游標處加上 ①②③ 這類子題號，號碼會自動排"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => stemRef.current?.insertSub()}
+              >
+                插入子題號
+              </button>
+              <button
+                type="button"
+                className="text-btn"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => stemRef.current?.insert(FIGURE_MARK)}
+              >
+                插入圖片位置
+              </button>
+            </span>
           </span>
           <ColorField
             ref={stemRef}
             ariaLabel="題目"
+            mathTools
             multiline
             rows={4}
             value={q.stem}
@@ -680,7 +814,31 @@ function QuestionEditor({ questionId }: { questionId: string }) {
                   : '輸入題目內容'
             }
             onChange={(stem) => set({ stem })}
+            subStyle={subStyleOf(q)}
           />
+          {hasSubItems(q.stem) ? (
+            <div className="ui-field">
+              <span className="ui-field__label">子題號</span>
+              <Segmented<SubStyle>
+                label="子題號樣式"
+                value={subStyleOf(q)}
+                options={SUB_STYLES.map((value) => ({ value, label: SUB_STYLE_LABEL[value] }))}
+                onChange={(subStyle) => set({ subStyle })}
+              />
+              <p className="exam-style__follow">
+                在子題那一行按 Enter，下一行會接著編號；子題號後面還沒打字時再按一次 Enter，就結束子題、回到題目本文。
+                子題太長自動換行時，第二行會對齊在號碼後面。刪掉或插入子題，號碼會自動重排。
+              </p>
+            </div>
+          ) : adopt ? (
+            <p className="exam-style__follow">
+              題目裡有自己打的子題號（{SUB_STYLE_LABEL[adopt.style]}…）。{' '}
+              <button type="button" className="text-btn" onClick={() => set({ stem: adopt.stem, subStyle: adopt.style })}>
+                換成自動子題號
+              </button>
+              {' '}之後刪掉或插入子題，號碼會自動重排，換行也會對齊。
+            </p>
+          ) : null}
           <p className="exam-style__follow">
             {hasFigureMark(q.stem)
               ? '題目裡的［圖］不會印在卷上，只代表圖片要插在這裡。可以剪到別的句子後面，半形的 [圖] 也有效。'
@@ -719,6 +877,8 @@ function QuestionEditor({ questionId }: { questionId: string }) {
           </div>
         </PanelSection>
       ) : null}
+
+      {q.type === 'matching' ? <MatchingEditor questionId={q.id} /> : null}
 
       <FiguresEditor questionId={q.id} />
 
@@ -850,12 +1010,85 @@ function QuestionEditor({ questionId }: { questionId: string }) {
       </PanelSection>
 
       <PanelSection title="答案" description="編輯時不印在卷面上。「匯出試卷」不含答案；「匯出答案」會另外存一份印上答案的 PDF。">
-        <input
-          className="ui-input"
-          value={q.answer}
-          placeholder={isChoiceType(q.type) ? '例：C' : '輸入參考答案'}
-          onChange={(e) => set({ answer: e.target.value })}
-        />
+        {q.type === 'true_false' ? (
+          <Segmented<string>
+            label="是非題答案"
+            value={trueFalseAnswer(q.answer)}
+            options={[
+              { value: TRUE_MARK, label: `${TRUE_MARK} 對` },
+              { value: FALSE_MARK, label: `${FALSE_MARK} 錯` },
+            ]}
+            onChange={(answer) => set({ answer })}
+          />
+        ) : q.type === 'matching' ? (
+          <p className="exam-style__follow">
+            {matchLeftItems(q).length
+              ? `依上面的配對自動產生：${matchAnswerText(q)}。答案卷會用紅線連起來。`
+              : '先在「配對」填好左右兩邊。'}
+          </p>
+        ) : (
+          <input
+            className="ui-input"
+            value={q.answer}
+            placeholder={isChoiceType(q.type) ? '例：C' : '輸入參考答案'}
+            onChange={(e) => set({ answer: e.target.value })}
+          />
+        )}
+      </PanelSection>
+
+      <PanelSection
+        title="雙向細目表"
+        description="可以不填。填了之後，「出題」側欄的「雙向細目表」會依單元、能力與難易度統計題數和配分比例。"
+      >
+        <div className="ui-grid-2">
+          <label className="ui-field">
+            <span className="ui-field__label">單元／目標</span>
+            <input
+              className="ui-input"
+              list="unit-options"
+              value={q.unit ?? ''}
+              placeholder="例：第三課"
+              onChange={(e) => set({ unit: e.target.value || undefined })}
+            />
+          </label>
+          <label className="ui-field">
+            <span className="ui-field__label">能力</span>
+            <input
+              className="ui-input"
+              list="skill-options"
+              value={q.skill ?? ''}
+              placeholder="例：理解"
+              onChange={(e) => set({ skill: e.target.value || undefined })}
+            />
+          </label>
+        </div>
+        <datalist id="unit-options">
+          {[...new Set(state.exam.sections.flatMap((s) => s.questions.map((x) => x.unit ?? '').filter(Boolean)))].map(
+            (u) => (
+              <option key={u} value={u} />
+            ),
+          )}
+        </datalist>
+        <datalist id="skill-options">
+          {SKILL_OPTIONS.map((u) => (
+            <option key={u} value={u} />
+          ))}
+        </datalist>
+        <div className="ui-field">
+          <span className="ui-field__label">難易度</span>
+          <Segmented<QuestionLevel | ''>
+            label="難易度"
+            value={q.level ?? ''}
+            options={[
+              { value: '', label: '未填' },
+              ...(['easy', 'medium', 'hard'] as QuestionLevel[]).map((value) => ({
+                value,
+                label: QUESTION_LEVEL_LABEL[value],
+              })),
+            ]}
+            onChange={(level) => set({ level: level || undefined })}
+          />
+        </div>
       </PanelSection>
 
       <button
@@ -866,7 +1099,88 @@ function QuestionEditor({ questionId }: { questionId: string }) {
         <Icon name="plus" />
         在下方新增一題
       </button>
+      <button type="button" className="btn btn--ghost btn--block" onClick={() => dispatch({ type: 'DUPLICATE_QUESTION', id: q.id })}>
+        <Icon name="copy" />
+        複製這一題
+      </button>
     </div>
+  )
+}
+
+const SKILL_OPTIONS = ['記憶', '理解', '應用', '分析', '評鑑', '創造']
+
+/** 連連看：每一組左右各一格。左邊空白就是右欄多放的干擾項 */
+function MatchingEditor({ questionId }: { questionId: string }) {
+  const { state, dispatch } = useEditor()
+  const hit = findQuestion(state.exam, questionId)
+  if (!hit) return null
+  const q = hit.question
+  const pairs = q.pairs ?? []
+  const setPairs = (next: MatchPair[], order?: string[]) =>
+    dispatch({ type: 'UPDATE_QUESTION', id: q.id, patch: { pairs: next, ...(order ? { matchOrder: order } : {}) } })
+  const update = (id: string, patch: Partial<MatchPair>) => setPairs(pairs.map((p) => (p.id === id ? { ...p, ...patch } : p)))
+  const right = matchRightItems(q)
+  return (
+    <PanelSection
+      title="配對"
+      description="左欄依順序印出，右欄會打亂。左邊留空就是右欄多放的干擾項。"
+      actions={
+        <button type="button" className="text-btn" onClick={() => setPairs([...pairs, createMatchPair()])}>
+          ＋ 新增一組
+        </button>
+      }
+    >
+      <div className="match-editor">
+        <div className="match-editor__head" aria-hidden>
+          <span>左欄</span>
+          <span>右欄（正確配對）</span>
+          <span />
+        </div>
+        {pairs.map((p, i) => (
+          <div key={p.id} className="match-editor__row">
+            <input
+              className="ui-input"
+              aria-label={`第 ${i + 1} 組左欄`}
+              value={p.left}
+              placeholder={i === 0 ? '例：蘋果' : '留空＝干擾項'}
+              onChange={(e) => update(p.id, { left: e.target.value })}
+            />
+            <input
+              className="ui-input"
+              aria-label={`第 ${i + 1} 組右欄`}
+              value={p.right}
+              placeholder={i === 0 ? '例：紅色' : ''}
+              onChange={(e) => update(p.id, { right: e.target.value })}
+            />
+            <button
+              type="button"
+              className="icon-btn"
+              title="刪除這一組"
+              disabled={pairs.length <= 1}
+              onClick={() => setPairs(pairs.filter((x) => x.id !== p.id))}
+            >
+              <Icon name="trash" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="ui-row">
+        <span className="ui-row__label">右欄順序：{right.map((p) => p.right.trim()).join('、') || '（還沒有）'}</span>
+        <button
+          type="button"
+          className="text-btn"
+          disabled={right.length < 2}
+          onClick={() => {
+            const ids = right.map((p) => p.id)
+            let next = shuffled(ids)
+            for (let k = 0; k < 5 && next.join() === ids.join(); k++) next = shuffled(ids)
+            setPairs(pairs, next)
+          }}
+        >
+          重新打亂
+        </button>
+      </div>
+    </PanelSection>
   )
 }
 

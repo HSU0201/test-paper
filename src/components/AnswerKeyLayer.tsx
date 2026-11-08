@@ -1,5 +1,5 @@
 import { memo,useMemo } from 'react'
-import { Ellipse, Group, Rect, Text } from 'react-konva'
+import { Ellipse, Group, Line, Rect, Text } from 'react-konva'
 
 import type { PlacedBlock } from '../editor/flowLayout'
 import { FLOW_WRAP } from '../editor/konvaMeasure'
@@ -26,6 +26,18 @@ function AnswerKeyLayerInner({
   return (
     <Group name={ANSWER_KEY_NAME} visible={false} listening={false}>
       {marks.map((mark, index) => {
+        if (mark.kind === 'line') {
+          return (
+            <Line
+              key={`line-${index}`}
+              points={[mark.x1, mark.y1, mark.x2, mark.y2]}
+              stroke={ANSWER_INK}
+              strokeWidth={1.75}
+              lineCap="round"
+              listening={false}
+            />
+          )
+        }
         if (mark.kind === 'ring') {
           return (
             <Group key={`ring-${index}`} listening={false}>

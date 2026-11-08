@@ -1,6 +1,7 @@
 import { plainText } from '../editor/richText'
+import { normalizeSubStyle, type SubStyle } from '../editor/subItems'
 
-export type QuestionType = 'single_choice' | 'multi_choice' | 'fill_blank' | 'short_answer'
+export type QuestionType = 'single_choice' | 'multi_choice' | 'true_false' | 'fill_blank' | 'matching' | 'short_answer'
 
 /** 這一題是否用注音出題。未設則跟隨大題。 */
 export function questionUsesZhuyin(section: { zhuyin?: boolean }, question: { zhuyin?: boolean }): boolean {
@@ -10,8 +11,129 @@ export function questionUsesZhuyin(section: { zhuyin?: boolean }, question: { zh
 export const QUESTION_TYPE_LABEL: Record<QuestionType, string> = {
   single_choice: '單選題',
   multi_choice: '多選題',
+  true_false: '是非題',
   fill_blank: '填充題',
+  matching: '連連看',
   short_answer: '問答題',
+}
+
+/** 是非題的答案記號 */
+export const TRUE_MARK = '○'
+export const FALSE_MARK = '×'
+
+/** 是非題印在題幹前面的作答括號 */
+export const TRUE_FALSE_BLANK = '（　　）'
+
+/** 是非題的答案統一成 ○ 或 ×。認得 O、o、V、對、是；X、x、錯、否 */
+export function trueFalseAnswer(raw: string): '○' | '×' | '' {
+  const t = raw.trim()
+  if (!t) return ''
+  if (/^[○〇OoVv✓✔對是]/.test(t)) return TRUE_MARK
+  if (/^[×XxＸ✗✘錯否]/.test(t)) return FALSE_MARK
+  return ''
+}
+
+/** 連連看的一組。left 空白表示右欄多放的干擾項 */
+export type MatchPair = { id: string; left: string; right: string }
+
+const MATCH_RIGHT_LABELS = '甲乙丙丁戊己庚辛壬癸'
+
+export function matchLeftLabel(i: number): string {
+  return i < 20 ? String.fromCodePoint(0x2460 + i) : `(${i + 1})`
+}
+
+export function matchRightLabel(i: number): string {
+  return i < MATCH_RIGHT_LABELS.length ? MATCH_RIGHT_LABELS[i] : String.fromCharCode(65 + i - MATCH_RIGHT_LABELS.length)
+}
+
+/** 左欄：有左邊文字的組，依原順序 */
+export function matchLeftItems(q: { pairs?: MatchPair[] }): MatchPair[] {
+  return (q.pairs ?? []).filter((p) => plainText(p.left).trim())
+}
+
+/** 簡單的固定雜湊，讓沒有手動打亂過的題目每次排版都一樣 */
+function hashString(s: string): number {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
+  return h >>> 0
+}
+
+/** 打亂 list。rand 回傳 0–1 */
+export function shuffled<T>(list: T[], rand: () => number = Math.random): T[] {
+  const out = [...list]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+
+/** 由種子產生 0–1 的亂數，A／B 卷與連連看用，同一個種子每次結果相同 */
+export function seededRandom(seed: string): () => number {
+  let x = hashString(seed) || 1
+  return () => {
+    x ^= x << 13
+    x ^= x >>> 17
+    x ^= x << 5
+    return (x >>> 0) / 4294967296
+  }
+}
+
+/**
+ * 右欄的順序。用過「重新打亂」就照存下的順序；新加的組接在後面。
+ * 沒有存順序時，用題目 id 當種子打亂，避免右欄跟左欄同順序。
+ */
+export function matchRightItems(q: { id: string; pairs?: MatchPair[]; matchOrder?: string[] }): MatchPair[] {
+  const items = (q.pairs ?? []).filter((p) => plainText(p.right).trim())
+  if (q.matchOrder?.length) {
+    const rank = new Map(q.matchOrder.map((id, i) => [id, i]))
+    return [...items].sort((a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9))
+  }
+  const rand = seededRandom(q.id)
+  for (let tries = 0; tries < 6; tries++) {
+    const out = shuffled(items, rand)
+    if (items.length < 2 || out.some((p, i) => p !== items[i])) return out
+  }
+  return [...items].reverse()
+}
+
+/** 連連看的答案，例如「①丙 ②甲 ③乙」 */
+export function matchAnswerText(q: { id: string; pairs?: MatchPair[]; matchOrder?: string[] }): string {
+  const right = matchRightItems(q)
+  return matchLeftItems(q)
+    .map((p, i) => {
+      const j = right.findIndex((r) => r.id === p.id)
+      return `${matchLeftLabel(i)}${j >= 0 ? matchRightLabel(j) : '—'}`
+    })
+    .join(' ')
+}
+
+/** 全卷文字套用同一個轉換，例如黑白列印 */
+export function mapExamText(exam: ExamContent, fn: (s: string) => string): ExamContent {
+  return {
+    ...exam,
+    sections: exam.sections.map((s) => ({
+      ...s,
+      title: fn(s.title),
+      instruction: fn(s.instruction),
+      passage: fn(s.passage ?? ''),
+      questions: s.questions.map((q) => ({
+        ...q,
+        stem: fn(q.stem),
+        aside: fn(q.aside ?? ''),
+        choices: q.choices.map((c) => ({ ...c, text: fn(c.text) })),
+        ...(q.pairs ? { pairs: q.pairs.map((p) => ({ ...p, left: fn(p.left), right: fn(p.right) })) } : {}),
+      })),
+    })),
+    footer: { ...exam.footer, continueText: fn(exam.footer.continueText), endText: fn(exam.footer.endText) },
+  }
+}
+
+/** 這一題的答案文字，答案表與雙向細目表用 */
+export function questionAnswerText(q: Question): string {
+  if (q.type === 'matching') return matchAnswerText(q)
+  if (q.type === 'true_false') return trueFalseAnswer(q.answer) || q.answer.trim()
+  return plainText(q.answer).trim()
 }
 
 export type ChoiceLayout = 'auto' | 1 | 2 | 4
@@ -158,7 +280,23 @@ export type Question = {
   bodyStyle?: FontOverride
   /** 未設則跟隨大題。有注音時音節與作答空格不會在換行時被拆開 */
   zhuyin?: boolean
+  /** 題目裡子題號（{{n}}）的樣式。未設為 ①②③ */
+  subStyle?: SubStyle
+  /** 連連看：左右各一欄，學生畫線配對 */
+  pairs?: MatchPair[]
+  /** 連連看右欄的順序（MatchPair id）。按「重新打亂」時存下 */
+  matchOrder?: string[]
+  /** 雙向細目表：單元或教學目標 */
+  unit?: string
+  /** 雙向細目表：能力層次，例如「記憶」「理解」「應用」 */
+  skill?: string
+  /** 雙向細目表：難易度 */
+  level?: QuestionLevel
 }
+
+export type QuestionLevel = 'easy' | 'medium' | 'hard'
+
+export const QUESTION_LEVEL_LABEL: Record<QuestionLevel, string> = { easy: '易', medium: '中', hard: '難' }
 
 /** firstChild：標題至少與第一題同欄；whole：整個大題不跨欄 */
 export type KeepTogether = 'firstChild' | 'whole'
@@ -251,6 +389,9 @@ export function countAnswerBlanks(stem: string): number {
 
 export function questionBlankCount(q: Question): number {
   if (typeof q.blanks === 'number' && Number.isFinite(q.blanks)) return Math.max(0, Math.round(q.blanks))
+  // 是非題的括號在排版時才加上；連連看每一條線算一格
+  if (q.type === 'true_false') return countAnswerBlanks(q.stem) + 1
+  if (q.type === 'matching') return matchLeftItems(q).length
   return countAnswerBlanks(q.stem)
 }
 
@@ -426,7 +567,27 @@ export function createQuestion(type: QuestionType, score: number): Question {
     answerRuled: true,
     aside: '',
     figures: [],
+    ...(type === 'matching' ? { pairs: [createMatchPair(), createMatchPair(), createMatchPair()] } : {}),
   }
+}
+
+export function createMatchPair(left = '', right = ''): MatchPair {
+  return { id: newId(), left, right }
+}
+
+function normalizePairs(raw: unknown): MatchPair[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  return raw
+    .filter((p): p is MatchPair => !!p && typeof p === 'object')
+    .map((p) => ({
+      id: typeof p.id === 'string' && p.id ? p.id : newId(),
+      left: typeof p.left === 'string' ? p.left : '',
+      right: typeof p.right === 'string' ? p.right : '',
+    }))
+}
+
+function cleanText(raw: unknown): string | undefined {
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined
 }
 
 export function createChoice(): Choice {
@@ -619,6 +780,12 @@ export function normalizeExam(raw: unknown): ExamContent {
             pairNext: item.pairNext === true,
             zhuyin: item.zhuyin === true ? true : item.zhuyin === false ? false : undefined,
             bodyStyle: normalizeFontOverride(item.bodyStyle),
+            subStyle: normalizeSubStyle(item.subStyle),
+            pairs: normalizePairs(item.pairs) ?? (type === 'matching' ? [] : undefined),
+            matchOrder: Array.isArray(item.matchOrder) ? item.matchOrder.filter((id) => typeof id === 'string') : undefined,
+            unit: cleanText(item.unit),
+            skill: cleanText(item.skill),
+            level: item.level === 'easy' || item.level === 'medium' || item.level === 'hard' ? item.level : undefined,
             choices: (Array.isArray(item.choices) ? item.choices : []).map((c) =>
               c.image && !assets[c.image.assetId] ? { id: c.id, text: c.text } : c,
             ),
