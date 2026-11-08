@@ -202,15 +202,31 @@ export function Inspector() {
     )
   }
 
+  const hasSelection = !!(state.selectedBlock || state.selectedId)
+  const done = () => {
+    dispatch({ type: 'SELECT_BLOCK', ref: null })
+    dispatch({ type: 'SELECT', id: null })
+  }
+
   return (
+    <>
+    {hasSelection ? <div className="inspector-scrim" aria-hidden onClick={done} /> : null}
     <motion.aside
       ref={scrollerRef}
-      className="inspector"
+      className={`inspector${hasSelection ? ' has-selection' : ''}`}
       aria-label="題目內容"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.32, delay: 0.06, ease: easeOut }}
     >
+      {hasSelection ? (
+        <div className="inspector__mobilebar">
+          <button type="button" className="btn btn--primary" onClick={done}>
+            完成
+          </button>
+          <span>改完按「完成」回到{state.selectedBlock?.kind === 'question' ? '題目清單' : '上一頁'}</span>
+        </div>
+      ) : null}
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={viewKey}
@@ -224,5 +240,6 @@ export function Inspector() {
         </motion.div>
       </AnimatePresence>
     </motion.aside>
+    </>
   )
 }

@@ -30,8 +30,16 @@ export type IconName =
   | 'table'
   | 'print'
   | 'tools'
+  | 'more'
 
 const ICON_PATHS: Record<IconName, ReactNode> = {
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1.4" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+      <circle cx="19" cy="12" r="1.4" fill="currentColor" />
+    </>
+  ),
   copy: (
     <>
       <rect x="8" y="8" width="12" height="12" rx="2" />

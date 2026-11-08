@@ -2301,26 +2301,6 @@ kbd {
   }
 }
 
-@media (max-width: 1024px) {
-  .editor-body {
-    grid-template-columns: 56px var(--side-w) minmax(0, 1fr);
-  }
-
-  .inspector {
-    display: none;
-  }
-
-  .inspector:has(.inspector__head) {
-    display: block;
-    position: fixed;
-    top: var(--topbar-h);
-    right: 0;
-    bottom: 28px;
-    width: var(--inspector-w);
-    z-index: 40;
-    box-shadow: var(--shadow-l);
-  }
-}
 
 .color-field {
   display: flex;
@@ -3789,4 +3769,320 @@ kbd {
 
 .checklist__steps li.is-done .checklist__label {
   color: var(--c-text-2);
+}
+
+/* ============ 響應式：電腦、平板、手機 ============ */
+
+/* 只在窄螢幕才出現的東西 */
+.mobile-nav,
+.topbar__more,
+.inspector__mobilebar,
+.inspector-scrim,
+.btn__short {
+  display: none;
+}
+
+.topbar__secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.topbar__more {
+  position: relative;
+}
+
+.topbar__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-m);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-l);
+}
+
+.topbar__menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: none;
+  color: var(--c-text);
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.topbar__menu button:hover {
+  background: var(--c-primary-soft);
+}
+
+.topbar__menu button.is-danger {
+  color: var(--c-danger);
+}
+
+/* 筆電寬度：頂列的檔案按鈕只留圖示，滑鼠移上去有說明 */
+@media (max-width: 1360px) {
+  .topbar__secondary .btn__label {
+    display: none;
+  }
+
+  .topbar__secondary .btn {
+    padding-inline: 8px;
+  }
+}
+
+/* 平板：側欄＋卷面兩欄，題目設定從右邊滑出來 */
+@media (max-width: 1024px) {
+  .editor-root {
+    --side-w: 248px;
+    --inspector-w: min(400px, 92vw);
+    --mobilebar-h: 52px;
+  }
+
+  .editor-body {
+    grid-template-columns: 56px var(--side-w) minmax(0, 1fr);
+  }
+
+  .topbar {
+    gap: 8px;
+    padding: 0 10px;
+  }
+
+  .topbar__app {
+    display: none;
+  }
+
+  .inspector {
+    display: none;
+  }
+
+  .inspector.has-selection {
+    position: fixed;
+    top: var(--topbar-h);
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    display: block;
+    width: var(--inspector-w);
+    border-left: 1px solid var(--c-border);
+    box-shadow: var(--shadow-l);
+  }
+
+  .inspector-scrim {
+    position: fixed;
+    inset: var(--topbar-h) 0 0 0;
+    z-index: 45;
+    display: block;
+    background: rgba(58, 46, 16, 0.2);
+  }
+
+  .inspector__mobilebar {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: var(--mobilebar-h);
+    padding: 0 12px;
+    border-bottom: 1px solid var(--c-border);
+    background: var(--c-surface);
+    font-size: 12px;
+    color: var(--c-text-3);
+  }
+
+  .inspector__mobilebar .btn {
+    flex: none;
+    min-width: 72px;
+  }
+
+  .inspector.has-selection .inspector__head {
+    top: var(--mobilebar-h);
+  }
+}
+
+/* 手機：一次一個畫面，下方切換；題目設定蓋滿整個畫面 */
+@media (max-width: 640px) {
+  .editor-root {
+    --topbar-h: 52px;
+  }
+
+  .editor-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .side-rail,
+  .statusbar,
+  .topbar__secondary,
+  .topbar__sep {
+    display: none;
+  }
+
+  .side-panel {
+    border-right: 0;
+  }
+
+  .editor-body.is-view-panel .canvas-area,
+  .editor-body.is-view-paper .side-panel {
+    display: none;
+  }
+
+  .topbar__more {
+    display: block;
+  }
+
+  .topbar__logo {
+    width: 28px;
+    height: 28px;
+  }
+
+  .topbar__doc {
+    font-size: 13px;
+  }
+
+  .topbar__export {
+    gap: 4px;
+    margin-left: 0;
+  }
+
+  .topbar__export .btn {
+    padding-inline: 10px;
+  }
+
+  .topbar__export .btn__label {
+    display: none;
+  }
+
+  .topbar__export .btn__short {
+    display: inline;
+  }
+
+  .canvas-scroll {
+    padding: 10px;
+  }
+
+  .canvas-controls {
+    right: 10px;
+    bottom: 10px;
+  }
+
+  .inspector.has-selection {
+    inset: 0;
+    z-index: 70;
+    width: 100%;
+    border-left: 0;
+  }
+
+  .inspector-scrim {
+    display: none;
+  }
+
+  .mobile-nav {
+    display: grid;
+    flex-shrink: 0;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    height: calc(58px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-top: 1px solid var(--c-border);
+    background: var(--c-surface);
+  }
+
+  .mobile-nav__btn {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: 0;
+    background: none;
+    color: var(--c-text-3);
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .mobile-nav__btn.is-active {
+    color: var(--c-text);
+    font-weight: 700;
+  }
+
+  .mobile-nav__btn.is-active::before {
+    position: absolute;
+    top: 0;
+    left: 25%;
+    right: 25%;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--c-primary);
+    content: '';
+  }
+
+  /* 輸入框至少 16px，iPhone 點進去才不會自動放大畫面 */
+  .editor-root input,
+  .editor-root select,
+  .editor-root textarea,
+  .color-field__box {
+    font-size: 16px;
+  }
+}
+
+/* 觸控螢幕：按鈕和清單列加大，手指比較好點 */
+@media (pointer: coarse) {
+  .outline-row {
+    min-height: 40px;
+  }
+
+  .icon-btn {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .preset-grid__item,
+  .tools-list__item {
+    min-height: 48px;
+  }
+
+  .choice-row__correct {
+    width: 28px;
+    height: 28px;
+    margin-top: 3px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* 手機寬度放不下試卷名稱，只留圖示 */
+  .topbar__title {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  /* 狀態列放不下時不換行，次要資訊先藏 */
+  .statusbar {
+    gap: 12px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .statusbar > * {
+    flex-shrink: 0;
+  }
+
+  .statusbar__spacer {
+    flex-shrink: 1;
+  }
+
+  .statusbar__info,
+  .statusbar__version {
+    display: none;
+  }
 }

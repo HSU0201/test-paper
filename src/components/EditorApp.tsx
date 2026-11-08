@@ -18,10 +18,11 @@ import { focusKeyOf, SIDE_TABS, type SideTab,tabForFocusKey, taskHint } from './
 import { useCanvasZoom } from './shell/useCanvasZoom'
 import { useContactRoute } from './shell/useContactRoute'
 import { useEditorHotkeys } from './shell/useEditorHotkeys'
+import { useViewport } from './shell/useViewport'
 import { StatusBar } from './StatusBar'
 import { TextEditOverlay } from './TextEditOverlay'
 import { TopBar } from './TopBar'
-import { Icon } from './ui'
+import { Icon, type IconName } from './ui'
 
 import './editor.css'
 
@@ -38,6 +39,9 @@ function EditorShell() {
   )
   const [tab, setTab] = useState<SideTab>(() => (focusKey ? tabForFocusKey(focusKey) : 'questions'))
   const [sheetView, setSheetView] = useState<SheetView>('header')
+  /** 手機一次只顯示一個畫面：側欄（出題、卷面…）或卷面預覽 */
+  const [mobileView, setMobileView] = useState<'panel' | 'paper'>('panel')
+  const viewport = useViewport()
   const [tabDir, setTabDir] = useState(1)
   const [seenFocus, setSeenFocus] = useState(focusKey)
   if (focusKey !== seenFocus) {
@@ -104,7 +108,7 @@ function EditorShell() {
       {contactOpen ? <ContactPage onBack={closeContact} /> : null}
       <div className="editor-root__work" hidden={contactOpen}>
         <TopBar stagesRef={stagesRef} />
-        <div className="editor-body">
+        <div className={`editor-body is-view-${mobileView}`} data-viewport={viewport}>
           <motion.nav
             className="side-rail"
             aria-label="編輯面板"
@@ -285,11 +289,44 @@ function EditorShell() {
 
           <Inspector />
         </div>
+        <nav className="mobile-nav" aria-label="切換畫面">
+          {MOBILE_TABS.map((item) => {
+            const active = item.id === 'paper' ? mobileView === 'paper' : mobileView === 'panel' && tab === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`mobile-nav__btn${active ? ' is-active' : ''}`}
+                aria-pressed={active}
+                onClick={() => {
+                  if (item.id === 'paper') {
+                    setMobileView('paper')
+                    return
+                  }
+                  selectTab(item.id)
+                  setMobileView('panel')
+                }}
+              >
+                <Icon name={item.icon} />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </nav>
         <StatusBar onLocate={locatePage} onContact={openContact} />
       </div>
     </div>
   )
 }
+
+/** 手機下方的分頁。預覽是看整張卷面，其他跟左側的分頁一樣 */
+const MOBILE_TABS: { id: SideTab | 'paper'; label: string; icon: IconName }[] = [
+  { id: 'questions', label: '出題', icon: 'outline' },
+  { id: 'paper', label: '預覽', icon: 'page' },
+  { id: 'sheet', label: '卷面', icon: 'layout' },
+  { id: 'tools', label: '工具', icon: 'tools' },
+  { id: 'decorate', label: '物件', icon: 'insert' },
+]
 
 export function EditorApp() {
   return (

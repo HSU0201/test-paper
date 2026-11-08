@@ -29,16 +29,16 @@ export function taskHint(tab: SideTab, sheetView: SheetView, state: EditorState)
   if (tab === 'sheet') {
     if (sheetView === 'header') return '學校、科目、座號、姓名。點卷上的頁首文字也會打開這裡。'
     if (sheetView === 'paper') return '紙張大小、分欄、行距與頁邊距。'
-    return '全卷的字型與字級。某一題要不同，回到「出題」點那一題，在右側打開「單獨設定」。'
+    return '全卷的字型與字級。某一題要不同，回到「出題」點那一題，打開「這一題的字級」。'
   }
   if (tab === 'decorate') return '固定在某一頁的文字、線條、方框、圖片。題目請在「出題」新增。'
   if (tab === 'tools') return '題庫、頁首範本、答案表與細目表、A/B 卷與補考卷，以及大字和黑白列印。'
   const block = state.selectedBlock
   if (block?.kind === 'question') {
     const num = questionNumbers(state.exam).get(block.id)
-    return num ? `正在編輯第 ${num} 題。題幹、選項與配分在右側。` : '正在編輯這一題。內容在右側。'
+    return num ? `正在編輯第 ${num} 題。可以修改題目、選項、答案與配分。` : '正在編輯這一題。'
   }
-  if (block?.kind === 'section') return '正在編輯這個大題。名稱、說明與配分在右側；小題請點下面的列。'
-  if (block?.kind === 'notice') return '頁尾文字在右側。'
-  return '由上到下就是卷上的順序。點一題，右側就是這一題的內容。'
+  if (block?.kind === 'section') return '正在編輯這個大題的名稱、說明與配分；要改小題，點下面的題目。'
+  if (block?.kind === 'notice') return '正在編輯頁尾文字。'
+  return '由上到下就是卷上的順序。點一題就能編輯它。'
 }

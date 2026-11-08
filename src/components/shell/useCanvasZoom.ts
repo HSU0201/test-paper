@@ -34,10 +34,12 @@ export function useCanvasZoom(pageWidth: number, pageHeight: number) {
     if (!el) return
     const observer = new ResizeObserver(() => {
       const rect = el.getBoundingClientRect()
-      const pad = 64
+      // 手機、直立平板：寬度塞滿，上下捲動看整張；電腦：整頁放進視窗
+      const narrow = rect.width < 820
+      const pad = narrow ? 20 : 64
       const sx = (rect.width - pad) / pageWidth
       const sy = (rect.height - pad) / pageHeight
-      setFitScale(Math.max(0.3, Math.min(1.25, sx, sy)))
+      setFitScale(Math.max(0.3, Math.min(1.25, narrow ? sx : Math.min(sx, sy))))
     })
     observer.observe(el)
     return () => observer.disconnect()

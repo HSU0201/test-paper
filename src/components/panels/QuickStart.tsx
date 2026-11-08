@@ -57,7 +57,7 @@ export function StartCard() {
       <h3 className="start-card__title">開始出一份考卷</h3>
       <ol className="start-card__steps">
         <li>選題型，新增第一個大題</li>
-        <li>在右邊打題目、選答案</li>
+        <li>點題目，打字、選答案</li>
         <li>按右上角「匯出試卷」</li>
       </ol>
       <p className="start-card__label">第一個大題要出什麼？</p>
