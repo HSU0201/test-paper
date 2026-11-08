@@ -2848,7 +2848,113 @@ kbd {
 
 /* ============ 匯入 Word ============ */
 .import-word {
+  position: relative;
   width: min(560px, 100%);
+}
+
+/* 轉換中蓋住整個對話框 */
+.import-word__loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--c-surface) 92%, transparent);
+  backdrop-filter: blur(2px);
+  text-align: center;
+}
+
+.import-word__spinner {
+  width: 36px;
+  height: 36px;
+  margin-bottom: 6px;
+  border: 3px solid var(--c-border);
+  border-top-color: var(--c-primary);
+  border-radius: 50%;
+  animation: import-word-spin 0.8s linear infinite;
+}
+
+@keyframes import-word-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .import-word__spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+.import-word__loading-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.import-word__loading-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--c-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.import-word__bar {
+  width: min(280px, 100%);
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--c-border);
+  overflow: hidden;
+}
+
+.import-word__bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--c-primary);
+  transition: width 0.25s ease-out;
+}
+
+.import-word__steps {
+  display: flex;
+  gap: 14px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+
+.import-word__steps li::before {
+  content: '○ ';
+}
+
+.import-word__steps li.is-active {
+  color: var(--c-accent-ink);
+  font-weight: 700;
+}
+
+.import-word__steps li.is-active::before {
+  content: '● ';
+}
+
+.import-word__steps li.is-done {
+  color: var(--c-text-2);
+}
+
+.import-word__steps li.is-done::before {
+  content: '✓ ';
+}
+
+.import-word__loading-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--c-text-3);
 }
 
 .import-word__pick,
@@ -2947,6 +3053,71 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.import-word__pickq {
+  margin-bottom: 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-m);
+  font-size: 13px;
+}
+
+.import-word__pickq-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-surface-2);
+}
+
+.import-word__pickq-count {
+  flex: 1;
+  font-weight: 700;
+}
+
+.import-word__pickq-list {
+  max-height: 260px;
+  overflow: auto;
+  padding: 6px 0;
+}
+
+.import-word__pickq-section + .import-word__pickq-section {
+  margin-top: 4px;
+}
+
+.import-word__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 3px 12px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.import-word__check:hover {
+  background: var(--c-surface-2);
+}
+
+.import-word__check input {
+  flex: none;
+  margin: 2px 0 0;
+}
+
+.import-word__check.is-section {
+  font-weight: 700;
+}
+
+.import-word__check.is-question {
+  padding-left: 32px;
+  color: var(--c-text-2);
+}
+
+.import-word__check-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ============ 配分檢查 ============ */
