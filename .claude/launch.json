@@ -9,10 +9,10 @@
         "dev",
         "--",
         "--port",
-        "5173",
+        "80",
         "--strictPort"
       ],
-      "port": 5173
+      "port": 80
     },
     {
       "name": "pages-preview",

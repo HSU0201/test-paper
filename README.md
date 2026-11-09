@@ -2,6 +2,8 @@
 
 # 試卷編輯器
 
+**繁體中文** | [English](README.en.md)
+
 [![GitHub stars](https://img.shields.io/github/stars/HSU0201/TestPaper?style=for-the-badge)](https://github.com/HSU0201/TestPaper/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/HSU0201/TestPaper?style=for-the-badge)](https://github.com/HSU0201/TestPaper/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
@@ -77,7 +79,7 @@ npm install
 npm run dev
 ```
 
-啟動後依終端機顯示的網址開啟（預設 `http://localhost:5173`）。
+啟動後依終端機顯示的網址開啟（預設 `http://localhost`）。
 
 第一次開啟會載入一份含注音、選項、直式表格與配圖的範例。若瀏覽器裡已有暫存稿，會優先讀取暫存。
 
@@ -85,9 +87,10 @@ npm run dev
 npm run build      # 型別檢查並產出 dist
 npm run preview    # 預覽建置結果
 npm run lint       # ESLint
+npm test           # Vitest 單元測試
 ```
 
-`npm run build` 產出的是靜態檔，可放到任何靜態網站主機。
+`npm run build` 產出的是靜態檔，可放到任何靜態網站主機。推到 `main` 時，GitHub Actions 會先跑 lint 與測試，通過後才部署到 GitHub Pages；其他分支與 PR 也會跑同樣的檢查。
 
 ## 操作
 
@@ -126,6 +129,7 @@ src/
   editor/       狀態、復原、流式排版、注音、存檔
   export/       PDF
   fonts/        全卷字型與注音字型
+  import/       匯入 Word（.docx）
   types/        題目、版型、畫布物件
 ```
 

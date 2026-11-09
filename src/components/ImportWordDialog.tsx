@@ -7,7 +7,7 @@ import { useEditor } from '../editor/EditorContext'
 import type { ImportProgress, WordImportResult } from '../import/importWord'
 import type { Asset, Section } from '../types/exam'
 import { MotionDialog } from './MotionDialog'
-import { Segmented } from './ui'
+import { Icon, Segmented } from './ui'
 
 type Mode = 'replace' | 'append'
 
@@ -25,6 +25,10 @@ function FilePick({
   disabled: boolean
 }) {
   const ref = useRef<HTMLInputElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const dropClass = ['import-word__drop', file ? 'is-filled' : '', dragging ? 'is-dragging' : '']
+    .filter(Boolean)
+    .join(' ')
   return (
     <div className="import-word__pick">
       <div className="import-word__pick-head">
@@ -32,12 +36,37 @@ function FilePick({
         <span className="import-word__pick-hint">{hint}</span>
       </div>
       <div className="import-word__pick-row">
-        <button type="button" className="btn btn--ghost" disabled={disabled} onClick={() => ref.current?.click()}>
-          選擇檔案
+        <button
+          type="button"
+          className={dropClass}
+          disabled={disabled}
+          onClick={() => ref.current?.click()}
+          onDragOver={(e) => {
+            if (disabled) return
+            e.preventDefault()
+            setDragging(true)
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setDragging(false)
+            if (disabled) return
+            const dropped = e.dataTransfer.files?.[0]
+            if (dropped && /\.docx$/i.test(dropped.name)) onPick(dropped)
+          }}
+        >
+          <span className="import-word__drop-icon" aria-hidden>
+            <Icon name="word" />
+          </span>
+          <span className="import-word__drop-text">
+            <span className="import-word__drop-title" title={file?.name}>
+              {file ? file.name : '點這裡選擇 Word 檔'}
+            </span>
+            <span className="import-word__drop-sub">
+              {file ? '已選好，點一下可以換別的檔案' : '或把 .docx 檔拖曳到這裡'}
+            </span>
+          </span>
         </button>
-        <span className={file ? 'import-word__file' : 'import-word__file is-empty'} title={file?.name}>
-          {file ? file.name : '尚未選擇'}
-        </span>
         {file ? (
           <button type="button" className="text-btn" disabled={disabled} onClick={() => onPick(null)}>
             移除
