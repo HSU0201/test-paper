@@ -1,4 +1,4 @@
-<img width="1280" alt="試卷編輯器" src="docs/cover.svg" />
+<img width="1280" alt="試卷編輯器" src="docs/cover.png" />
 
 # 試卷編輯器
 
