@@ -5,7 +5,7 @@ import { useEditor } from '../../editor/EditorContext'
 import { SECTION_PRESETS } from '../../editor/sectionPresets'
 import { Icon } from '../ui'
 
-/** 頂端「匯入 Word」對話框；側欄也能叫出來 */
+/** 頂端「匯入考卷」對話框；側欄也能叫出來 */
 export const OPEN_IMPORT_WORD = 'testpaper:open-import-word'
 
 function PresetGrid({ afterId, onDone }: { afterId?: string; onDone?: () => void }) {
@@ -71,7 +71,7 @@ export function StartCard() {
         onClick={() => window.dispatchEvent(new Event(OPEN_IMPORT_WORD))}
       >
         <Icon name="word" />
-        匯入廠商的 Word 考卷
+        匯入現有考卷（Word、PDF、照片）
       </button>
       <div className="start-card__samples">
         <span>先看範例：</span>

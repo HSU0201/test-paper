@@ -16,7 +16,7 @@ type FileActionKey = 'open' | 'word' | 'save' | 'backup' | 'reset'
 
 const FILE_ACTIONS: { key: FileActionKey; icon: IconName; label: string; title: string; danger?: boolean }[] = [
   { key: 'open', icon: 'open', label: '開啟', title: '開啟存好的試卷檔（.json）' },
-  { key: 'word', icon: 'word', label: '匯入 Word', title: '把廠商的 Word 考卷轉成題目' },
+  { key: 'word', icon: 'word', label: '匯入考卷', title: '把 Word、PDF 或拍照的考卷轉成題目' },
   { key: 'save', icon: 'save', label: '儲存', title: '下載試卷檔，之後可以再開啟' },
   { key: 'backup', icon: 'backup', label: '備份', title: '定時備份、下載與匯入' },
   { key: 'reset', icon: 'trash', label: '清空', title: '清空整份試卷', danger: true },
@@ -122,7 +122,7 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
           <button
             type="button"
             className="icon-btn"
-            title="開啟、儲存、匯入 Word、備份"
+            title="開啟、儲存、匯入考卷、備份"
             aria-label="更多功能"
             aria-expanded={moreOpen}
             onClick={() => setMoreOpen(!moreOpen)}

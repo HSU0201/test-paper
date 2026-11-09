@@ -16,10 +16,12 @@
     "jspdf": "^4.2.1",
     "konva": "^10.2.5",
     "motion": "^14.6.0",
+    "pdfjs-dist": "^4.10.38",
     "pinyin-pro": "^3.29.5",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "react-konva": "^19.2.3"
+    "react-konva": "^19.2.3",
+    "tesseract.js": "^5.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

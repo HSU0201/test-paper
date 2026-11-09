@@ -41,7 +41,7 @@ This editor keeps **content** and **layout** apart. Questions define structure; 
 - **Header**: school, subject, class, seat number, name, date, time limit, total score, author, parent signature, or custom fields.
 - **Objects**: free text, lines, boxes and images pinned to a page, with snapping guides.
 - **Tools**: answer-key PDF, test blueprint (PDF / CSV), large-print mode, black-and-white print, 2-up printing, and an A/B version generator.
-- **Import from Word**: turn an existing `.docx` exam into editable sections and questions, optionally pulling answers from a separate answer document.
+- **Import existing exams**: turn a Word (`.docx`), PDF or photographed exam into editable sections and questions, optionally pulling answers from a separate answer document. PDFs are read from their text layer; scanned PDFs and photos go through in-browser OCR (Tesseract.js), so files never leave the computer.
 - **Saving**: auto-saves to IndexedDB about one second after each edit, keeps a rolling backup every 3 minutes (up to 15), and exports/imports JSON.
 - **PDF export**: pages are rendered straight from the canvas in the browser. Nothing is uploaded to a server.
 
@@ -77,7 +77,7 @@ src/
   editor/       state, undo, flow layout, Zhuyin, persistence
   export/       PDF
   fonts/        paper fonts and the Zhuyin font
-  import/       Word (.docx) import
+  import/       Word, PDF and photo (OCR) import
   types/        questions, layout, canvas objects
 ```
 

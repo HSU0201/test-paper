@@ -16,12 +16,12 @@ import {
   type Section,
   sectionScore,
 } from '../types/exam'
-import { type DocImage, type DocLayout, readParagraphs, readRelationships } from './docxParagraphs'
+import { type DocImage, type DocLayout, type DocParagraph, readParagraphs, readRelationships } from './docxParagraphs'
 import { isEmf, renderEmf } from './emf'
-import { buildVendorExam, choiceIndexes, flattenAnswer, type ImportedQuestion, type ImportedSection, vendorBlankCount } from './vendorExam'
+import { buildVendorExam, choiceIndexes, flattenAnswer, type ImportedExam, type ImportedQuestion, type ImportedSection, vendorBlankCount } from './vendorExam'
 import { isWmf, renderWmf } from './wmf'
 
-export type ImportProgress = { stage: 'read' | 'images' | 'build'; done: number; total: number }
+export type ImportProgress = { stage: 'read' | 'images' | 'ocr' | 'build'; done: number; total: number }
 
 export type WordImportResult = {
   title: string
@@ -177,19 +177,62 @@ function buildQuestion(
   return out
 }
 
+/** 整理好的大題與小題 → 編輯器的大題；圖片由 assetsFor 對上已轉好的素材 */
+export function buildSections(
+  imported: ImportedExam,
+  assetsFor: (image: DocImage) => { id: string; asset: Asset } | null,
+  layout: DocLayout,
+  warnings: string[],
+): { sections: Section[]; questionCount: number } {
+  let questionCount = 0
+  const sections = imported.sections
+    .filter((s) => s.questions.length || s.instruction)
+    .map((s, si) => {
+      const section = createSection(s.title, s.questions[0]?.choices ? 'single_choice' : 'fill_blank')
+      section.instruction = s.instruction
+      if (s.total != null) section.expectedTotal = s.total
+      if (s.blankScore != null) {
+        section.scoreMode = 'blank'
+        section.blankScore = s.blankScore
+      } else if (s.eachScore != null) {
+        section.defaultScore = s.eachScore
+      }
+      section.questions = s.questions.map((q, qi) =>
+        buildQuestion(s, q, assetsFor, layout, (m) => warnings.push(m), `第 ${si + 1} 大題第 ${qi + 1} 題`),
+      )
+      questionCount += section.questions.length
+      if (s.total != null) {
+        const got = Math.round(sectionScore(section) * 100) / 100
+        if (Math.abs(got - s.total) > 0.001) {
+          warnings.push(`「${s.title}」原卷寫共 ${s.total} 分，匯入後算出 ${got} 分，可能是格數判斷不同，請檢查。`)
+        }
+      }
+      return section
+    })
+
+  const explained = imported.sections.reduce((n, s) => n + s.questions.filter((q) => q.explanation).length, 0)
+  if (explained) warnings.push(`解析卷有 ${explained} 題附了解析說明，編輯器沒有放解析的欄位，所以沒有匯入。`)
+  return { sections, questionCount }
+}
+
+/** 讀 Word 解析卷的段落（題目卷是 PDF、圖片時，解析卷仍可以是 Word） */
+export async function readDocxParagraphs(file: File): Promise<DocParagraph[]> {
+  return (await readDocx(file, false)).paragraphs
+}
+
 /**
- * 讀題目卷（必要）與解析卷（可省略），轉成可以直接放進試卷的大題。
+ * 讀 Word 題目卷（必要）與解析卷（可省略，Word 檔或已讀好的段落），轉成可以直接放進試卷的大題。
  * 圖片轉換時會回報進度。
  */
 export async function importWordExam(
   questionFile: File,
-  answerFile: File | null,
+  answer: File | DocParagraph[] | null,
   onProgress?: (p: ImportProgress) => void,
 ): Promise<WordImportResult> {
   onProgress?.({ stage: 'read', done: 0, total: 1 })
   const questionDoc = await readDocx(questionFile, true)
-  const answerDoc = answerFile ? await readDocx(answerFile, false) : null
-  const imported = buildVendorExam(questionDoc.paragraphs, answerDoc?.paragraphs)
+  const answerParagraphs = answer instanceof File ? await readDocxParagraphs(answer) : (answer ?? undefined)
+  const imported = buildVendorExam(questionDoc.paragraphs, answerParagraphs)
   const warnings = [...imported.warnings]
 
   // 先把用到的圖片全部轉好
@@ -209,37 +252,15 @@ export async function importWordExam(
   }
   onProgress?.({ stage: 'build', done: targets.length, total: targets.length })
 
-  let questionCount = 0
-  const sections = imported.sections
-    .filter((s) => s.questions.length || s.instruction)
-    .map((s, si) => {
-      const section = createSection(s.title, s.questions[0]?.choices ? 'single_choice' : 'fill_blank')
-      section.instruction = s.instruction
-      if (s.total != null) section.expectedTotal = s.total
-      if (s.blankScore != null) {
-        section.scoreMode = 'blank'
-        section.blankScore = s.blankScore
-      } else if (s.eachScore != null) {
-        section.defaultScore = s.eachScore
-      }
-      section.questions = s.questions.map((q, qi) =>
-        buildQuestion(s, q, (im) => {
-          const id = idOf.get(im.target)
-          return id ? { id, asset: assets[id] } : null
-        }, questionDoc.layout, (m) => warnings.push(m), `第 ${si + 1} 大題第 ${qi + 1} 題`),
-      )
-      questionCount += section.questions.length
-      if (s.total != null) {
-        const got = Math.round(sectionScore(section) * 100) / 100
-        if (Math.abs(got - s.total) > 0.001) {
-          warnings.push(`「${s.title}」原卷寫共 ${s.total} 分，匯入後算出 ${got} 分，可能是格數判斷不同，請檢查。`)
-        }
-      }
-      return section
-    })
-
-  const explained = imported.sections.reduce((n, s) => n + s.questions.filter((q) => q.explanation).length, 0)
-  if (explained) warnings.push(`解析卷有 ${explained} 題附了解析說明，編輯器沒有放解析的欄位，所以沒有匯入。`)
+  const { sections, questionCount } = buildSections(
+    imported,
+    (im) => {
+      const id = idOf.get(im.target)
+      return id ? { id, asset: assets[id] } : null
+    },
+    questionDoc.layout,
+    warnings,
+  )
 
   return {
     title: imported.title,

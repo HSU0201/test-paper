@@ -4,29 +4,38 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
 
 import { useEditor } from '../editor/EditorContext'
-import type { ImportProgress, WordImportResult } from '../import/importWord'
+import type { ImportProgress, WordImportResult } from '../import/importExam'
 import type { Asset, Section } from '../types/exam'
 import { MotionDialog } from './MotionDialog'
 import { Icon, Segmented } from './ui'
 
 type Mode = 'replace' | 'append'
 
+const ACCEPT = '.docx,.pdf,image/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf'
+
+function filesLabel(files: File[]): string {
+  if (files.length === 1) return files[0].name
+  const names = files.map((f) => f.name).join('、')
+  return `${files.length} 個檔案：${names}`
+}
+
 function FilePick({
   label,
   hint,
-  file,
+  files,
   onPick,
   disabled,
 }: {
   label: string
   hint: string
-  file: File | null
-  onPick: (file: File | null) => void
+  files: File[]
+  onPick: (files: File[]) => void
   disabled: boolean
 }) {
   const ref = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
-  const dropClass = ['import-word__drop', file ? 'is-filled' : '', dragging ? 'is-dragging' : '']
+  const filled = files.length > 0
+  const dropClass = ['import-word__drop', filled ? 'is-filled' : '', dragging ? 'is-dragging' : '']
     .filter(Boolean)
     .join(' ')
   return (
@@ -51,24 +60,24 @@ function FilePick({
             e.preventDefault()
             setDragging(false)
             if (disabled) return
-            const dropped = e.dataTransfer.files?.[0]
-            if (dropped && /\.docx$/i.test(dropped.name)) onPick(dropped)
+            const dropped = [...(e.dataTransfer.files ?? [])]
+            if (dropped.length) onPick(dropped)
           }}
         >
           <span className="import-word__drop-icon" aria-hidden>
-            <Icon name="word" />
+            <Icon name={filled && !files.some((f) => /\.docx$/i.test(f.name)) ? 'image' : 'word'} />
           </span>
           <span className="import-word__drop-text">
-            <span className="import-word__drop-title" title={file?.name}>
-              {file ? file.name : '點這裡選擇 Word 檔'}
+            <span className="import-word__drop-title" title={filled ? filesLabel(files) : undefined}>
+              {filled ? filesLabel(files) : '點這裡選擇檔案'}
             </span>
             <span className="import-word__drop-sub">
-              {file ? '已選好，點一下可以換別的檔案' : '或把 .docx 檔拖曳到這裡'}
+              {filled ? '已選好，點一下可以換別的檔案' : 'Word、PDF 或照片都可以，也能直接拖曳進來'}
             </span>
           </span>
         </button>
-        {file ? (
-          <button type="button" className="text-btn" disabled={disabled} onClick={() => onPick(null)}>
+        {filled ? (
+          <button type="button" className="text-btn" disabled={disabled} onClick={() => onPick([])}>
             移除
           </button>
         ) : null}
@@ -76,14 +85,15 @@ function FilePick({
       <input
         ref={ref}
         type="file"
-        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        multiple
+        accept={ACCEPT}
         className="visually-hidden"
         tabIndex={-1}
         aria-hidden
         onChange={(e) => {
-          const picked = e.target.files?.[0] ?? null
+          const picked = [...(e.target.files ?? [])]
           e.target.value = ''
-          if (picked) onPick(picked)
+          if (picked.length) onPick(picked)
         }}
       />
     </div>
@@ -174,26 +184,36 @@ function SectionCheck({
 
 function progressText(p: ImportProgress | null): string {
   if (!p) return '準備中…'
-  if (p.stage === 'read') return '讀取 Word 檔…'
+  const page = p.total > 1 ? ` 第 ${Math.min(p.done + 1, p.total)}/${p.total} 頁` : ''
+  if (p.stage === 'read') return `讀取檔案${page}…`
+  if (p.stage === 'ocr') return `辨識文字${page}…`
   if (p.stage === 'images') return `轉換圖片 ${p.done}/${p.total}…`
   return '整理題目…'
 }
 
-const STEPS: { stage: ImportProgress['stage']; label: string }[] = [
+const WORD_STEPS: { stage: ImportProgress['stage']; label: string }[] = [
   { stage: 'read', label: '讀取檔案' },
   { stage: 'images', label: '轉換圖片' },
   { stage: 'build', label: '整理題目' },
 ]
 
-/** 進度條百分比；讀檔與整理題目時間不定，各給一小段 */
+const TEXT_STEPS: { stage: ImportProgress['stage']; label: string }[] = [
+  { stage: 'read', label: '讀取檔案' },
+  { stage: 'ocr', label: '辨識文字' },
+  { stage: 'build', label: '整理題目' },
+]
+
+/** 進度條百分比；逐頁或逐張圖的階段依完成比例前進，其他階段各給一小段 */
 function progressPercent(p: ImportProgress | null): number {
-  if (!p || p.stage === 'read') return 6
-  if (p.stage === 'images') return 10 + Math.round((p.total ? p.done / p.total : 1) * 80)
-  return 95
+  if (!p) return 6
+  if (p.stage === 'build') return 95
+  if (p.stage === 'read' && p.total <= 1) return 6
+  return 10 + Math.round((p.total ? p.done / p.total : 1) * 80)
 }
 
-function ImportLoading({ progress }: { progress: ImportProgress | null }) {
-  const current = STEPS.findIndex((s) => s.stage === (progress?.stage ?? 'read'))
+function ImportLoading({ progress, textMode }: { progress: ImportProgress | null; textMode: boolean }) {
+  const steps = textMode ? TEXT_STEPS : WORD_STEPS
+  const current = steps.findIndex((s) => s.stage === (progress?.stage ?? 'read'))
   const percent = progressPercent(progress)
   return (
     <motion.div
@@ -219,21 +239,25 @@ function ImportLoading({ progress }: { progress: ImportProgress | null }) {
         <div className="import-word__bar-fill" style={{ width: `${percent}%` }} />
       </div>
       <ol className="import-word__steps">
-        {STEPS.map((s, i) => (
+        {steps.map((s, i) => (
           <li key={s.stage} className={i < current ? 'is-done' : i === current ? 'is-active' : undefined}>
             {s.label}
           </li>
         ))}
       </ol>
-      <p className="import-word__loading-hint">圖片多的考卷需要久一點，請不要關閉視窗。</p>
+      <p className="import-word__loading-hint">
+        {textMode
+          ? '文字辨識在這台電腦上進行，一頁約需 10～30 秒；第一次使用要先下載辨識資料。請不要關閉視窗。'
+          : '圖片多的考卷需要久一點，請不要關閉視窗。'}
+      </p>
     </motion.div>
   )
 }
 
 export function ImportWordDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { dispatch, state } = useEditor()
-  const [questionFile, setQuestionFile] = useState<File | null>(null)
-  const [answerFile, setAnswerFile] = useState<File | null>(null)
+  const [questionFiles, setQuestionFiles] = useState<File[]>([])
+  const [answerFiles, setAnswerFiles] = useState<File[]>([])
   const [mode, setMode] = useState<Mode>('replace')
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
@@ -252,28 +276,30 @@ export function ImportWordDialog({ open, onClose }: { open: boolean; onClose: ()
   }, [open, onClose, busy])
 
   // 換了檔案就要重新轉換
-  const pickQuestion = (f: File | null) => {
-    setQuestionFile(f)
+  const pick = (setFiles: (files: File[]) => void) => (files: File[]) => {
     setResult(null)
-    setError(null)
+    // 不能匯入的檔案（例如 Word 和圖片混選）直接說明，不收進來
+    void import('../import/importExam').then(({ checkFiles }) => {
+      const problem = checkFiles(files)
+      setError(problem)
+      if (!problem) setFiles(files)
+    })
   }
-  const pickAnswer = (f: File | null) => {
-    setAnswerFile(f)
-    setResult(null)
-    setError(null)
-  }
+  const pickQuestion = pick(setQuestionFiles)
+  const pickAnswer = pick(setAnswerFiles)
+  const textMode = questionFiles.length > 0 && !/.docx$/i.test(questionFiles[0].name)
 
   const convert = () => {
-    if (!questionFile) return
+    if (!questionFiles.length) return
     setBusy(true)
     setError(null)
     setResult(null)
     setProgress(null)
     setSkipped(new Set())
-    import('../import/importWord')
-      .then(({ importWordExam }) => importWordExam(questionFile, answerFile, setProgress))
+    import('../import/importExam')
+      .then(({ importExam }) => importExam(questionFiles, answerFiles, setProgress))
       .then(setResult)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : '匯入失敗，請確認檔案是 Word（.docx）。'))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : '匯入失敗，請確認檔案是 Word、PDF 或圖片。'))
       .finally(() => setBusy(false))
   }
 
@@ -290,8 +316,8 @@ export function ImportWordDialog({ open, onClose }: { open: boolean; onClose: ()
     })
     setResult(null)
     setSkipped(new Set())
-    setQuestionFile(null)
-    setAnswerFile(null)
+    setQuestionFiles([])
+    setAnswerFiles([])
     onClose()
   }
 
@@ -309,15 +335,15 @@ export function ImportWordDialog({ open, onClose }: { open: boolean; onClose: ()
       {open ? (
         <MotionDialog key="import-word" className="import-word" titleId="import-word-title" onClose={busy ? () => undefined : onClose}>
           <h3 id="import-word-title" className="text-level-dialog__title">
-            匯入 Word 考卷
+            匯入考卷
           </h3>
           <p className="text-level-dialog__intro">
-            把廠商的 Word 考卷轉成這裡的大題與小題，再用本編輯器的版面重新排版。大題要寫成「一、選擇題：每格 0.3
-            分」，小題要用 Word 的自動編號。一併選解析卷的話，會把「答案：」對回每一題。
+            把 Word、PDF 或拍照的考卷轉成這裡的大題與小題，再用本編輯器的版面重新排版。大題要寫成「一、選擇題：每格 0.3
+            分」，小題用 Word 自動編號或「1.」開頭。一併選解析卷的話，會把「答案：」對回每一題。照片可以一次選多張，一張一頁。
           </p>
 
-          <FilePick label="題目卷" hint="必選" file={questionFile} onPick={pickQuestion} disabled={busy} />
-          <FilePick label="解析卷" hint="可省略，用來帶入答案" file={answerFile} onPick={pickAnswer} disabled={busy} />
+          <FilePick label="題目卷" hint="必選" files={questionFiles} onPick={pickQuestion} disabled={busy} />
+          <FilePick label="解析卷" hint="可省略，用來帶入答案" files={answerFiles} onPick={pickAnswer} disabled={busy} />
 
           <div className="import-word__mode">
             <span className="import-word__pick-label">放進試卷的方式</span>
@@ -335,7 +361,7 @@ export function ImportWordDialog({ open, onClose }: { open: boolean; onClose: ()
             ) : null}
           </div>
 
-          <AnimatePresence>{busy ? <ImportLoading key="loading" progress={progress} /> : null}</AnimatePresence>
+          <AnimatePresence>{busy ? <ImportLoading key="loading" progress={progress} textMode={textMode} /> : null}</AnimatePresence>
           {error ? (
             <p className="import-word__error" role="alert">
               {error}
@@ -410,7 +436,7 @@ export function ImportWordDialog({ open, onClose }: { open: boolean; onClose: ()
               <button
                 type="button"
                 className="text-level-dialog__btn text-level-dialog__btn--primary"
-                disabled={!questionFile || busy}
+                disabled={!questionFiles.length || busy}
                 onClick={convert}
               >
                 {busy ? '轉換中…' : '開始轉換'}
