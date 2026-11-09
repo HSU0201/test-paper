@@ -85,7 +85,7 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.4, ease: easeOut, delay: 0.05 }}
         >
-          <img src="/favicon.png" alt="" />
+          <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" />
         </motion.span>
         <div className="topbar__title">
           <span className="topbar__app">試卷編輯器</span>

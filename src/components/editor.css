@@ -2834,6 +2834,31 @@ kbd {
   color: var(--c-text-2);
 }
 
+.contact__share {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--c-primary-line);
+  width: 100%;
+}
+
+.contact__share-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--c-text-2);
+}
+
+.contact__share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.contact__share-actions .btn {
+  text-decoration: none;
+}
+
 @media (max-height: 720px) {
   .contact__body {
     padding: 12px 16px;

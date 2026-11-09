@@ -13,6 +13,12 @@
         "--strictPort"
       ],
       "port": 5173
+    },
+    {
+      "name": "pages-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "preview", "--base", "/TestPaper/", "--port", "4173", "--strictPort"],
+      "port": 4173
     }
   ]
 }

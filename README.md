@@ -6,9 +6,23 @@
 [![GitHub forks](https://img.shields.io/github/forks/HSU0201/TestPaper?style=for-the-badge)](https://github.com/HSU0201/TestPaper/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
+**👉 [立即線上使用](https://hsu0201.github.io/TestPaper/)**：打開瀏覽器就能出題，免安裝、免註冊，資料只存在自己的電腦。
+
 給教師在瀏覽器裡編排正式試卷。依學校考試的格式安排頁首、大題與小題，設定題型、配分、注音與作答說明，完成後匯出可列印的 PDF，或把整份試卷存成 JSON。
 
 題目內容與版面分開存放。改題目、分欄或紙張後，編輯器會重新計算頁數與位置；自由放置的文字、線條、方框與圖片則留在指定頁面上。題目、圖片與備份都留在這台電腦的瀏覽器裡。
+
+## 畫面預覽
+
+<img alt="左邊出題，中間就排好：題目大綱、即時試卷、出卷進度同一個畫面" src="docs/showcase/01-editor.png" />
+
+<img alt="注音考卷排好就能印：注音方格、旁注注音、選項分欄" src="docs/showcase/02-zhuyin.png" />
+
+<img alt="橫向紙張自動直排：頁首移到右側，題文由右往左接續" src="docs/showcase/03-landscape.png" />
+
+<img alt="答案表、細目表一次搞定：大字與黑白列印、兩頁並排、A/B 卷" src="docs/showcase/04-tools.png" />
+
+<img alt="手機平板也能改考卷：出題與預覽" src="docs/showcase/05-mobile.png" />
 
 ## 為什麼做這個
 
@@ -53,6 +67,8 @@
 各頁由畫布直接輸出成 PDF，不經過伺服器。檔名取自可見的學校名稱與試卷名稱。
 
 ## 開始使用
+
+一般老師直接開啟 **[線上版](https://hsu0201.github.io/TestPaper/)** 即可。以下是在自己電腦上開發或架設的方式。
 
 環境需求：[Node.js](https://nodejs.org/) 20 或以上。
 
