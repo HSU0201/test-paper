@@ -371,10 +371,30 @@ function stripMarks(stem: string) {
   return stem.replace(/[[［]\s*圖\s*[\]］]/g, '')
 }
 
-/** 配分接在題目最後，並先收掉題幹裡還沒關的上色，避免分數被塗成同一色。 */
-function stemWithScore(stem: string, scoreMark: string): string {
+/**
+ * 配分接在題目最後，並先收掉題幹裡還沒關的上色，避免分數被塗成同一色。
+ * newLine 時配分整個換到下一行，不會被拆成「（2」和「分）」兩半。
+ */
+function stemWithScore(stem: string, scoreMark: string, newLine = false): string {
   if (!scoreMark) return stem
-  return stem ? `${stem}{{/*}}{{/}}${scoreMark}` : stem
+  return stem ? `${stem}{{/*}}{{/}}${newLine ? '\n' : ''}${scoreMark}` : stem
+}
+
+/** 題幹最後一行還放得下整個配分嗎？放不下就讓配分整個換行 */
+function scoreFitsOnLastLine(
+  stem: string,
+  scoreMark: string,
+  width: number,
+  style: TextStyle,
+  lineHeight: number,
+  m: MeasureFn,
+): boolean {
+  if (!scoreMark || !stem || hasInkMarkup(stem)) return true
+  const plain = paintText(stripMarks(stem)).text
+  const last = wrapLines(plain, width, style, lineHeight, m).at(-1) ?? ''
+  const widthOf = (sample: string) => m(sample, 10000, style, lineHeight).naturalWidth
+  // 留一點餘裕，避免量測與實際繪製差一兩個像素時，配分最後一個字被擠到下一行
+  return widthOf(last + scoreMark) <= width - style.fontSize * 0.25
 }
 
 function buildQuestion(
@@ -396,7 +416,6 @@ function buildQuestion(
   const prefix = `${num}.`
   const innerW = Math.max(40, w - indent)
   const rawStem = q.stem.trim()
-  const scoredStem = stemWithScore(rawStem, scoreMark)
 
   const right = q.figures.find((f) => f.placement === 'right')
   const middle = q.figures.filter((f) => f.placement === 'middle')
@@ -414,6 +433,12 @@ function buildQuestion(
       images.push({ key: right.id, x: indent + innerW - rightBox.w, y: 2, w: rightBox.w, h: rightBox.h, assetId: right.assetId })
     }
   }
+
+  const scoredStem = stemWithScore(
+    rawStem,
+    scoreMark,
+    !hasSubItems(rawStem) && !scoreFitsOnLastLine(rawStem, scoreMark, stemW, body, mt.lineHeight, m),
+  )
 
   const subStyle = subStyleOf(q)
   const subCount = countSubItems(q.stem)
@@ -715,10 +740,15 @@ function layoutMatching(q: Question, top: number, indent: number, innerW: number
   return h
 }
 
-/** 是非題在題幹前面加上作答括號；直排時連連看改成文字列出 */
+/** 題幹開頭已經自己打了作答括號，例如「（　）」或「(  )」 */
+const LEADING_BLANK = /^[（(][\s　]*[)）]/
+
+/** 是非題與選擇題在題幹前面加上作答括號；直排時連連看改成文字列出 */
 function stemForLayout(q: Question, vertical: boolean): string {
   const stem = q.stem.trim()
-  if (q.type === 'true_false') return stem ? `${TRUE_FALSE_BLANK}${stem}` : stem
+  if (q.type === 'true_false' || isChoiceType(q.type)) {
+    return stem && !LEADING_BLANK.test(stem) ? `${TRUE_FALSE_BLANK}${stem}` : stem
+  }
   if (q.type === 'matching' && vertical) {
     const left = matchLeftItems(q).map((p, i) => `${matchLeftLabel(i)}${p.left.trim()}`)
     const right = matchRightItems(q).map((p, i) => `${matchRightLabel(i)}、${p.right.trim()}`)
@@ -727,7 +757,7 @@ function stemForLayout(q: Question, vertical: boolean): string {
   return q.stem
 }
 
-/** 排版時用的題目：是非題補上括號；直排與注音格不做懸掛縮排，子題號直接換成文字 */
+/** 排版時用的題目：是非題與選擇題補上括號；直排與注音格不做懸掛縮排，子題號直接換成文字 */
 function layoutQuestion(question: Question, section: Section, vertical: boolean): Question {
   let stem = stemForLayout(question, vertical)
   if ((vertical || section.layout === 'grid') && hasSubItems(stem)) stem = resolveSubItems(stem, subStyleOf(question))
@@ -1776,6 +1806,17 @@ function placeFooter(
   }
 }
 
+/** 整塊平移；提示框被使用者拖曳後用這個套上位移 */
+function shiftBlock(b: PlacedBlock, dx: number, dy: number): PlacedBlock {
+  return {
+    ...b,
+    box: { ...b.box, x: b.box.x + dx, y: b.box.y + dy },
+    runs: b.runs.map((r) => ({ ...r, x: r.x + dx, y: r.y + dy })),
+    rules: b.rules.map((r) => ({ ...r, x1: r.x1 + dx, x2: r.x2 + dx, y1: r.y1 + dy, y2: r.y2 + dy })),
+    images: b.images.map((im) => ({ ...im, x: im.x + dx, y: im.y + dy })),
+  }
+}
+
 /** 外框與直式表格的內部分隔線。提示框的框線已經畫在題塊上。 */
 function decorate(exam: ExamContent, blocks: PlacedBlock[], vertical: boolean): FlowFrame[] {
   const frames: FlowFrame[] = []
@@ -1975,6 +2016,13 @@ export function layoutExam(
     for (let page = 0; page < pages - 1; page++) {
       blocks.push(placeFooter(FOOTER_CONTINUE_ID, footer.continueText, page, getFrames, best.ctx, vertical))
     }
+  }
+
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i]
+    if (b.ref.kind !== 'notice') continue
+    const offset = b.ref.id === FOOTER_END_ID ? footer.endOffset : b.ref.id === FOOTER_CONTINUE_ID ? footer.continueOffset : undefined
+    if (offset) blocks[i] = shiftBlock(b, offset.dx, offset.dy)
   }
 
   const warnings = [...best.r.warnings]

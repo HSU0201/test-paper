@@ -216,6 +216,19 @@ export type ExamFooter = {
   endOn: boolean
   continueText: string
   endText: string
+  /** 使用者在卷面上拖曳後的位移（相對自動排好的位置） */
+  continueOffset?: NoticeOffset
+  endOffset?: NoticeOffset
+}
+
+export type NoticeOffset = { dx: number; dy: number }
+
+function normalizeOffset(raw: unknown): NoticeOffset | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const { dx, dy } = raw as Partial<NoticeOffset>
+  if (typeof dx !== 'number' || typeof dy !== 'number' || !Number.isFinite(dx) || !Number.isFinite(dy)) return undefined
+  if (dx === 0 && dy === 0) return undefined
+  return { dx, dy }
 }
 
 export function createDefaultFooter(): ExamFooter {
@@ -680,6 +693,8 @@ function normalizeFooter(raw: unknown, legacyNotices: unknown): ExamFooter {
       endOn: f.endOn === true,
       continueText: typeof f.continueText === 'string' && f.continueText.trim() ? f.continueText : base.continueText,
       endText: typeof f.endText === 'string' && f.endText.trim() ? f.endText : base.endText,
+      continueOffset: normalizeOffset(f.continueOffset),
+      endOffset: normalizeOffset(f.endOffset),
     }
   }
   const footer = { ...base }

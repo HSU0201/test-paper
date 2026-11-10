@@ -18,6 +18,7 @@ import {
   type UserTextTier,
 } from '../types/document'
 import { MotionDialog } from './MotionDialog'
+import { Select } from './ui'
 
 function buildLevelDraft(overrides: TextLevelOverrides): Record<BuiltinTextLevelKey, TextLevelPreset> {
   const out = {} as Record<BuiltinTextLevelKey, TextLevelPreset>
@@ -74,24 +75,18 @@ export function PropertiesPanel() {
           </div>
           <label className="field">
             <span>套用階層</span>
-            <select
+            <Select
               value={obj.textLevel}
-              onChange={(e) =>
-                dispatch({ type: 'SET_TEXT_STYLE', id: obj.id, patch: { textLevel: e.target.value } })
-              }
-            >
-              {TEXT_PRESET_LEVEL_KEYS.map((key) => (
-                <option key={key} value={key}>
-                  {getTextTierLabel(key, state.textLevelOverrides, state.userTextTiers)}
-                </option>
-              ))}
-              {state.userTextTiers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-              <option value="custom">自訂（不套階層）</option>
-            </select>
+              options={[
+                ...TEXT_PRESET_LEVEL_KEYS.map((key) => ({
+                  value: key as string,
+                  label: getTextTierLabel(key, state.textLevelOverrides, state.userTextTiers),
+                })),
+                ...state.userTextTiers.map((t) => ({ value: t.id, label: t.label })),
+                { value: 'custom', label: '自訂（不套階層）' },
+              ]}
+              onChange={(v) => dispatch({ type: 'SET_TEXT_STYLE', id: obj.id, patch: { textLevel: v } })}
+            />
           </label>
           {levelLocked ? (
             <p className="properties-panel__hint">
@@ -117,25 +112,16 @@ export function PropertiesPanel() {
         </label>
         <label className="field">
           <span>字型</span>
-          <select
+          <Select
             value={obj.fontFamily}
-            onChange={(e) =>
-              dispatch({
-                type: 'SET_TEXT_STYLE',
-                id: obj.id,
-                patch: { fontFamily: e.target.value },
-              })
-            }
-          >
-            {PAPER_FONTS.map((font) => (
-              <option key={font.id} value={font.family}>
-                {font.label}
-              </option>
-            ))}
-            {PAPER_FONTS.some((font) => font.family === obj.fontFamily) ? null : (
-              <option value={obj.fontFamily}>目前字型</option>
-            )}
-          </select>
+            options={[
+              ...PAPER_FONTS.map((font) => ({ value: font.family, label: font.label })),
+              ...(PAPER_FONTS.some((font) => font.family === obj.fontFamily)
+                ? []
+                : [{ value: obj.fontFamily, label: '目前字型' }]),
+            ]}
+            onChange={(v) => dispatch({ type: 'SET_TEXT_STYLE', id: obj.id, patch: { fontFamily: v } })}
+          />
         </label>
         <label className="field">
           <span>文字顏色</span>
@@ -170,38 +156,28 @@ export function PropertiesPanel() {
         ) : null}
         <label className="field">
           <span>樣式</span>
-          <select
+          <Select<FontStyle>
             value={obj.fontStyle}
-            onChange={(e) =>
-              dispatch({
-                type: 'SET_TEXT_STYLE',
-                id: obj.id,
-                patch: { fontStyle: e.target.value as FontStyle },
-              })
-            }
-          >
-            <option value="normal">一般</option>
-            <option value="bold">粗體</option>
-            <option value="italic">斜體</option>
-            <option value="bold italic">粗斜體</option>
-          </select>
+            options={[
+              { value: 'normal', label: '一般' },
+              { value: 'bold', label: '粗體' },
+              { value: 'italic', label: '斜體' },
+              { value: 'bold italic', label: '粗斜體' },
+            ]}
+            onChange={(v) => dispatch({ type: 'SET_TEXT_STYLE', id: obj.id, patch: { fontStyle: v } })}
+          />
         </label>
         <label className="field">
           <span>對齊</span>
-          <select
+          <Select<TextAlign>
             value={obj.align}
-            onChange={(e) =>
-              dispatch({
-                type: 'SET_TEXT_STYLE',
-                id: obj.id,
-                patch: { align: e.target.value as TextAlign },
-              })
-            }
-          >
-            <option value="left">靠左</option>
-            <option value="center">置中</option>
-            <option value="right">靠右</option>
-          </select>
+            options={[
+              { value: 'left', label: '靠左' },
+              { value: 'center', label: '置中' },
+              { value: 'right', label: '靠右' },
+            ]}
+            onChange={(v) => dispatch({ type: 'SET_TEXT_STYLE', id: obj.id, patch: { align: v } })}
+          />
         </label>
         <label className="field">
           <span>區塊寬度</span>

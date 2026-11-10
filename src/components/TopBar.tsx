@@ -3,6 +3,7 @@ import { type RefObject, useEffect, useRef, useState } from 'react'
 import type Konva from 'konva'
 import { motion } from 'motion/react'
 
+import { forgetCurrentPaper } from '../editor/currentPaper'
 import { documentBaseName, downloadJson, readDocumentFile, serializeDocument } from '../editor/documentIO'
 import { useEditor } from '../editor/EditorContext'
 import { exportStagesToPdf } from '../export/pdfFromStage'
@@ -10,11 +11,13 @@ import { easeOut } from '../motion/presets'
 import { BackupDialog } from './BackupDialog'
 import { ImportWordDialog } from './ImportWordDialog'
 import { OPEN_IMPORT_WORD } from './panels/QuickStart'
+import { PapersDialog } from './PapersDialog'
 import { Icon, type IconName } from './ui'
 
-type FileActionKey = 'open' | 'word' | 'save' | 'backup' | 'reset'
+type FileActionKey = 'papers' | 'open' | 'word' | 'save' | 'backup' | 'reset'
 
 const FILE_ACTIONS: { key: FileActionKey; icon: IconName; label: string; title: string; danger?: boolean }[] = [
+  { key: 'papers', icon: 'page', label: '我的考卷', title: '同時出好幾份考卷，例如先存數學、再出國語' },
   { key: 'open', icon: 'open', label: '開啟', title: '開啟存好的試卷檔（.json）' },
   { key: 'word', icon: 'word', label: '匯入考卷', title: '把 Word、PDF 或拍照的考卷轉成題目' },
   { key: 'save', icon: 'save', label: '儲存', title: '下載試卷檔，之後可以再開啟' },
@@ -26,6 +29,7 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
   const { state, dispatch, undo, redo, canUndo, canRedo, pageCount } = useEditor()
   const openRef = useRef<HTMLInputElement>(null)
   const [backupOpen, setBackupOpen] = useState(false)
+  const [papersOpen, setPapersOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const moreRef = useRef<HTMLDivElement>(null)
@@ -62,12 +66,15 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
 
   /** 開啟、匯入、儲存、備份、清空。電腦上排成一列；手機收進「⋯」 */
   const runFile = (key: FileActionKey) => {
-    if (key === 'open') openRef.current?.click()
+    if (key === 'papers') setPapersOpen(true)
+    else if (key === 'open') openRef.current?.click()
     else if (key === 'word') setImportOpen(true)
     else if (key === 'save') downloadJson(`${baseName}.json`, serializeDocument(state))
     else if (key === 'backup') setBackupOpen(true)
-    else if (window.confirm('確定要清空整份試卷？題目、版型與所有物件都會重設。清空前會先留下一份備份，也可以按復原找回。'))
+    else if (window.confirm('確定要清空整份試卷？題目、版型與所有物件都會重設。清空前會先留下一份備份，也可以按復原找回。')) {
+      forgetCurrentPaper()
       dispatch({ type: 'RESET' })
+    }
   }
 
   return (
@@ -159,7 +166,9 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
           onChange={(e) => {
             const file = e.target.files?.[0]
             e.target.value = ''
-            if (file) readDocumentFile(file, dispatch)
+            if (!file) return
+            forgetCurrentPaper()
+            readDocumentFile(file, dispatch)
           }}
         />
         <span className="topbar__sep" aria-hidden />
@@ -203,6 +212,7 @@ export function TopBar({ stagesRef }: { stagesRef: RefObject<(Konva.Stage | null
         </span>
       </div>
       <BackupDialog open={backupOpen} onClose={() => setBackupOpen(false)} />
+      <PapersDialog open={papersOpen} onClose={() => setPapersOpen(false)} />
       <ImportWordDialog open={importOpen} onClose={() => setImportOpen(false)} />
     </motion.header>
   )

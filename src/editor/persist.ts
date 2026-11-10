@@ -129,8 +129,8 @@ export function requestPersistentStorage(): void {
   void navigator.storage?.persist?.().catch(() => undefined)
 }
 
-/** section：存起來的大題；template：頁首、紙張與字級範本 */
-export type LibraryKind = 'section' | 'template'
+/** section：存起來的大題；template：頁首、紙張與字級範本；paper：「我的考卷」裡的整份試卷 */
+export type LibraryKind = 'section' | 'template' | 'paper'
 
 export type LibraryItem<T = unknown> = {
   id: string

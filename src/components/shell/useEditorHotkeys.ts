@@ -12,6 +12,8 @@ function isTypingTarget(target: EventTarget | null) {
   if (!el) return false
   const tag = el.tagName
   if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT') return true
+  // 自訂下拉選單：焦點在上面時，Backspace / Esc 不能刪除或取消選取題目
+  if (el.closest('[data-ui-select]')) return true
   return el.isContentEditable || !!el.closest('[contenteditable="true"]')
 }
 

@@ -71,15 +71,20 @@ export function StartCard() {
         onClick={() => window.dispatchEvent(new Event(OPEN_IMPORT_WORD))}
       >
         <Icon name="word" />
-        匯入現有考卷（Word、PDF、照片）
+        <span className="start-card__import">
+          匯入現有考卷
+          <small>Word、PDF、照片</small>
+        </span>
       </button>
       <div className="start-card__samples">
-        <span>先看範例：</span>
-        {SAMPLE_SUBJECTS.filter((s) => s.ready).map((s) => (
-          <button key={s.id} type="button" className="text-btn" onClick={() => dispatch({ type: 'LOAD_EXAMPLE', subject: s.id })}>
-            {s.label}
-          </button>
-        ))}
+        <span className="start-card__samples-label">先看範例：</span>
+        <span className="start-card__samples-list">
+          {SAMPLE_SUBJECTS.filter((s) => s.ready).map((s) => (
+            <button key={s.id} type="button" className="text-btn" onClick={() => dispatch({ type: 'LOAD_EXAMPLE', subject: s.id })}>
+              {s.label}
+            </button>
+          ))}
+        </span>
       </div>
     </div>
   )

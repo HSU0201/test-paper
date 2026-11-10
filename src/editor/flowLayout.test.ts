@@ -111,3 +111,46 @@ describe('子題號', () => {
     expect(runs.some((r) => r.text.includes('{{n}}'))).toBe(false)
   })
 })
+
+describe('小題配分', () => {
+  /** 用測試的等寬量字，模擬 Konva 逐字換行後的每一行 */
+  function wrapByChar(text: string, width: number, charW: number): string[] {
+    const perLine = Math.max(1, Math.floor(width / charW))
+    return text.split('\n').flatMap((line) => {
+      const chars = [...line]
+      if (!chars.length) return ['']
+      const out: string[] = []
+      for (let i = 0; i < chars.length; i += perLine) out.push(chars.slice(i, i + perLine).join(''))
+      return out
+    })
+  }
+
+  it('同一列兩題、放不下時，配分整個換行，不拆成「（2」與「分）」', () => {
+    const state = initialEditorState()
+    const sectionId = state.exam.sections[0].id
+    let slice = { exam: state.exam, selectedBlock: state.selectedBlock }
+    slice = examReducer(slice, { type: 'UPDATE_SECTION', id: sectionId, patch: { rowSize: 2, scoreMode: 'each' } })
+    const stems = ['2 x 8 = （　　）', '2 x 4 = （　　）', '3 x 4 = （　　）', '6 x 6 = （　　）', '1 公尺 = （　　）公分']
+    const ids: string[] = []
+    stems.forEach((stem, i) => {
+      slice = examReducer(slice, { type: 'ADD_QUESTION', sectionId })
+      const id = slice.selectedBlock?.id ?? ''
+      ids.push(id)
+      slice = examReducer(slice, { type: 'UPDATE_QUESTION', id, patch: { stem, score: i === 0 ? 3 : 2 } })
+    })
+    const r = layout({ ...state, exam: slice.exam })
+    let checked = 0
+    for (const id of ids) {
+      for (const b of r.blocks.filter((x) => x.ref.id === id)) {
+        for (const run of b.runs.filter((x) => x.key === 'stem')) {
+          const mark = run.text.match(/（\d+ 分）/)?.[0]
+          if (!mark) continue
+          checked += 1
+          const lines = wrapByChar(run.text, run.width, run.style.fontSize)
+          expect(lines.some((line) => line.includes(mark))).toBe(true)
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0)
+  })
+})

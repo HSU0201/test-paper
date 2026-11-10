@@ -58,6 +58,8 @@ export type ExamAction =
   | { type: 'SET_CHOICE_IMAGE_RATIO'; questionId: string; choiceId: string; widthRatio: number }
   | { type: 'SET_NUMBERING'; numbering: QuestionNumbering }
   | { type: 'SET_FOOTER'; patch: Partial<ExamFooter> }
+  /** 在卷面上拖曳提示框；dx、dy 累加到原本的位移上 */
+  | { type: 'MOVE_NOTICE'; id: string; dx: number; dy: number }
   | { type: 'ADD_FIGURE'; questionId: string; asset: Asset }
   | { type: 'UPDATE_FIGURE'; questionId: string; figureId: string; patch: Partial<Omit<Figure, 'id' | 'assetId'>> }
   | { type: 'REMOVE_FIGURE'; questionId: string; figureId: string }
@@ -89,6 +91,7 @@ export const EXAM_ACTION_TYPES = new Set<string>([
   'SET_CHOICE_IMAGE_RATIO',
   'SET_NUMBERING',
   'SET_FOOTER',
+  'MOVE_NOTICE',
 ])
 
 type ExamSlice = { exam: ExamContent; selectedBlock: BlockRef | null }
@@ -436,6 +439,17 @@ export function examReducer(state: ExamSlice, action: ExamAction): ExamSlice {
       if (action.patch.continueOn === false && selectedBlock?.id === FOOTER_CONTINUE_ID) selectedBlock = null
       if (action.patch.endOn === false && selectedBlock?.id === FOOTER_END_ID) selectedBlock = null
       return { exam: { ...exam, footer }, selectedBlock }
+    }
+    case 'MOVE_NOTICE': {
+      const key = action.id === FOOTER_END_ID ? 'endOffset' : action.id === FOOTER_CONTINUE_ID ? 'continueOffset' : null
+      if (!key) return state
+      const prev = exam.footer[key] ?? { dx: 0, dy: 0 }
+      const dx = Math.round(prev.dx + action.dx)
+      const dy = Math.round(prev.dy + action.dy)
+      return {
+        exam: { ...exam, footer: { ...exam.footer, [key]: dx || dy ? { dx, dy } : undefined } },
+        selectedBlock: { kind: 'notice', id: action.id },
+      }
     }
 
     case 'ADD_FIGURE': {

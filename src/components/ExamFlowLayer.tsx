@@ -482,8 +482,26 @@ function ExamFlowLayerInner({
         const isFlag = flagged.has(b.ref.id)
         const pad = 4
         const questionId = b.ref.kind === 'question' ? b.ref.id : null
+        // 提示框（下一頁還有題目、作答結束）可以在卷面上自由拖曳
+        const movable = interactive && b.ref.kind === 'notice'
         return (
-          <Group key={`${b.ref.kind}:${b.ref.id}:${b.page}:${b.frame}:${Math.round(b.box.x)}`}>
+          <Group
+            key={`${b.ref.kind}:${b.ref.id}:${b.page}:${b.frame}:${Math.round(b.box.x)}:${Math.round(b.box.y)}`}
+            draggable={movable}
+            onDragStart={movable ? () => dispatch({ type: 'SELECT_BLOCK', ref: b.ref }) : undefined}
+            onDragEnd={
+              movable
+                ? (e) => {
+                    const node = e.target
+                    const dx = node.x()
+                    const dy = node.y()
+                    node.position({ x: 0, y: 0 })
+                    if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
+                    dispatch({ type: 'MOVE_NOTICE', id: b.ref.id, dx, dy })
+                  }
+                : undefined
+            }
+          >
             {b.rules.map((r) => (
               <Line
                 key={r.key}
@@ -527,13 +545,14 @@ function ExamFlowLayerInner({
               dash={[5, 3]}
               listening={interactive}
               onMouseDown={(e) => {
-                e.cancelBubble = true
+                // 提示框要讓事件傳到外層 Group，Konva 才會開始拖曳
+                if (!movable) e.cancelBubble = true
                 dispatch({ type: 'SELECT_BLOCK', ref: b.ref })
               }}
               onTap={() => dispatch({ type: 'SELECT_BLOCK', ref: b.ref })}
               onMouseEnter={(e) => {
                 const c = e.target.getStage()?.container()
-                if (c) c.style.cursor = 'pointer'
+                if (c) c.style.cursor = movable ? 'move' : 'pointer'
               }}
               onMouseLeave={(e) => {
                 const c = e.target.getStage()?.container()

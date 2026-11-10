@@ -61,9 +61,12 @@ import {
 import { ColorField, type ColorFieldHandle } from './ColorField'
 import type { ExamTextRole } from './exam/ExamTextStyle'
 import { SaveToLibraryButton } from './panels/ToolsPanel'
-import { Icon, NumberField, PanelSection, Segmented, Switch } from './ui'
+import { Icon, NumberField, PanelSection, Segmented, Select, Switch } from './ui'
 
-const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]
+const QUESTION_TYPE_OPTIONS = (Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]).map((t) => ({
+  value: t,
+  label: QUESTION_TYPE_LABEL[t],
+}))
 
 /** 某一題覆寫全卷字級；關閉時刪除覆寫，改回跟隨全卷 */
 function FontOverrideField({
@@ -234,17 +237,11 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
         )}
         <label className="ui-field">
           <span className="ui-field__label">新增小題的題型</span>
-          <select
-            className="ui-input"
+          <Select
             value={section.defaultType}
-            onChange={(e) => set({ defaultType: e.target.value as QuestionType })}
-          >
-            {QUESTION_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {QUESTION_TYPE_LABEL[t]}
-              </option>
-            ))}
-          </select>
+            options={QUESTION_TYPE_OPTIONS}
+            onChange={(v) => set({ defaultType: v })}
+          />
         </label>
       </PanelSection>
 
@@ -787,17 +784,7 @@ function QuestionEditor({ questionId }: { questionId: string }) {
         <div className="ui-grid-2">
           <label className="ui-field">
             <span className="ui-field__label">題型</span>
-            <select
-              className="ui-input"
-              value={q.type}
-              onChange={(e) => set({ type: e.target.value as QuestionType })}
-            >
-              {QUESTION_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {QUESTION_TYPE_LABEL[t]}
-                </option>
-              ))}
-            </select>
+            <Select value={q.type} options={QUESTION_TYPE_OPTIONS} onChange={(v) => set({ type: v })} />
           </label>
           {section.scoreMode === 'blank' ? (
             <NumberField
@@ -1259,6 +1246,7 @@ function NoticeEditor({ id }: { id: string }) {
   const isContinue = id === FOOTER_CONTINUE_ID
   if ((!isEnd && !isContinue) || (isEnd && !footer.endOn) || (isContinue && !footer.continueOn)) return null
   const text = isEnd ? footer.endText : footer.continueText
+  const offset = isEnd ? footer.endOffset : footer.continueOffset
   const setText = (value: string) =>
     dispatch({ type: 'SET_FOOTER', patch: isEnd ? { endText: value } : { continueText: value } })
   return (
@@ -1281,6 +1269,16 @@ function NoticeEditor({ id }: { id: string }) {
           onClick={() => setText(isEnd ? NOTICE_END : NOTICE_CONTINUE)}
         >
           還原預設文字
+        </button>
+      </PanelSection>
+      <PanelSection title="位置" description="在卷面上直接拖曳這個框就能移動；「下一頁還有題目」每一頁會一起移動。">
+        <button
+          type="button"
+          className="btn btn--ghost"
+          disabled={!offset}
+          onClick={() => dispatch({ type: 'SET_FOOTER', patch: isEnd ? { endOffset: undefined } : { continueOffset: undefined } })}
+        >
+          還原自動位置
         </button>
       </PanelSection>
     </div>

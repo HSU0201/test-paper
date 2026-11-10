@@ -3,6 +3,7 @@ import { type DragEvent, type KeyboardEvent, useEffect, useMemo, useState } from
 import { motion } from 'motion/react'
 
 import { SAMPLE_SUBJECTS } from '../../editor/chineseSample'
+import { forgetCurrentPaper } from '../../editor/currentPaper'
 import { useEditor } from '../../editor/EditorContext'
 import { hasRubyMarkup, hasZhuyinMarkup, plainText } from '../../editor/richText'
 import { checkScores } from '../../editor/scoreCheck'
@@ -351,10 +352,13 @@ export function OutlinePanel() {
                     if (!sample.ready) return
                     if (
                       exam.sections.length > 0 &&
-                      !window.confirm(`放入${sample.label}範例會取代目前的題目，頁首評量名稱也會改成這科。要繼續嗎？`)
+                      !window.confirm(
+                        `放入${sample.label}範例會取代目前的題目，頁首評量名稱也會改成這科。\n想保留目前這份，請先按上方「我的考卷」→「出新考卷」。\n\n要直接取代嗎？`,
+                      )
                     ) {
                       return
                     }
+                    forgetCurrentPaper()
                     dispatch({ type: 'LOAD_EXAMPLE', subject: sample.id })
                   }}
                 >

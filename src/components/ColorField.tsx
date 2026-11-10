@@ -16,6 +16,7 @@ import {
   SUB_TOKEN,
 } from '../editor/richText'
 import type { SubStyle } from '../editor/subItems'
+import { Select, type SelectGroup } from './ui'
 
 type ColorFieldProps = {
   value: string
@@ -39,6 +40,11 @@ const MATH_SYMBOLS: { group: string; items: string[] }[] = [
   { group: '時間金錢', items: ['時', '分', '秒', '日', '元', '角'] },
   { group: '其他', items: ['°', '°C', '％', '□', '○', '△', '∠', '⊥', '∥', '√', 'π'] },
 ]
+
+const SYMBOL_GROUPS: SelectGroup<string>[] = MATH_SYMBOLS.map((g) => ({
+  group: g.group,
+  options: g.items.map((s) => ({ value: s, label: s })),
+}))
 
 export type ColorFieldHandle = {
   insert: (token: string) => void
@@ -539,31 +545,22 @@ export const ColorField = forwardRef<ColorFieldHandle, ColorFieldProps>(function
           >
             分數
           </button>
-          <select
-            className="ui-input color-field__symbols"
+          <Select
+            className="color-field__symbols"
+            listClassName="color-field__symbols-list"
             aria-label="插入單位或符號"
             value=""
-            onChange={(e) => {
+            placeholder="單位、符號…"
+            options={SYMBOL_GROUPS}
+            onChange={(sym) => {
               const el = ref.current
-              const sym = e.target.value
               if (!el || !sym) return
               restoreCaret(el)
               document.execCommand('insertText', false, sym)
               emit()
               saveSel()
             }}
-          >
-            <option value="">單位、符號…</option>
-            {MATH_SYMBOLS.map((g) => (
-              <optgroup key={g.group} label={g.group}>
-                {g.items.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+          />
           {frac ? (
             <form
               className="color-field__frac"
