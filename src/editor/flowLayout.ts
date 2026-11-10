@@ -123,6 +123,8 @@ export type PlacedBlock = {
   runs: FlowRun[]
   rules: FlowRule[]
   images: FlowImage[]
+  /** 提示框自動排好的位置（拖曳前）；拖曳時用來吸附回原位 */
+  home?: Box
 }
 
 export type FrameRef = { page: number; frame: number }
@@ -1810,6 +1812,7 @@ function placeFooter(
 function shiftBlock(b: PlacedBlock, dx: number, dy: number): PlacedBlock {
   return {
     ...b,
+    home: b.home ?? b.box,
     box: { ...b.box, x: b.box.x + dx, y: b.box.y + dy },
     runs: b.runs.map((r) => ({ ...r, x: r.x + dx, y: r.y + dy })),
     rules: b.rules.map((r) => ({ ...r, x1: r.x1 + dx, x2: r.x2 + dx, y1: r.y1 + dy, y2: r.y2 + dy })),

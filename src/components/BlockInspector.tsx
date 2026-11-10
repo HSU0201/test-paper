@@ -1271,7 +1271,7 @@ function NoticeEditor({ id }: { id: string }) {
           還原預設文字
         </button>
       </PanelSection>
-      <PanelSection title="位置" description="在卷面上直接拖曳這個框就能移動；「下一頁還有題目」每一頁會一起移動。">
+      <PanelSection title="位置" description="在卷面上直接拖曳這個框就能移動。靠近原位、欄的邊線或中線時會自動吸附對齊（出現虛線）；按住 Alt 拖曳可以不吸附。「下一頁還有題目」每一頁會一起移動。">
         <button
           type="button"
           className="btn btn--ghost"

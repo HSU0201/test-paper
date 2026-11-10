@@ -332,6 +332,10 @@ export const PaperStage = forwardRef<Konva.Stage, PaperStageProps>(
                 interactive={!state.textPlacementMode}
                 dispatch={dispatch}
                 fontFamily={withBopomofoFont(state.paperFontFamily)}
+                pageW={pageW}
+                pageH={pageH}
+                setGuides={setGuides}
+                clearGuides={clearGuides}
               />
               {pageObjects.map((obj) => {
                 if (obj.type === 'text') {

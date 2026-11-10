@@ -1,11 +1,13 @@
 import { memo } from 'react'
 import { Group, Image as KonvaImage, Line, Rect, Text } from 'react-konva'
 
+import type { Box } from '../editor/bounds'
 import type { FlowFrame, FlowImage, FlowRun, PlacedBlock } from '../editor/flowLayout'
 import { FLOW_WRAP, measureText } from '../editor/konvaMeasure'
 import type { EditorAction } from '../editor/reducer'
 import { fontStyleFor, layoutRichLines, type RubyFace,textDecorationFor } from '../editor/richText'
 import { FRAC_SCALE, rubyPlace } from '../editor/rubyLayout'
+import { snapBoxPosition, type SnapGuides } from '../editor/snap'
 import { EDITOR_FLAG, EDITOR_SELECTION } from '../editor/theme'
 import { needsManualWrap } from '../editor/zhuyin'
 import { ANSWER_INK } from '../export/answerMarks'
@@ -24,6 +26,25 @@ type ExamFlowLayerProps = {
   interactive: boolean
   dispatch: (a: EditorAction) => void
   fontFamily: string
+  pageW: number
+  pageH: number
+  /** 拖曳提示框時顯示吸附參考線 */
+  setGuides: (g: SnapGuides) => void
+  clearGuides: () => void
+}
+
+/**
+ * 提示框可以吸附的位置：原本自動排好的位置、各欄的左右邊與中線、頁面中線，
+ * 以及同頁其他提示框。原位的左右邊也算，所以只改高低時左右會自動對齊原位。
+ */
+function noticeSnapTargets(b: PlacedBlock, blocks: PlacedBlock[], frames: FlowFrame[]): Box[] {
+  const targets: Box[] = [b.home ?? b.box]
+  for (const f of frames) targets.push({ x: f.x, y: f.y, w: f.w, h: f.h })
+  for (const other of blocks) {
+    if (other === b || other.ref.kind !== 'notice') continue
+    targets.push(other.box)
+  }
+  return targets
 }
 
 function FigureImage({ im, asset }: { im: FlowImage; asset: Asset | undefined }) {
@@ -460,6 +481,10 @@ function ExamFlowLayerInner({
   interactive,
   dispatch,
   fontFamily,
+  pageW,
+  pageH,
+  setGuides,
+  clearGuides,
 }: ExamFlowLayerProps) {
   return (
     <Group>
@@ -489,12 +514,29 @@ function ExamFlowLayerInner({
             key={`${b.ref.kind}:${b.ref.id}:${b.page}:${b.frame}:${Math.round(b.box.x)}:${Math.round(b.box.y)}`}
             draggable={movable}
             onDragStart={movable ? () => dispatch({ type: 'SELECT_BLOCK', ref: b.ref }) : undefined}
+            onDragMove={
+              movable
+                ? (e) => {
+                    const node = e.target
+                    // 按住 Alt 拖曳時不吸附，可以微調到任何位置
+                    if (e.evt.altKey) {
+                      clearGuides()
+                      return
+                    }
+                    const moved = { ...b.box, x: b.box.x + node.x(), y: b.box.y + node.y() }
+                    const r = snapBoxPosition(moved, noticeSnapTargets(b, blocks, frames), pageW, pageH)
+                    node.position({ x: r.x - b.box.x, y: r.y - b.box.y })
+                    setGuides(r.guides)
+                  }
+                : undefined
+            }
             onDragEnd={
               movable
                 ? (e) => {
                     const node = e.target
                     const dx = node.x()
                     const dy = node.y()
+                    clearGuides()
                     node.position({ x: 0, y: 0 })
                     if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
                     dispatch({ type: 'MOVE_NOTICE', id: b.ref.id, dx, dy })
