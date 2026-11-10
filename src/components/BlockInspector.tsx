@@ -10,6 +10,7 @@ import { adoptTypedSubItems, hasSubItems, SUB_STYLE_LABEL, SUB_STYLES, type SubS
 import { choiceHits } from '../export/answerMarks'
 import { mergeTextLevelPreset } from '../types/document'
 import {
+  ANSWER_BLANK,
   ASIDE_WIDTH_DEFAULT,
   ASIDE_WIDTH_MAX,
   ASIDE_WIDTH_MIN,
@@ -817,6 +818,15 @@ function QuestionEditor({ questionId }: { questionId: string }) {
           <span className="ui-field__label ui-field__label--split">
             <span>題目</span>
             <span className="ui-field__actions">
+              <button
+                type="button"
+                className="text-btn"
+                title="在游標處放一個作答格（　　），學生把答案寫在裡面。每個作答格會自動算一格"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => stemRef.current?.insert(ANSWER_BLANK)}
+              >
+                插入作答格
+              </button>
               <button
                 type="button"
                 className="text-btn"

@@ -24,6 +24,9 @@ export const FALSE_MARK = '×'
 /** 是非題印在題幹前面的作答括號 */
 export const TRUE_FALSE_BLANK = '（　　）'
 
+/** 「插入作答格」放進題目的括號，跟是非題的作答括號同寬 */
+export const ANSWER_BLANK = TRUE_FALSE_BLANK
+
 /** 是非題的答案統一成 ○ 或 ×。認得 O、o、V、對、是；X、x、錯、否 */
 export function trueFalseAnswer(raw: string): '○' | '×' | '' {
   const t = raw.trim()
