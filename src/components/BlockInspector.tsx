@@ -133,9 +133,9 @@ function sectionScoreDescription(section: Section): string {
   }
   const each = uniformQuestionScore(section)
   if (each == null) {
-    return `本大題共 ${n} 題，配分不完全相同，合計 ${total} 分。標題只寫總分，每題最後會標出該題分數。`
+    return `本大題共 ${n} 題，配分不完全相同，合計 ${total} 分。標題只寫總分${section.showQuestionScore ? '，每題最後也會標出該題分數' : ''}。`
   }
-  return `本大題共 ${n} 題，每題 ${each} 分，合計 ${total} 分。標題最後會寫「每題 ${each} 分」。`
+  return `本大題共 ${n} 題，每題 ${each} 分，合計 ${total} 分。標題最後會寫「每題 ${each} 分」${section.showQuestionScore ? '，每題最後也會標出分數' : ''}。`
 }
 
 function SectionEditor({ section, index }: { section: Section; index: number }) {
@@ -236,6 +236,16 @@ function SectionEditor({ section, index }: { section: Section; index: number }) 
             </button>
           </div>
         )}
+        {section.scoreMode === 'each' ? (
+          <div className="exam-style__head">
+            <span className="exam-style__label">小題標示配分</span>
+            <Switch
+              checked={section.showQuestionScore === true}
+              label="小題標示配分"
+              onChange={(showQuestionScore) => set({ showQuestionScore })}
+            />
+          </div>
+        ) : null}
         <label className="ui-field">
           <span className="ui-field__label">新增小題的題型</span>
           <Select

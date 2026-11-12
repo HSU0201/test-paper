@@ -129,7 +129,7 @@ describe('小題配分', () => {
     const state = initialEditorState()
     const sectionId = state.exam.sections[0].id
     let slice = { exam: state.exam, selectedBlock: state.selectedBlock }
-    slice = examReducer(slice, { type: 'UPDATE_SECTION', id: sectionId, patch: { rowSize: 2, scoreMode: 'each' } })
+    slice = examReducer(slice, { type: 'UPDATE_SECTION', id: sectionId, patch: { rowSize: 2, scoreMode: 'each', showQuestionScore: true } })
     const stems = ['2 x 8 = （　　）', '2 x 4 = （　　）', '3 x 4 = （　　）', '6 x 6 = （　　）', '1 公尺 = （　　）公分']
     const ids: string[] = []
     stems.forEach((stem, i) => {

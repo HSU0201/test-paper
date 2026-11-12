@@ -328,6 +328,8 @@ export type Section = {
   scoreMode: ScoreMode
   /** 每格幾分。scoreMode 為 blank 時使用 */
   blankScore: number
+  /** 在每一小題最後標出該題分數。預設關閉，只在大題標題寫配分 */
+  showQuestionScore?: boolean
   defaultType: QuestionType
   keepTogether: KeepTogether
   questions: Question[]
@@ -482,12 +484,13 @@ export function sectionScoreNote(s: Section): string {
 }
 
 /**
- * 小題配分不同時印在題目最後。
+ * 小題配分預設不印，配分只寫在大題標題。
+ * 大題打開「小題標示配分」才在每題最後標出分數。
  * 每格固定分數時各題總分可能不同（5 格、4 格），這種情況不列在題目上。
  */
 export function questionScoreMark(section: Section, q: Question): string {
+  if (section.showQuestionScore !== true) return ''
   if (section.scoreMode === 'blank') return ''
-  if (uniformQuestionScore(section) != null) return ''
   return `（${storedScore(q)} 分）`
 }
 
@@ -777,6 +780,7 @@ export function normalizeExam(raw: unknown): ExamContent {
         rowSize: s.rowSize === 2 || s.rowSize === 'all' ? s.rowSize : 1,
         numberStyle: s.numberStyle === 'paren' ? 'paren' : 'dot',
         zhuyin: s.zhuyin === true,
+        showQuestionScore: s.showQuestionScore === true,
         passage: typeof s.passage === 'string' ? s.passage : '',
         headingStyle: normalizeFontOverride(s.headingStyle),
         instructionStyle: normalizeFontOverride(s.instructionStyle),
